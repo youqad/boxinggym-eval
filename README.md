@@ -1,5 +1,5 @@
 <h1 align="center">🥊 BoxingGym 🥊</h1>
-<h3 align="center"> Kanishk Gandhi*, Michael Y. Li*, Lyle Goodyear, Agam Bhatia, Louise Li, Aditi Bhaskar, Mohammed Zaman, Noah D. Goodman </h3>
+<h3 align="center"> Kanishk Gandhi*, Michael Y. Li*, Lyle Goodyear, Agam Bhatia,<br> Louise Li, Aditi Bhaskar, Mohammed Zaman, Noah D. Goodman </h3>
 <h3 align="center"> Stanford University </h3>
   
 <p align="center">
