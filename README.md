@@ -1,5 +1,7 @@
 <h1 align="center">🥊 BoxingGym 🥊</h1>
-
+<h3 align="center"> Kanishk Gandhi*, Michael Y. Li*, Lyle Goodyear, Agam Bhatia, Louise Li, Aditi Bhaskar, Mohammed Zaman, Noah D. Goodman </h3>
+<h3 align="center"> Stanford University </h3>
+  
 <p align="center">
   <img src="https://img.shields.io/badge/Version-0.1.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
