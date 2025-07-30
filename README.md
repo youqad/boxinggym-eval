@@ -259,20 +259,31 @@ optimal_eig = goal.expected_information_gain(optimal_query)
 regret = optimal_eig - agent_eig
 ```
 
-### 4. Communication Evaluation
+### 4. Communication Evaluation (Discovery Setting)
 
-For discovery tasks, we evaluate how well agents communicate findings:
+This metric is computed only when `experiment_type="discovery"` – i.e. the *direct_discovery* goal variants.  
+It measures how effectively a *scientist* agent can convey its understanding of the environment to a *naive* agent that is **not allowed to run any experiments**:
+
+1. After finishing its experiments, the scientist receives a prompt from `Goal.get_comm_prompt` (respecting the `com_limit` word budget) and produces a natural-language explanation.
+2. The naive agent is initialized with a system prompt containing `Goal.get_naive_system_message` followed **only** by the scientist's explanation – it does not see the raw data or experiment log.
+3. The naive agent is then evaluated on the standard prediction questions using `evaluate(...)`. Its accuracy (and standard deviation) constitute the communication score.
 
 ```python
-# Expert agent explores and explains
-expert_explanation = expert_agent.explain_findings(word_limit=300)
+# 1. Scientist writes explanation
+prompt = goal.get_comm_prompt(com_limit=200, include_prior=True)
+explanation = scientist.prompt_llm(prompt)
 
-# Naive agent makes predictions using only the explanation
-naive_agent.set_context(expert_explanation)
-naive_accuracy = evaluate_naive_agent(naive_agent, test_questions)
+# 2. Build naive agent
+system_msg = goal.get_naive_system_message(include_prior=True) + explanation
+naive_agent.set_system_message(system_msg)
 
-# Communication quality = naive agent's performance
+# 3. Evaluate naive agent
+(comm_acc, comm_std), _, _, _ = evaluate(
+    final_results, goal, naive_agent, num_evals, include_prior=True
+)
 ```
+
+Higher accuracy indicates clearer, more informative explanations produced by the scientist agent.
 
 ## Running Experiments
 
