@@ -22,219 +22,405 @@ BoxingGym is a benchmarking framework designed to evaluate the capabilities of l
 
 
 
+## 📚 Table of Contents
+- [Key Features](#key-features)
+- [Installation](#installation)
+- [Available Environments](#available-environments)
+- [Environment Implementation Example](#environment-implementation-example)
+- [Agent Evaluation Process](#agent-evaluation-process)
+- [Metrics and Evaluation](#metrics-and-evaluation)
+- [Running Experiments](#running-experiments)
+- [Configuration System](#configuration-system)
+- [Analysis Tools](#analysis-tools)
+- [Contributing](#contributing)
 
-## Getting Started with Installation
-To install BoxingGym, clone the repository and install the dependencies:
+## Key Features
+
+- **10+ Diverse Environments**: From physical systems (Lotka-Volterra predator-prey) to psychological models (temporal discounting)
+- **Multiple Goal Types**: Direct prediction, parameter estimation, and system identification
+- **Box's Loop Integration**: Automated statistical model building using PyMC
+- **EIG-based Evaluation**: Quantitative assessment of experimental design quality
+- **Flexible Agent Interface**: Support for any LLM-based agent
+- **Comprehensive Metrics**: Accuracy, MSE, EIG regret, and more
+
+## Installation
 
 ```bash
 git clone https://github.com/kanishkg/boxing-gym.git
-cd boxing_gym
+cd boxing-gym
 pip install -e .
 ```
 
-You should now be able to import the BoxingGym package in your Python environment.
-```python
-import boxing_gym
-```
+Requirements:
+- Python >= 3.11
+- PyMC for probabilistic modeling
+- OpenAI/Anthropic API keys for LLM agents
 
-## Interacting with an Environment
-Environments in BoxingGym simulate models of the world across different domains. You can interact with an environment using predefined methods to conduct experiments, collect data, and test hypotheses.
+## Available Environments
 
-Example code to interact with an environment(see `run_experiment.py` for a complete example):
-    
-```python
-from boxing_gym.envs import SomeEnvironment
+BoxingGym includes the following environments, each with multiple goal configurations:
 
-env = SomeEnvironment()
-env.reset()
-action = env.sample_random_input()
-observation = env.step(action)
-```
+| Environment | Description | Input Space | Output Space |
+|------------|-------------|-------------|--------------|
+| **Hyperbolic Temporal Discount** | Models human decision-making between immediate and delayed rewards | (immediate_reward, delayed_reward, delay_days) | Binary choice (0/1) |
+| **Location Finding** | Signal source localization in n-dimensional space | n-dimensional coordinates | Signal intensity |
+| **Death Process** | Disease spread modeling in a population | Time | Number of infected |
+| **IRT (Item Response Theory)** | Student-question performance modeling | (student_id, question_id) | Correctness (0/1) |
+| **Survival Analysis** | Breast cancer patient survival prediction | (metastasized, time_since_surgery) | Survival status (0/1) |
+| **Dugongs** | Sea cow growth modeling | Age | Length |
+| **Peregrines** | Falcon population dynamics | Time | Population count |
+| **Lotka-Volterra** | Predator-prey population dynamics | Time | (prey_count, predator_count) |
+| **Moral Machines** | Ethical decision-making in autonomous vehicles | (group1, group2, intervention) | Choice (1/2) |
+| **Emotion** | Emotion prediction from gambling outcomes | (prizes, probabilities, outcome) | Emotion ratings |
 
+## Environment Implementation Example
 
-## Interacting with an Agent
-Agents in BoxingGym can perform experimental design, run simulations, and propose models. The framework includes pre-built agents like Box's Apprentice and the LLM Agent.
+Let's examine the **Hyperbolic Temporal Discount** environment in detail to understand how environments work:
 
-Example pseudo-code to interact with an agent (see `run_experiment.py` for a complete example):
-```python
-from boxing_gym.agents import LLMAgent
-from boxing_gym.envs.some_env import SomeEnv, SomeGoal
-
-env = SomeEnv()
-goal = SomeGoal(env, include_prior=True)
-agent = LLMAgent()
-agent.set_goal(goal_description)
-observation = env.reset()
-action = agent.act(observation)
-next_observation = env.step(action)
-```
-
-## Creating a New Environment 
-Environment in BoxingGym define the simulated world model and the interactions an agent can have with it. To create a new environment, subclass the Environment class and implement the necessary methods:
+### 1. Environment Structure
 
 ```python
-
-class CustomEnvironment:
-    def __init__(self, param1, param2, param3):
-        super().__init__()
-        self.param1 = param1
-        self.param2 = param2
-        self.param3 = param3
+class TemporalDiscount:
+    def __init__(self, epsilon=0.01, k_mean=-4.25, k_std=0.5, alpha_scale=2):
+        # Parameters define the prior distributions
+        self.epsilon = epsilon  # Noise parameter
+        self.k_mean = k_mean    # Mean of log-normal discount factor
+        self.k_std = k_std      # Std of log-normal discount factor
+        self.alpha_scale = alpha_scale  # Scale for decision noise
         self.reset()
-        self.env_name = "custom_environment"
-
-    def reset(self):
-        # Initialize or reset the environment to a starting state
-        # sample params for the world model
-        self.model_params = sample...
-        self.data = []
-
-    def get_system_message(self, include_prior=True, goal=None):
-        # Add a system message to the environment
-    
-    def step(self, action):
-        # Process the input_value to produce an output
-        result = # pass input through model to get the next observation
-        self.data.append(result)  # Store the result if necessary
-        return result
-    
-    def validate_input(self, action):
-        # validate the input action
-        # return error message if invalid so that the agent can correct it
-        return action
-    
-    def sample_random_input(self):
-        # Sample a random valid action for the environment
-
-    def run_experiment(self, action):
-        validated_input = self.validate_input(action)
-        if isinstance(validated_input, str):
-            return validated_input, False
-        result = self.step(validated_input)
-        return result, True
-```
-
-## Creating a New Goal
-Goals in BoxingGym define the objectives for an agent within an environment. To create a new goal, subclass the Goal class and implement the necessary methods:
-
-```python
-from boxing_gym.goals import Goal
-
-class MyCustomGoal(Goal):
-    def __init__(self, env):
-        super().__init__(env)  # Initialize with environment
-        self.eval_points = []  # Store evaluation points
-        self.eval_pointer = 0  # Pointer for evaluation
-        # other initialization code
-    
-    def get_system_message(self, include_prior):
-        # Generate goal description based on prior knowledge
-        goal_description = "Your goal is to "# goal description
-        return self.env.get_system_message(include_prior, goal_description)
-    
-    def get_goal_eval_question(self, include_prior):
-        # Generate or retrieve a question for evaluation
-        if self.eval_pointer >= len(self.eval_points):
-            x = ...  # Generate new input
-            y = self.env.step(x) # Get output
-            self.eval_points.append((time, infected_num)) # Store evaluation point
-        else:
-            x, y = self.eval_points[self.eval_pointer] # Retrieve evaluation point
         
-        self.eval_pointer += 1
-        question = f"What y for {x}"
-        return question, y
-    
-    def evaluate_predictions(self, predictions, measurements):
-        # Evaluate the predictions made by the agent
-        return mse, std
-    
-    def expected_information_gain(self, query_point, num_outer_samples=1000, num_inner_samples=10):
-        # Calculate EIG for a new query point using a Bayesian approach
-        # See existing environments for more details on how to implement this method
+    def reset(self):
+        # Sample true parameters from prior
+        log_k = np.random.normal(self.k_mean, self.k_std)
+        k = np.exp(log_k)  # Discount factor
+        alpha = halfnorm.rvs(scale=self.alpha_scale)  # Decision noise
+        self.truth = (k, alpha)
+        self.observed_data = []
 ```
 
-## Creating a New Agent
-An agent in BoxingGym is an entity that interacts with environments to perform experiments, propose models, and refine them based on collected data. To create a new agent, subclass the Agent class and implement the necessary methods:
+### 2. System Dynamics
+
+The environment models how people choose between immediate and delayed rewards:
 
 ```python
-class MyCustomAgent:
-    def __init__(self, param1, param2, param3):
-        super().__init__()
-        self.param1 = param1
-        self.param2 = param2
-        self.param3 = param3
-        self.reset()
-        self.agent_name = "custom_agent"
+def step(self, iR, dR, Days):
+    k, alpha = self.truth
     
-    def generate_actions(self, observation):
-        # Generate an action based on the past result 
-        return action
+    # Calculate subjective values
+    V0 = iR  # Value of immediate reward
+    V1 = dR / (1 + k * Days)  # Discounted value of delayed reward
     
-    def generate_predictions(self, query):
-        # Generate a prediction based on the current query 
-        return prediction
+    # Probabilistic choice using probit model
+    z = (V1 - V0) / alpha
+    probability = self.epsilon + (1 - 2 * self.epsilon) * norm.cdf(z)
+    choice = np.random.binomial(n=1, p=probability)
+    return choice  # 1 = choose delayed, 0 = choose immediate
+```
+
+### 3. Agent Interaction
+
+Agents interact through natural language with optional prior knowledge:
+
+```python
+def generate_system_message(self, include_prior=True, goal=None):
+    if include_prior:
+        # Provide context about human decision-making
+        message = """A person has to choose between a delayed reward dR dollars 
+        in x days and an immediate reward iR dollars today.
+        Your goal is to predict their choices.
+        Make observations by specifying [iR, dR, D]."""
+    else:
+        # Abstract version without context
+        message = """You are observing a binary response for a tuple of three 
+        positive integer values. Make observations by specifying [int1, int2, int3]."""
+    return message
+```
+
+### 4. Goal Types
+
+Each environment supports multiple goals:
+
+- **DirectGoal**: Predict outcomes for new inputs
+- **DiscountGoal**: Estimate the discount factor k
+- **DirectGoalNaive**: Explain findings to another agent
+
+## Agent Evaluation Process
+
+The evaluation process follows these steps:
+
+### 1. Initialization
+```python
+# Create environment and goal
+env = TemporalDiscount()
+goal = DirectGoal(env)
+
+# Initialize agent with system message
+agent = LMExperimenter(model_name="gpt-4o")
+system_message = goal.get_system_message(include_prior=True)
+agent.set_system_message(system_message)
+```
+
+### 2. Experimentation Loop
+```python
+for i in range(num_experiments):
+    # Agent designs experiment
+    observation_request = agent.generate_actions(previous_result)
+    # Example: "[50, 100, 7]" (choose between $50 now or $100 in 7 days)
+    
+    # Environment provides result
+    result, success = env.run_experiment(observation_request)
+    # Result: 1 (person chose to wait)
+    
+    # Store for analysis
+    observations.append((observation_request, result))
+```
+
+### 3. Evaluation Phase
+```python
+# Generate evaluation questions
+for _ in range(num_evals):
+    question, ground_truth = goal.get_goal_eval_question(include_prior)
+    # Example: "What choice for iR=75, dR=100, D=5?"
+    
+    prediction = agent.generate_predictions(question)
+    predictions.append(prediction)
+    ground_truths.append(ground_truth)
+
+# Calculate metrics
+accuracy, std = goal.evaluate_predictions(predictions, ground_truths)
+```
+
+## Metrics and Evaluation
+
+BoxingGym uses several metrics to evaluate agent performance:
+
+### 1. Predictive Error
+
+Predictive error captures how well an agent can forecast the outcome of new, unseen trials after it has finished experimenting.  For every evaluation question we compare the agent’s prediction \(\hat{y}\) with the environment-generated ground-truth \(y\).
+
+• We report **mean-squared-error (MSE)** together with its standard deviation for all environments—binary, count, or continuous.  Lower is better.
+
+A concise reference implementation looks like this:
+
+```python
+import numpy as np
+
+def predictive_error(predictions, ground_truths):
+    preds = np.asarray(predictions, dtype=float)
+    gts = np.asarray(ground_truths, dtype=float)
+
+    mse = np.mean((preds - gts) ** 2)
+    std = np.std((preds - gts) ** 2) / np.sqrt(len(gts))
+    return mse, std
+```
+
+This metric provides a direct measure of how well the agent has learned the underlying input-output relationship, independent of the optimality of its experimental designs.
+
+### 2. Expected Information Gain (EIG)
+
+For OED tasks, we calculate the information gain of each experiment:
+
+```python
+def expected_information_gain(self, query_point, num_outer_samples=1000):
+    # EIG = E_y[KL(p(\theta|y,x) || p([theta]))]
+    # Estimated using nested Monte Carlo
+    
+    # 1. Sample parameters from posterior given existing data
+    posterior_samples = self.get_posterior_samples(existing_data)
+    
+    # 2. For each parameter sample, calculate:
+    eig_samples = []
+    for theta in posterior_samples:
+        # Likelihood of observing y given theta and query x
+        y_sample = self.simulate_outcome(query_point, theta)
+        log_likelihood = self.log_prob(y_sample | theta, query_point)
+        
+        # Marginal likelihood p(y|x)
+        log_marginal = self.estimate_marginal_likelihood(y_sample, query_point)
+        
+        eig_samples.append(log_likelihood - log_marginal)
+    
+    return np.mean(eig_samples)
+```
+
+### 3. EIG Regret
+
+Compares agent's experimental choices to optimal designs:
+
+```python
+# For each agent query
+agent_eig = goal.expected_information_gain(agent_query)
+
+# Find optimal query
+optimal_query = max(random_queries, key=lambda q: goal.expected_information_gain(q))
+optimal_eig = goal.expected_information_gain(optimal_query)
+
+# Regret = missed information
+regret = optimal_eig - agent_eig
+```
+
+### 4. Communication Evaluation
+
+For discovery tasks, we evaluate how well agents communicate findings:
+
+```python
+# Expert agent explores and explains
+expert_explanation = expert_agent.explain_findings(word_limit=300)
+
+# Naive agent makes predictions using only the explanation
+naive_agent.set_context(expert_explanation)
+naive_accuracy = evaluate_naive_agent(naive_agent, test_questions)
+
+# Communication quality = naive agent's performance
 ```
 
 ## Running Experiments
-To run an experiment in BoxingGym, you can use the `run_experiment.py` script. The script allows you to specify the environment, agent, and goal for the experiment. You can also configure the experiment using Hydra configuration files.
 
-Example configuration file for running an experiment:
+### Basic Experiment
 
-example.yaml
-```yaml
-  - _self_
-  - llms: openai # LLM config to use
-  - exp: oed # Experiment type discovery or oed (Optimal Experiment Design)
-  - envs: custom_env # Environments to use
-include_prior: true # Include prior knowledge in the goal description
+```bash
+python run_experiment.py \
+    seed=1 \
+    llms=openai \
+    include_prior=true \
+    exp=oed \
+    envs=hyperbolic_direct
 ```
 
-openai.yaml
-```yaml
-  - model_name: "gpt-4o"
-  - temperature: 0.0
-  - max_tokens: 512
+### Batch Experiments
+
+Use the provided shell scripts:
+
+```bash
+# Run all hyperbolic discount experiments
+bash scripts/hyperbolic.sh
+
+# Run with Box's Loop for model building
+python run_experiment.py \
+    seed=1 \
+    llms=openai \
+    include_prior=true \
+    exp=oed \
+    envs=hyperbolic_direct \
+    use_ppl=true
 ```
 
-oed.yaml
-```yaml
-  - num_experiments: [0, 1, 3, 5, 7, 10]
-  - experiment_type: "oed"
+### EIG Regret Analysis
+
+```bash
+# First run experiments
+python run_experiment.py ...
+
+# Then calculate EIG regret
+python run_eig_regret.py \
+    seed=1 \
+    num_random=100 \ # number of samples for the MC estimate
+    box=false
 ```
 
-custom_env.yaml
-```yaml
-  - env_name: "custom_environment"
-  - goal_name: "custom_goal"
-  - num_evals: 10
-  - env_params:
-    - param1: 1
-    - param2: 2
-    - param3: 3
+## Configuration System
+
+BoxingGym uses Hydra for configuration management:
+
+### Configuration Structure
+```
+conf/
+├── config.yaml          # Main configuration
+├── llms/               # LLM configurations
+│   └── openai.yaml
+├── exp/                # Experiment types
+│   ├── oed.yaml
+│   └── discovery.yaml
+└── envs/               # Environment configs
+    ├── hyperbolic_direct.yaml
+    └── ...
 ```
 
-## Directory Structure
-- Environments: `src/boxing_gym/envs/`
-- Agents: `src/boxing_gym/agents/`
-    - LLM Agent: `src/boxing_gym/agents/agent.py`
-    - Box's Apprentice: Model Criticism LLM in `src/boxing_gym/agents/llm.py`
-- Configurations for experiments: We use hydra for configs, `conf/`
-- Running experiments: `run_experiment.py`
-- Scripts for running experiments: `scripts/`
-- Analysis of experiments: `analysis/`
+### Example Configuration
 
-## Existing Agents
-### Box's Apprentice
-Box's Apprentice is an agent that combines language model capabilities with statistical modeling to perform experimental design and model discovery. It can build explicit generative models to improve predictions.
-Box's Apprentice: Model Criticism LLM in `src/boxing_gym/agents/llm.py`
-### LLM Agent
-The LLM Agent is a language-based agent that interacts with environments purely through natural language. It is capable of proposing and testing scientific theories but relies on its language processing abilities.
-LLM Agent: `src/boxing_gym/agents/agent.py`
+`conf/envs/hyperbolic_direct.yaml`:
+```yaml
+num_evals: 10                    # Number of evaluation questions
+env_name: "hyperbolic_temporal_discount"
+goal_name: "direct"             # Goal type
+com_limit: 200                  # Word limit for explanations
+env_params:                     # Environment-specific parameters
+  epsilon: 0.01
+  k_mean: -4.25
+  k_std: 0.5
+  alpha_scale: 2
+```
 
+### Creating Custom Configurations
+
+```yaml
+# conf/exp/my_experiment.yaml
+num_experiments: [0, 5, 10, 20]  # Experiment budgets to test
+experiment_type: "oed"
+```
+
+## Analysis Tools
+
+### Results Structure
+
+Results are saved as JSON files:
+```
+results/
+└── hyperbolic_temporal_discount/
+    ├── direct_gpt-4o_oed_true_1.json      # Main results
+    └── regret_direct_gpt-4o_oed_true_1.json  # EIG analysis
+```
+
+### Result File Contents
+
+```json
+{
+  "config": {...},
+  "data": {
+    "results": [[accuracy, std], ...],
+    "queries": ["[10, 20, 5]", ...],
+    "observations": [1, 0, ...],
+    "successes": [true, true, ...],
+    "eigs": [0.23, 0.18, ...],
+    "programs": ["PyMC model code..."]  // If using Box's Loop
+  },
+  "scientist_messages": [...],
+  "naive_messages": [...]  // For discovery tasks
+}
+```
+
+### Analysis Scripts
+
+The `analysis/` directory contains Jupyter notebooks for:
+- Plotting learning curves across number of experiments
+- Comparing agent performance
+- Visualizing EIG Regret
+- Statistical significance testing
+
+## Box's Loop Integration
+
+When `use_ppl=true`, the system uses Box's Loop for automated model building:
+
+1. **Data Collection**: Agent experiments generate dataset
+2. **Model Proposal**: LLM proposes PyMC statistical models
+3. **Model Evaluation**: Models scored using LOO-CV
+4. **Model Criticism**: LLM analyzes discrepancies
+5. **Iteration**: Process repeats with refinements
+
+This provides agents with explicit probabilistic models to guide experimentation.
 
 ## Contributing
-We welcome contributions to BoxingGym, especially for new environments and agents. If you want to contribute, please follow these steps:
+
+We welcome contributions! Areas of interest:
+
+- **New Environments**: Implement novel experimental domains
+- **Goal Types**: Design new evaluation objectives  
+- **Agent Strategies**: Develop improved experimental design algorithms
+- **Analysis Tools**: Create visualization and statistical tools
+
+Please follow the environment and goal interfaces described above, and include comprehensive tests and documentation.
+
+If you want to contribute, please follow these steps:
 
 1. Fork the repository.
 2. Create a new branch (`git checkout -b feature-branch`).
