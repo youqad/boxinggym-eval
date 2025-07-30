@@ -1,0 +1,183 @@
+{
+    "config": {
+        "seed": 1,
+        "include_prior": true,
+        "use_ppl": false,
+        "llms": {
+            "model_name": "qwen2.5-7b-instruct",
+            "temperature": 0.0,
+            "max_tokens": 512
+        },
+        "exp": {
+            "num_experiments": [
+                10
+            ],
+            "experiment_type": "discovery"
+        },
+        "envs": {
+            "num_evals": 10,
+            "env_name": "survival",
+            "goal_name": "direct_discovery",
+            "com_limit": 200,
+            "env_params": {
+                "num_patients": 100,
+                "time_upper_bound": 10
+            }
+        }
+    },
+    "data": {
+        "results": [
+            [
+                [
+                    0.5,
+                    0.5
+                ],
+                [
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 3.665001387760368, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 3.1812013826793626, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 4.266124265090666, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 1.26253148722262, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 6.61822856298353, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 7.034092127832006, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 6.382091395488157, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 7.576531297592526, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 5.815724415041396, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 1.369304049186446, is the patient alive or dead? Respond using a binary value 0 or 1."
+                ],
+                [
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0
+                ],
+                [
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1"
+                ]
+            ]
+        ],
+        "queries": [
+            "50",
+            "24",
+            "25",
+            "88",
+            "57",
+            "47",
+            "76",
+            "28",
+            "97",
+            "86"
+        ],
+        "observations": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1
+        ],
+        "successes": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+        ],
+        "explanations": [
+            "Given the data and observations, we have seen that both metastasis and the time since surgery play significant roles in predicting survival. Metastasis generally correlates with shorter survival times, but there are exceptions where patients with metastasis can survive for extended periods. For instance, patient 50 survived 9.99 years despite metastasis, while patient 88 survived only 0.88 years. On the other hand, non-metastasis can also lead to both short and long survival times; patient 24 survived 0.74 years without metastasis, whereas patient 25 survived 8.39 years without metastasis. The key takeaway is that survival is influenced by multiple factors, and the interaction between metastasis and time since surgery is complex. Without metastasis, longer survival times are more common, but the presence of metastasis does not always result in shorter survival times. Therefore, to predict survival, consider both the time since surgery and the presence or absence of metastasis, understanding that these factors can vary widely among individuals."
+        ],
+        "eigs": [],
+        "programs": []
+    },
+    "scientist_messages": [
+        "role:system, messaage:There are breast cancer patients where, for each patient, an amount of time has passed since they received surgery and their cancer has either metastasized or not.\nYour goal is to conduct experiments and explain the environment to the user.The goal of the user is to be able to predict whether a breast cancer patient will survive given the time since they\nreceived surgery and whether their cancer has metastasized.\nThere are 100, and the time since surgery and status of metastasization are given\nby below. 0 or 1 indicates whether the cancer metastasized. \n0: 0.27, 0\n1: 6.02, 1\n2: 3.87, 0\n3: 2.23, 1\n4: 3.51, 1\n5: 9.31, 1\n6: 8.75, 1\n7: 6.82, 0\n8: 1.94, 1\n9: 4.11, 1\n10: 5.92, 1\n11: 6.28, 0\n12: 4.59, 0\n13: 7.49, 1\n14: 9.06, 1\n15: 6.08, 0\n16: 1.18, 1\n17: 6.30, 1\n18: 8.17, 1\n19: 2.48, 0\n20: 6.16, 0\n21: 6.62, 1\n22: 6.43, 0\n23: 1.25, 0\n24: 0.74, 0\n25: 8.39, 0\n26: 3.99, 1\n27: 2.76, 0\n28: 2.37, 1\n29: 6.98, 1\n30: 6.32, 1\n31: 4.35, 1\n32: 8.21, 1\n33: 1.68, 0\n34: 1.46, 0\n35: 5.38, 1\n36: 6.00, 1\n37: 5.89, 0\n38: 3.91, 0\n39: 8.41, 1\n40: 8.06, 1\n41: 8.74, 1\n42: 3.60, 0\n43: 5.08, 1\n44: 9.51, 0\n45: 7.81, 0\n46: 1.36, 1\n47: 4.07, 1\n48: 6.87, 0\n49: 0.15, 1\n50: 9.99, 1\n51: 7.24, 1\n52: 4.33, 1\n53: 0.15, 1\n54: 4.88, 0\n55: 6.48, 0\n56: 0.80, 1\n57: 0.88, 0\n58: 3.70, 1\n59: 6.03, 1\n60: 1.76, 0\n61: 9.16, 0\n62: 7.76, 0\n63: 1.43, 0\n64: 5.31, 1\n65: 5.76, 1\n66: 6.31, 1\n67: 7.48, 1\n68: 6.70, 1\n69: 3.81, 1\n70: 6.10, 0\n71: 7.31, 1\n72: 5.23, 1\n73: 7.19, 1\n74: 3.50, 0\n75: 1.03, 1\n76: 2.91, 0\n77: 4.12, 0\n78: 0.36, 1\n79: 1.23, 1\n80: 3.06, 1\n81: 0.96, 1\n82: 4.30, 0\n83: 9.16, 1\n84: 8.33, 0\n85: 3.25, 1\n86: 3.91, 0\n87: 1.04, 0\n88: 7.43, 1\n89: 2.77, 0\n90: 8.81, 1\n91: 1.28, 0\n92: 5.00, 1\n93: 6.98, 1\n94: 2.36, 1\n95: 2.68, 0\n96: 5.71, 0\n97: 9.26, 1\n98: 4.64, 1\n99: 6.26, 1\n\nYou may check whether a patient is alive by providing a patient ID where the ID ranges from 0 to 99. Make observations by specifying a single integer ID. If the patient is alive, the output will be 0, otherwise 1, if the the patient is dead.\nYou can think before you choose to decide which ID you want to observe.\n\nHere is an example:\n<thought> your thought </thought>\n<observe>1</observe>\nWhen asked to answer a question about the environment, respond in the format specified in the question.\n<thought> your thought</thought>\n<answer> your answer </answer>\n",
+        "role:user, messaage:Think about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\n<thought>your thought</thought>\n<observe> your observation</observe>\nMake an observation now.",
+        "role:assistant, messaage:<thought> To gain insight into the relationship between time since surgery and metastasis, I will start by observing a patient who has undergone surgery for a significant amount of time and has experienced metastasis. This will help us understand if there is a correlation between longer survival times and metastasis. </thought>\n<observe>50</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Since patient 50 survived (result: 0) despite having metastasized after a long period (9.99 years), it suggests that longer survival times are possible even with metastasis. To further explore this, I will observe a patient who has not metastasized but has a shorter survival time. This will help us understand the impact of metastasis on survival independently of the time since surgery. </thought>\n<observe>24</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Observing patient 24, who did not metastasize and had a short survival time (0.74 years), shows that non-metastasis can lead to shorter survival times. However, it does not provide information on the impact of longer survival times without metastasis. To better understand this, I will observe a patient who has not metastasized and has a longer survival time. This will help us determine if longer survival times can occur without metastasis. </thought>\n<observe>25</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Observing patient 25, who did not metastasize and had a longer survival time (8.39 years), confirms that longer survival times are possible without metastasis. This suggests that factors other than metastasis might influence survival. To further explore this, I will observe a patient who has metastasized but has a relatively short survival time. This will help us understand if metastasis always leads to shorter survival times or if there are exceptions. </thought>\n<observe>88</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Observing patient 88, who metastasized but had a relatively short survival time (7.43 years), suggests that metastasis does not always lead to immediate death. To further investigate the relationship between metastasis and survival time, I will observe a patient who has metastasized and has a very long survival time. This will help us understand if there are cases where metastasis does not significantly impact survival. </thought>\n<observe>57</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Observing patient 57, who metastasized but had a very short survival time (0.88 years), indicates that in some cases, metastasis can lead to rapid deterioration. To further explore the variability in survival times among patients with metastasis, I will observe another patient who has metastasized and has a longer survival time. This will help us understand the range of survival times for patients with metastasis. </thought>\n<observe>47</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Observing patient 47, who metastasized and had a longer survival time (7.48 years), provides additional evidence that survival times can vary significantly even among patients with metastasis. To further understand the impact of time since surgery on survival, I will observe a patient who has not metastasized and has a longer survival time. This will help us compare the survival outcomes of patients with and without metastasis at similar time points since surgery. </thought>\n<observe>76</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Observing patient 76, who did not metastasize and had a longer survival time (2.91 years), helps us understand that non-metastasis can lead to longer survival times. To further explore the relationship between time since surgery and survival, I will observe a patient who has not metastasized and has a shorter survival time. This will help us understand the impact of shorter survival times without metastasis. </thought>\n<observe>28</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Observing patient 28, who did not metastasize and had a shorter survival time (2.37 years), confirms that shorter survival times are possible without metastasis. To further explore the relationship between metastasis and survival time, I will observe a patient who has metastasized and has a very long survival time. This will help us understand if there are cases where metastasis does not significantly impact survival. </thought>\n<observe>97</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Observing patient 97, who metastasized but had a very long survival time (9.26 years), indicates that there are cases where metastasis does not significantly impact survival. To further explore the variability in survival times among patients with metastasis, I will observe another patient who has metastasized and has a shorter survival time. This will help us understand the range of survival times for patients with metastasis. </thought>\n<observe>86</observe>",
+        "role:user, messaage:Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. \nThey will make predictions based solely on your explanation, so provide as much detail as possible. You cannot provide your own experiments or observations.\nLimit your explanation to 200 words.",
+        "role:assistant, messaage:Given the data and observations, we have seen that both metastasis and the time since surgery play significant roles in predicting survival. Metastasis generally correlates with shorter survival times, but there are exceptions where patients with metastasis can survive for extended periods. For instance, patient 50 survived 9.99 years despite metastasis, while patient 88 survived only 0.88 years. On the other hand, non-metastasis can also lead to both short and long survival times; patient 24 survived 0.74 years without metastasis, whereas patient 25 survived 8.39 years without metastasis. The key takeaway is that survival is influenced by multiple factors, and the interaction between metastasis and time since surgery is complex. Without metastasis, longer survival times are more common, but the presence of metastasis does not always result in shorter survival times. Therefore, to predict survival, consider both the time since surgery and the presence or absence of metastasis, understanding that these factors can vary widely among individuals."
+    ],
+    "naive_messages": [
+        "role:system, messaage:Your goal is to predict whether a breast cancer patient will survive given the time since they received surgery and whether their cancer has metastasized.\nRespond with a binary value 0 or 1. Make assumptions about the environment and provide your best guess.\nHere is an example:\n<thought> your thought </thought>\n<answer>1</answer>Here is what you know about the environment:\nGiven the data and observations, we have seen that both metastasis and the time since surgery play significant roles in predicting survival. Metastasis generally correlates with shorter survival times, but there are exceptions where patients with metastasis can survive for extended periods. For instance, patient 50 survived 9.99 years despite metastasis, while patient 88 survived only 0.88 years. On the other hand, non-metastasis can also lead to both short and long survival times; patient 24 survived 0.74 years without metastasis, whereas patient 25 survived 8.39 years without metastasis. The key takeaway is that survival is influenced by multiple factors, and the interaction between metastasis and time since surgery is complex. Without metastasis, longer survival times are more common, but the presence of metastasis does not always result in shorter survival times. Therefore, to predict survival, consider both the time since surgery and the presence or absence of metastasis, understanding that these factors can vary widely among individuals.",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 3.665001387760368, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 3.1812013826793626, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 4.266124265090666, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 1.26253148722262, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 6.61822856298353, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 7.034092127832006, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 6.382091395488157, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 7.576531297592526, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 5.815724415041396, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 1.369304049186446, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>"
+    ]
+}

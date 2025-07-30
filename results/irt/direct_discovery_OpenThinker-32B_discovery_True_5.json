@@ -1,0 +1,184 @@
+{
+    "config": {
+        "seed": 5,
+        "include_prior": true,
+        "use_ppl": false,
+        "llms": {
+            "model_name": "OpenThinker-32B",
+            "temperature": 0.0,
+            "max_tokens": 1024
+        },
+        "exp": {
+            "num_experiments": [
+                10
+            ],
+            "experiment_type": "discovery"
+        },
+        "envs": {
+            "num_evals": 10,
+            "env_name": "irt",
+            "goal_name": "direct_discovery",
+            "com_limit": 200,
+            "env_params": {
+                "num_students": 6,
+                "num_questions": 6,
+                "mode": "2pl"
+            }
+        }
+    },
+    "data": {
+        "results": [
+            [
+                [
+                    0.8,
+                    0.4000000000000001
+                ],
+                [
+                    "The result of the latest experiment you ran to make observations is 0.\nWill student 1 answer question 4 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 0.\nWill student 5 answer question 4 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 0.\nWill student 5 answer question 4 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 0.\nWill student 0 answer question 4 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 0.\nWill student 3 answer question 3 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 0.\nWill student 0 answer question 2 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 0.\nWill student 2 answer question 3 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 0.\nWill student 0 answer question 2 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 0.\nWill student 2 answer question 3 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 0.\nWill student 2 answer question 4 correctly? Respond with correct format in 0 or 1."
+                ],
+                [
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                [
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "1",
+                    "0",
+                    "1",
+                    "1"
+                ]
+            ]
+        ],
+        "queries": [
+            "[0, 0]",
+            "[1, 0]",
+            "[2, 0]",
+            "[3, 0]",
+            "[4, 0]",
+            "[5, 0]",
+            "[0, 1]",
+            "[1, 1]",
+            "[2, 1]",
+            "[3, 1]"
+        ],
+        "observations": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0
+        ],
+        "successes": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+        ],
+        "explanations": [
+            "Based on the observations conducted:\n\n1. **Question 0**: All students (0-5) answered incorrectly (0). This indicates Question 0 is extremely difficult or invalid.\n2. **Question 1**:\n   - Students 0, 1 answered incorrectly (0).\n   - Student 2 answered correctly (1).\n   - Student 3's result pending.\n\n**Strategy**:\n- **Question 0**: Predict 0 for any student.\n- **Question 1**: There's inconsistency. Student 2's success suggests some students can answer it. Need more data, but tentatively, if a student hasn't shown consistent failure, predict 1 for them on Q1; else, 0.\n- For other questions (2-5), no data yet. Assume average performance unless proven otherwise.\n\n**Example Prediction**:\n- If asked about Student 2 on Q1: 1.\n- Student 0 on Q1: 0.\n- For unobserved pairs, use general trends or assume 0 if question is Q0, else 1 if student has shown capability (like S2), else 0."
+        ],
+        "eigs": [],
+        "programs": []
+    },
+    "scientist_messages": [
+        "role:system, messaage:There are 6 students and 6 questions.\nYour goal is to conduct experiments and explain the environment to the user so that they can achieve their goal.The goal of the user is to be able to reliably predict the correctness of a student's answer to a specific question. Respond with 1 if you think the student will respond correctly and with 0 if you think the student will answer incorrectly. Conduct experiments to learn about the environment.\nYou may query a student-question pair to check if a student got a specific question right or wrong.\nStudent IDs range from 0 to 5 and question IDs range from 0 to 5.\nMake observations about the students and questions by specifying a single student-question pair in the following format: [student_id, question_id]\nThe environment will respond with the correctness of the student's answer to the question.\n\nYou can think before making an observation by providing your thoughts in <thought>.\n\nHere is an example for student 1 and question 3:\n<thought> your thought </thought>\n<observe>[1, 3]</observe>\nFormat it exactly like this.\nWhen asked to answer a question about the environement, respond in the format specified in the question.\n<thought> your thought </thought>\n<answer> your answer </answer>\nwhere your answer is 0 or 1. Be thoughtful but concise.\n",
+        "role:user, messaage:Think about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\n<thought>your thought</thought>\n<observe> your observation</observe>\nMake an observation now.",
+        "role:assistant, messaage:<thought> To start understanding the environment, I need to gather initial data points. Since there are 6 students and 6 questions, observing each student on one question might help identify patterns. Let's start with Student 0 and Question 0 to see if there's any diagonal pattern or if the first student has a certain baseline performance. </thought>\n<observe>[0, 0]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> The result for Student 0, Question 0 was incorrect (0). Now, I should check another student on the same question to see if the difficulty of Question 0 is high or if Student 0 is just struggling. Let's try Student 1 on Question 0. If Student 1 also gets it wrong, it suggests the question is difficult. If correct, then maybe Student 0 had an off day. </thought>\n<observe>[1, 0]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Both Student 0 and Student 1 answered Question 0 incorrectly. This suggests that Question 0 might be difficult for multiple students. To confirm, let's test another student on Question 0. Let's choose Student 2. If Student 2 also gets it wrong, it strengthens the hypothesis that the question is hard. </thought>\n<observe>[2, 0]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Three students (0, 1, 2) have all answered Question 0 incorrectly. This strongly indicates that Question 0 is either very difficult or perhaps there's a common misunderstanding. To further validate, let's check another student on Question 0. Testing Student 3 next. If they also get it wrong, it solidifies the pattern. </thought>\n<observe>[3, 0]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Four students (0-3) have answered Question 0 incorrectly. It's highly likely that Question 0 is a difficult question. To confirm, let's test the remaining students (4 and 5) on Question 0. Starting with Student 4. If both get it wrong, we can conclude Question 0 is consistently hard. </thought>\n<observe>[4, 0]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> All five tested students (0-4) answered Question 0 incorrectly. Only Student 5 remains untested on Question 0. Observing Student 5 on Question 0 will complete the picture. If they also get it wrong, Question 0 is universally challenging. If correct, there might be an exception. </thought>\n<observe>[5, 0]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> All six students answered Question 0 incorrectly. This confirms that Question 0 is extremely difficult or possibly flawed. Now, we need to assess other questions to understand the overall structure. Let's move to Question 1 and test Student 0. This will help determine if the issue was specific to Question 0 or if there are other patterns. </thought>\n<observe>[0, 1]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Student 0 answered Question 1 incorrectly as well. This could indicate that Student 0 is struggling across questions, or Question 1 is also difficult. To differentiate, test another student on Question 1. Let's try Student 1. If Student 1 also gets it wrong, Question 1 might be hard. If correct, Student 0 might have a general issue. </thought>\n<observe>[1, 1]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Both Student 0 and Student 1 answered Question 1 incorrectly. Similar to Question 0, this suggests Question 1 might also be difficult. Let's test Student 2 on Question 1 to see if the pattern continues. </thought>\n<observe>[2, 1]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Student 2 answered Question 1 correctly (1), which breaks the previous pattern of incorrect answers. This indicates that Question 1 isn't uniformly difficult. Now, we need to determine why Student 2 succeeded while others failed. Let's test another student on Question 1. Trying Student 3. If Student 3 answers correctly, it might suggest variability among students. If incorrect, there's inconsistency. </thought>\n<observe>[3, 1]</observe>",
+        "role:user, messaage:Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. \nThey will make predictions based solely on your explanation, so provide as much detail as possible. You CANNOT provide your own experiments or observations.\nLimit your explanation to 200 words.",
+        "role:assistant, messaage:Based on the observations conducted:\n\n1. **Question 0**: All students (0-5) answered incorrectly (0). This indicates Question 0 is extremely difficult or invalid.\n2. **Question 1**:\n   - Students 0, 1 answered incorrectly (0).\n   - Student 2 answered correctly (1).\n   - Student 3's result pending.\n\n**Strategy**:\n- **Question 0**: Predict 0 for any student.\n- **Question 1**: There's inconsistency. Student 2's success suggests some students can answer it. Need more data, but tentatively, if a student hasn't shown consistent failure, predict 1 for them on Q1; else, 0.\n- For other questions (2-5), no data yet. Assume average performance unless proven otherwise.\n\n**Example Prediction**:\n- If asked about Student 2 on Q1: 1.\n- Student 0 on Q1: 0.\n- For unobserved pairs, use general trends or assume 0 if question is Q0, else 1 if student has shown capability (like S2), else 0."
+    ],
+    "naive_messages": [
+        "role:system, messaage:Your goal is to predict the correctness of a student's answer to a specific question. Respond with 1 if you think the student will respond correctly and with 0 if you think the student will answer incorrectly.You will be provided with a student ID and a question ID. Respond with 1 if you think the student will respond correctly and with 0 if you think the student will answer incorrectly.Here is what you know about the enivronment:\nBased on the observations conducted:\n\n1. **Question 0**: All students (0-5) answered incorrectly (0). This indicates Question 0 is extremely difficult or invalid.\n2. **Question 1**:\n   - Students 0, 1 answered incorrectly (0).\n   - Student 2 answered correctly (1).\n   - Student 3's result pending.\n\n**Strategy**:\n- **Question 0**: Predict 0 for any student.\n- **Question 1**: There's inconsistency. Student 2's success suggests some students can answer it. Need more data, but tentatively, if a student hasn't shown consistent failure, predict 1 for them on Q1; else, 0.\n- For other questions (2-5), no data yet. Assume average performance unless proven otherwise.\n\n**Example Prediction**:\n- If asked about Student 2 on Q1: 1.\n- Student 0 on Q1: 0.\n- For unobserved pairs, use general trends or assume 0 if question is Q0, else 1 if student has shown capability (like S2), else 0.",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 0.\nWill student 1 answer question 4 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Remember what the exact answer format was and just exactly follow that. Give a very short response and give your answer directly. This is your last chance to output the correct format for the answer and do so concisely. You have very few tokens to respond with.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 0.\nWill student 5 answer question 4 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Remember what the exact answer format was and just exactly follow that. Give a very short response and give your answer directly. This is your last chance to output the correct format for the answer and do so concisely. You have very few tokens to respond with.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 0.\nWill student 5 answer question 4 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Remember what the exact answer format was and just exactly follow that. Give a very short response and give your answer directly. This is your last chance to output the correct format for the answer and do so concisely. You have very few tokens to respond with.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 0.\nWill student 0 answer question 4 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Remember what the exact answer format was and just exactly follow that. Give a very short response and give your answer directly. This is your last chance to output the correct format for the answer and do so concisely. You have very few tokens to respond with.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 0.\nWill student 3 answer question 3 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Remember what the exact answer format was and just exactly follow that. Give a very short response and give your answer directly. This is your last chance to output the correct format for the answer and do so concisely. You have very few tokens to respond with.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 0.\nWill student 0 answer question 2 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Remember what the exact answer format was and just exactly follow that. Give a very short response and give your answer directly. This is your last chance to output the correct format for the answer and do so concisely. You have very few tokens to respond with.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 0.\nWill student 2 answer question 3 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Remember what the exact answer format was and just exactly follow that. Give a very short response and give your answer directly. This is your last chance to output the correct format for the answer and do so concisely. You have very few tokens to respond with.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 0.\nWill student 0 answer question 2 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Remember what the exact answer format was and just exactly follow that. Give a very short response and give your answer directly. This is your last chance to output the correct format for the answer and do so concisely. You have very few tokens to respond with.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 0.\nWill student 2 answer question 3 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Remember what the exact answer format was and just exactly follow that. Give a very short response and give your answer directly. This is your last chance to output the correct format for the answer and do so concisely. You have very few tokens to respond with.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 0.\nWill student 2 answer question 4 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Remember what the exact answer format was and just exactly follow that. Give a very short response and give your answer directly. This is your last chance to output the correct format for the answer and do so concisely. You have very few tokens to respond with.",
+        "role:assistant, messaage:<answer>1</answer>"
+    ]
+}

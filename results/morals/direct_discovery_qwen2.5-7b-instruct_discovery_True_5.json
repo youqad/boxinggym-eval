@@ -1,0 +1,168 @@
+{
+    "config": {
+        "seed": 5,
+        "include_prior": true,
+        "use_ppl": false,
+        "llms": {
+            "model_name": "qwen2.5-7b-instruct",
+            "temperature": 0.0,
+            "max_tokens": 512
+        },
+        "exp": {
+            "num_experiments": [
+                10
+            ],
+            "experiment_type": "discovery"
+        },
+        "envs": {
+            "num_evals": 10,
+            "env_name": "morals",
+            "goal_name": "direct_discovery",
+            "com_limit": 200,
+            "env_params": {
+                "model_name": "gpt-4o"
+            }
+        }
+    },
+    "data": {
+        "results": [
+            [
+                [
+                    0.5,
+                    0.5
+                ],
+                [
+                    "The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['girl']\nGroup 2: ['girl' 'female_executive' 'female_executive' 'stroller']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)",
+                    "The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['pregnant_woman' 'pregnant_woman' 'female_executive']\nGroup 2: ['female_doctor' 'large_woman']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)",
+                    "The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['stroller' 'dog']\nGroup 2: ['old_man' 'female_doctor' 'male_doctor' 'criminal']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)",
+                    "The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['male_athlete' 'male_executive' 'large_woman']\nGroup 2: ['cat' 'male_doctor' 'old_woman' 'criminal']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)",
+                    "The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['criminal' 'homeless']\nGroup 2: ['female_athlete' 'female_doctor' 'stroller' 'female_doctor']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)",
+                    "The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['male_doctor' 'boy' 'male_athlete' 'old_man']\nGroup 2: ['female_executive' 'female_doctor' 'female_executive']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)",
+                    "The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['criminal']\nGroup 2: ['criminal' 'cat' 'female_executive']\nIntervention: stay\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)",
+                    "The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['stroller' 'cat' 'homeless' 'male_athlete']\nGroup 2: ['female_executive' 'female_athlete']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)",
+                    "The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['cat' 'stroller' 'male_doctor' 'large_woman']\nGroup 2: ['stroller' 'old_woman' 'male_athlete' 'cat']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)",
+                    "The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['male_executive' 'male_athlete']\nGroup 2: ['boy' 'girl']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)"
+                ],
+                [
+                    2,
+                    1,
+                    2,
+                    1,
+                    2,
+                    1,
+                    2,
+                    1,
+                    2,
+                    1
+                ],
+                [
+                    "2",
+                    "2",
+                    "2",
+                    "2",
+                    "2",
+                    "2",
+                    "2",
+                    "2",
+                    "2",
+                    "2"
+                ]
+            ]
+        ],
+        "queries": [
+            "Group 1: [boy]\nGroup 2: [female_executive, male_executive] \nIntervention: swerve",
+            "Group 1: [large_man, large_woman, old_man, old_woman]\nGroup 2: [criminal] \nIntervention: swerve",
+            "Group 1: [male_doctor]\nGroup 2: [criminal, female_doctor, male_executive] \nIntervention: swerve",
+            "Group 1: [male_athlete]\nGroup 2: [female_athlete, male_doctor, female_doctor] \nIntervention: swerve",
+            "Group 1: [criminal]\nGroup 2: [homeless, old_man, old_woman] \nIntervention: swerve",
+            "Group 1: [boy, girl]\nGroup 2: [male_athlete, female_athlete, male_executive, female_executive] \nIntervention: swerve",
+            "Group 1: [old_man, old_woman]\nGroup 2: [male_athlete, female_athlete, male_executive, female_executive] \nIntervention: swerve",
+            "Group 1: [old_man]\nGroup 2: [male_athlete, female_athlete, old_woman, old_man] \nIntervention: swerve",
+            "Group 1: [old_woman]\nGroup 2: [male_athlete, female_athlete, old_man, old_woman] \nIntervention: swerve",
+            "Group 1: [old_man]\nGroup 2: [male_athlete, female_athlete, old_woman, old_man] \nIntervention: swerve"
+        ],
+        "observations": [
+            "The participant responded with: I choose to save group 2 because there are more people in this group.\n",
+            "The participant responded with: I choose to save group 1 because it includes multiple individuals, whereas group 2 consists of only one person with a criminal background.\n",
+            "The participant responded with: I choose to save group 2 because it contains more individuals, including a female doctor and a male executive, reflecting a greater social contribution.\n",
+            "The participant responded with: I choose to save group 2 because it consists of more people, including professionals who contribute significantly to society.\n",
+            "The participant responded with: I choose to save group 2 because it includes more people and individuals who are older.\n",
+            "The participant responded with: I choose to save group 2 because it contains more individuals and includes people with high social status and fitness.\n",
+            "The participant responded with: I choose to save group 2 because it includes a higher number of people and individuals who are younger and fitter.\n",
+            "The participant responded with: I choose to save group 2 because it includes more individuals and prioritizes the lives of young and fit individuals.\n",
+            "The participant responded with: I choose to save group 2 because it includes more individuals and people who are physically fit.\n",
+            "The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n"
+        ],
+        "successes": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+        ],
+        "explanations": [
+            "Based on the participant's responses, it appears that they prioritize saving a larger number of individuals and those who are younger and more physically fit. They also seem to consider the social status of the individuals, favoring those who are seen as contributing more to society. Given this information, we can predict that the participant would likely choose to save Group 2 if it contains more individuals, especially if they are younger, fitter, or have higher social status. Conversely, if Group 1 contains a single individual who is older or less fit, the participant might choose to save Group 1. However, if Group 2 includes multiple individuals who are younger and more fit, the participant is likely to choose Group 2. \n\nTo summarize, the key factors influencing the participant's decision are the number of individuals, their age, fitness level, and social status."
+        ],
+        "eigs": [],
+        "programs": []
+    },
+    "scientist_messages": [
+        "role:system, messaage:The Moral Machine is an experiment where participants are presented with moral dilemmas involving autonomous vehicles. In each dilemma, the vehicle must decide between two outcomes, each involving the death of a different group of characters.\nYour goal is to conduct experiments and explain the environment to the user so that they can achieve their goal.The goal of the user is to be able to predict the choice of the participant in the Moral Machine experiment based on the descriptions of the characters in each group and the intervention the car would take to save a group.\nYou may query the participant for their decision by providing the descriptions of the characters in each group and the intervention the car would take ('swerve' or 'stay'). The two groups involved are passengers and pedestrians.\nThe participant will provide their choice of which group to save (1 for group 1, 2 for group 2).\nProvide the characters in group 1 (passengers) and 2 (pedestrians) in the following format:\n<observe>\nGroup 1: [character1, character2, ...] \nGroup 2: [character1, character2, ...]\nIntervention: intervention (swerve to save group 1 or stay to save group 1)\n</observe>\nCharacters can be any of: stroller, boy, girl, pregnant_woman, male_doctor, female_doctor, female_athlete, male_athlete, female_executive, male_executive, large_woman, large_man, homeless, old_man, old_woman, criminal, dog, cat  \nYou can reflect before making an observation by providing your thoughts in <thought>.\n\nHere is an example:\n<thought> This scenario tests whether people value the young over the elderly. </thought>\n<observe>\nGroup 1: [boy, girl]\nGroup 2: [elderly_man, elderly_woman] \nIntervention: swerve\n</observe>\nWhen asked to answer a question about the environment, respond in the format specified in the question.\n<thought> your thought </thought>\n<answer> your answer </answer>\n",
+        "role:user, messaage:Think about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\n<thought>your thought</thought>\n<observe> your observation</observe>\nMake an observation now.",
+        "role:assistant, messaage:<thought> I will start by observing scenarios that involve different combinations of characters to understand how various factors such as age, gender, and occupation influence the decisions. Let's begin with a scenario that includes a child and a professional. </thought>\n<observe>\nGroup 1: [boy]\nGroup 2: [female_executive, male_executive] \nIntervention: swerve\n</observe>",
+        "role:user, messaage:Result: The participant responded with: I choose to save group 2 because there are more people in this group.\n\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> The participant's response suggests that they prioritize saving more lives over fewer lives, even if those lives are of a different group. To further explore this, let's introduce a scenario with a single pedestrian and multiple passengers. This will help us understand if the number of people in a group is a significant factor in the decision-making process. </thought>\n<observe>\nGroup 1: [large_man, large_woman, old_man, old_woman]\nGroup 2: [criminal] \nIntervention: swerve\n</observe>",
+        "role:user, messaage:Result: The participant responded with: I choose to save group 1 because it includes multiple individuals, whereas group 2 consists of only one person with a criminal background.\n\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> The participant's response indicates that they consider the number of individuals and the nature of the individuals in the group when making a decision. To further test this, let's introduce a scenario with a single passenger and multiple pedestrians, including a criminal. This will help us understand if the presence of a criminal in the group affects the decision. </thought>\n<observe>\nGroup 1: [male_doctor]\nGroup 2: [criminal, female_doctor, male_executive] \nIntervention: swerve\n</observe>",
+        "role:user, messaage:Result: The participant responded with: I choose to save group 2 because it contains more individuals, including a female doctor and a male executive, reflecting a greater social contribution.\n\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> The participant's response suggests that they consider the social contribution of the individuals in the group. To further explore this, let's introduce a scenario with a single passenger and multiple pedestrians, all of whom are contributing members of society (e.g., doctors and executives). This will help us understand if the social contribution is a significant factor in the decision-making process. </thought>\n<observe>\nGroup 1: [male_athlete]\nGroup 2: [female_athlete, male_doctor, female_doctor] \nIntervention: swerve\n</observe>",
+        "role:user, messaage:Result: The participant responded with: I choose to save group 2 because it consists of more people, including professionals who contribute significantly to society.\n\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> The participant's response indicates that they prioritize the number of individuals and the perceived social contribution of the group. To further test this, let's introduce a scenario with a single passenger and multiple pedestrians, all of whom are not contributing members of society (e.g., criminals and homeless individuals). This will help us understand if the social contribution is a significant factor in the decision-making process. </thought>\n<observe>\nGroup 1: [criminal]\nGroup 2: [homeless, old_man, old_woman] \nIntervention: swerve\n</observe>",
+        "role:user, messaage:Result: The participant responded with: I choose to save group 2 because it includes more people and individuals who are older.\n\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> The participant's response suggests that they prioritize the number of individuals and the age of the individuals in the group. To further explore this, let's introduce a scenario with a single passenger and multiple pedestrians, all of whom are younger individuals. This will help us understand if the age of the individuals is a significant factor in the decision-making process. </thought>\n<observe>\nGroup 1: [boy, girl]\nGroup 2: [male_athlete, female_athlete, male_executive, female_executive] \nIntervention: swerve\n</observe>",
+        "role:user, messaage:Result: The participant responded with: I choose to save group 2 because it contains more individuals and includes people with high social status and fitness.\n\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> The participant's response indicates that they prioritize the number of individuals and the perceived social status and physical fitness of the group. To further test this, let's introduce a scenario with a single passenger and multiple pedestrians, all of whom are older individuals. This will help us understand if the age and social status of the individuals are significant factors in the decision-making process. </thought>\n<observe>\nGroup 1: [old_man, old_woman]\nGroup 2: [male_athlete, female_athlete, male_executive, female_executive] \nIntervention: swerve\n</observe>",
+        "role:user, messaage:Result: The participant responded with: I choose to save group 2 because it includes a higher number of people and individuals who are younger and fitter.\n\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> The participant's response suggests that they prioritize the number of individuals and the age and fitness of the individuals in the group. To further explore this, let's introduce a scenario with a single passenger and multiple pedestrians, all of whom are older individuals but with varying levels of fitness. This will help us understand if the age and fitness level of the individuals are significant factors in the decision-making process. </thought>\n<observe>\nGroup 1: [old_man]\nGroup 2: [male_athlete, female_athlete, old_woman, old_man] \nIntervention: swerve\n</observe>",
+        "role:user, messaage:Result: The participant responded with: I choose to save group 2 because it includes more individuals and prioritizes the lives of young and fit individuals.\n\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> The participant's response indicates that they prioritize the number of individuals and the age and fitness level of the individuals in the group. To further test this, let's introduce a scenario with a single passenger and multiple pedestrians, all of whom are older individuals but with varying levels of fitness. This will help us understand if the age and fitness level of the individuals are significant factors in the decision-making process. </thought>\n<observe>\nGroup 1: [old_woman]\nGroup 2: [male_athlete, female_athlete, old_man, old_woman] \nIntervention: swerve\n</observe>",
+        "role:user, messaage:Result: The participant responded with: I choose to save group 2 because it includes more individuals and people who are physically fit.\n\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> The participant's response suggests that they prioritize the number of individuals and the physical fitness of the individuals in the group. To further explore this, let's introduce a scenario with a single passenger and multiple pedestrians, all of whom are older individuals but with varying levels of fitness. This will help us understand if the age and fitness level of the individuals are significant factors in the decision-making process. </thought>\n<observe>\nGroup 1: [old_man]\nGroup 2: [male_athlete, female_athlete, old_woman, old_man] \nIntervention: swerve\n</observe>",
+        "role:user, messaage:Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. \nThey will make predictions based solely on your explanation, so provide as much detail as possible. You CANNOT provide your own experiments or observations.\nLimit your explanation to 200 words",
+        "role:assistant, messaage:Based on the participant's responses, it appears that they prioritize saving a larger number of individuals and those who are younger and more physically fit. They also seem to consider the social status of the individuals, favoring those who are seen as contributing more to society. Given this information, we can predict that the participant would likely choose to save Group 2 if it contains more individuals, especially if they are younger, fitter, or have higher social status. Conversely, if Group 1 contains a single individual who is older or less fit, the participant might choose to save Group 1. However, if Group 2 includes multiple individuals who are younger and more fit, the participant is likely to choose Group 2. \n\nTo summarize, the key factors influencing the participant's decision are the number of individuals, their age, fitness level, and social status."
+    ],
+    "naive_messages": [
+        "role:system, messaage:The Moral Machine is an experiment where participants are presented with moral dilemmas involving autonomous vehicles. In each dilemma, the vehicle must decide between two outcomes, each involving the death of a different group of characters.\nYour goal is to predict the choice of the participant in the Moral Machine experiment based on the descriptions of the characters in each group and the intervention the car would take to save a group.\nThe intervention the car can take ('swerve' or 'stay'). The two groups involved are passengers and pedestrians.\nThe participant can provide their choice of which group to save (1 for group 1, 2 for group 2).\n\nAnswer the question in the following format:\n1 for group 1, 2 for group 2\nYou may think before prividing your answer. Here is an example:\n<thought>your thought</thought>\n<answer>your answer in the specified format</answer>Here is what you know about the environment:\nBased on the participant's responses, it appears that they prioritize saving a larger number of individuals and those who are younger and more physically fit. They also seem to consider the social status of the individuals, favoring those who are seen as contributing more to society. Given this information, we can predict that the participant would likely choose to save Group 2 if it contains more individuals, especially if they are younger, fitter, or have higher social status. Conversely, if Group 1 contains a single individual who is older or less fit, the participant might choose to save Group 1. However, if Group 2 includes multiple individuals who are younger and more fit, the participant is likely to choose Group 2. \n\nTo summarize, the key factors influencing the participant's decision are the number of individuals, their age, fitness level, and social status.",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['girl']\nGroup 2: ['girl' 'female_executive' 'female_executive' 'stroller']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:2",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>2</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['pregnant_woman' 'pregnant_woman' 'female_executive']\nGroup 2: ['female_doctor' 'large_woman']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:<answer>2</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['stroller' 'dog']\nGroup 2: ['old_man' 'female_doctor' 'male_doctor' 'criminal']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:<answer>2</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['male_athlete' 'male_executive' 'large_woman']\nGroup 2: ['cat' 'male_doctor' 'old_woman' 'criminal']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:<answer>2</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['criminal' 'homeless']\nGroup 2: ['female_athlete' 'female_doctor' 'stroller' 'female_doctor']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:<answer>2</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['male_doctor' 'boy' 'male_athlete' 'old_man']\nGroup 2: ['female_executive' 'female_doctor' 'female_executive']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:<answer>2</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['criminal']\nGroup 2: ['criminal' 'cat' 'female_executive']\nIntervention: stay\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:2",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>2</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['stroller' 'cat' 'homeless' 'male_athlete']\nGroup 2: ['female_executive' 'female_athlete']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:<answer>2</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['cat' 'stroller' 'male_doctor' 'large_woman']\nGroup 2: ['stroller' 'old_woman' 'male_athlete' 'cat']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:<answer>2</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is The participant responded with: I choose to save group 2 because it contains more individuals and includes fit athletes.\n.\n\n Question: The participant was presented with the following scenario:\nGroup 1: ['male_executive' 'male_athlete']\nGroup 2: ['boy' 'girl']\nIntervention: swerve\nWhat choice do you predict the participant made? (1 for group 1, 2 for group 2)\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:2",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>2</answer>"
+    ]
+}

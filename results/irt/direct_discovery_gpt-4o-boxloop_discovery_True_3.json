@@ -1,0 +1,164 @@
+{
+    "config": {
+        "seed": 3,
+        "include_prior": true,
+        "use_ppl": true,
+        "llms": {
+            "model_name": "gpt-4o",
+            "temperature": 0.0,
+            "max_tokens": 512
+        },
+        "exp": {
+            "num_experiments": [
+                10
+            ],
+            "experiment_type": "discovery"
+        },
+        "envs": {
+            "num_evals": 10,
+            "env_name": "irt",
+            "goal_name": "direct_discovery",
+            "com_limit": 200,
+            "env_params": {
+                "num_students": 6,
+                "num_questions": 6,
+                "mode": "2pl"
+            }
+        }
+    },
+    "data": {
+        "results": [
+            [
+                [
+                    0.6,
+                    0.4898979485566356
+                ],
+                [
+                    "The result of the latest experiment you ran to make observations is 1.\nWill student 5 answer question 3 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nWill student 2 answer question 5 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nWill student 3 answer question 5 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nWill student 2 answer question 4 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nWill student 4 answer question 2 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nWill student 5 answer question 0 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nWill student 4 answer question 1 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nWill student 1 answer question 2 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nWill student 1 answer question 2 correctly? Respond with correct format in 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nWill student 5 answer question 0 correctly? Respond with correct format in 0 or 1."
+                ],
+                [
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                [
+                    "0",
+                    "0",
+                    "1",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "1",
+                    "1",
+                    "0"
+                ]
+            ]
+        ],
+        "queries": [
+            "[0, 0]",
+            "[1, 0]",
+            "[2, 0]",
+            "[2, 1]",
+            "[2, 2]",
+            "[0, 1]",
+            "[1, 1]",
+            "[3, 1]",
+            "[3, 0]",
+            "[4, 0]"
+        ],
+        "observations": [
+            1,
+            1,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+        ],
+        "successes": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+        ],
+        "explanations": [
+            "The statistical model suggests that a student's ability and a question's difficulty influence the likelihood of a correct answer. Each student has an inherent ability level, and each question has a difficulty level. The probability of a student answering correctly is higher if their ability exceeds the question's difficulty.\n\nFrom the inferred parameters, we see that students 0, 1, and 3 have higher ability levels, making them more likely to answer questions correctly. Student 2 has a lower ability, indicating they might struggle more. Questions 0, 1, and 2 have negative difficulty values, suggesting they are easier compared to others.\n\nThe probabilities (p values) indicate the likelihood of correctness for specific student-question pairs. For instance, p[0] and p[1] are high, meaning students 0 and 1 are likely to answer their respective questions correctly. Conversely, lower p values suggest a lower probability of correctness.\n\nIn summary, to predict if a student will answer correctly, consider both the student's ability and the question's difficulty. Higher student ability and lower question difficulty increase the chances of a correct answer."
+        ],
+        "eigs": [],
+        "programs": []
+    },
+    "scientist_messages": [
+        "role:system, messaage:There are 6 students and 6 questions.\nYour goal is to conduct experiments and explain the environment to the user so that they can achieve their goal.The goal of the user is to be able to reliably predict the correctness of a student's answer to a specific question. Respond with 1 if you think the student will respond correctly and with 0 if you think the student will answer incorrectly. Conduct experiments to learn about the environment.\nYou may query a student-question pair to check if a student got a specific question right or wrong.\nStudent IDs range from 0 to 5 and question IDs range from 0 to 5.\nMake observations about the students and questions by specifying a single student-question pair in the following format: [student_id, question_id]\nThe environment will respond with the correctness of the student's answer to the question.\n\nYou can think before making an observation by providing your thoughts in <thought>.\n\nHere is an example for student 1 and question 3:\n<thought> your thought </thought>\n<observe>[1, 3]</observe>\nFormat it exactly like this.\nWhen asked to answer a question about the environement, respond in the format specified in the question.\n<thought> your thought </thought>\n<answer> your answer </answer>\nwhere your answer is 0 or 1. Be thoughtful but concise.\n",
+        "role:user, messaage:Think about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\n<thought>your thought</thought>\n<observe> your observation</observe>\nMake an observation now.",
+        "role:assistant, messaage:<thought>To develop a strategy for predicting the correctness of a student's answer to a specific question, I should first gather some initial data points to identify any patterns or trends. A good starting point is to observe a few different students answering the same question to see if the question's difficulty level affects all students similarly. I will start by observing student 0's response to question 0.</thought>\n<observe>[0, 0]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Since student 0 answered question 0 correctly, I will now observe another student answering the same question to see if the question is generally easy or if student 0 is particularly strong. This will help me determine if the question's difficulty level is consistent across different students. I will observe student 1's response to question 0.</thought>\n<observe>[1, 0]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Both student 0 and student 1 answered question 0 correctly, which might suggest that question 0 is relatively easy. To further confirm this, I will observe another student answering the same question. I will choose student 2 to see if they also answer question 0 correctly.</thought>\n<observe>[2, 0]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Student 2 answered question 0 incorrectly, which suggests that question 0 might not be universally easy. It could be that students 0 and 1 are particularly strong or that student 2 struggles with this type of question. To explore this further, I will observe student 2's response to a different question to see if they generally struggle with questions or if it was specific to question 0. I will observe student 2's response to question 1.</thought>\n<observe>[2, 1]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Student 2 answered question 1 incorrectly as well, which might indicate that student 2 generally struggles with questions or that the questions are difficult for them. To determine if student 2's performance is consistent across different questions, I will observe their response to another question. I will choose question 2 to see if the pattern continues.</thought>\n<observe>[2, 2]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Student 2 answered question 2 correctly, indicating that they may not struggle with all questions, but rather with specific ones. To further understand the pattern, I should check if other students also have varying performance across different questions. I will now observe student 0's response to question 1 to see if they maintain their performance across different questions.</thought>\n<observe>[0, 1]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Student 0 answered question 1 correctly, which suggests that they might be a strong student or that question 1 is relatively easy. To determine if question 1 is generally easy, I will observe another student's response to the same question. I will choose student 1 to see if they also answer question 1 correctly.</thought>\n<observe>[1, 1]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Both students 0 and 1 answered question 1 correctly, which suggests that question 1 might be relatively easy. To further confirm this, I will observe another student's response to question 1. I will choose student 3 to see if they also answer question 1 correctly.</thought>\n<observe>[3, 1]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Student 3 also answered question 1 correctly, reinforcing the idea that question 1 might be relatively easy for most students. To explore the performance of students on a different question, I will now observe student 3's response to question 0, which had mixed results previously.</thought>\n<observe>[3, 0]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Student 3 answered question 0 correctly, similar to students 0 and 1. This suggests that question 0 might be easier for some students but not for others, as student 2 got it wrong. To further investigate the performance of students on different questions, I will observe student 4's response to question 0 to see if they also find it easy.</thought>\n<observe>[4, 0]</observe>",
+        "role:user, messaage:Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. \nThey will make predictions based solely on your explanation, so provide as much detail as possible. You CANNOT provide your own experiments or observations.\nLimit your explanation to 200 words.To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \nHere is the statistical model. \n import pymc as pm\nimport numpy as np\n\ndef gen_model(observed_data):\n    # Convert observed_data columns to numpy arrays\n    student_ids = observed_data['student_id'].to_numpy()\n    question_ids = observed_data['question_id'].to_numpy()\n    correctness = observed_data['correctness'].to_numpy()\n    \n    rng1 = np.random.default_rng(42)\n    rng2 = np.random.default_rng(314)\n    \n    with pm.Model() as model:\n        # Create a pm.MutableData object for each non-observation column\n        student_id = pm.MutableData(\"student_id\", student_ids, dims='obs_id')\n        question_id = pm.MutableData(\"question_id\", question_ids, dims='obs_id')\n        \n        # Priors for student ability and question difficulty\n        student_ability = pm.Normal(\"student_ability\", mu=0, sigma=1, shape=6)\n        question_difficulty = pm.Normal(\"question_difficulty\", mu=0, sigma=1, shape=6)\n        \n        # Logistic regression for probability of correctness\n        logit_p = student_ability[student_id] - question_difficulty[question_id]\n        p = pm.Deterministic(\"p\", pm.math.sigmoid(logit_p))\n        \n        # Likelihood\n        y_obs = pm.Bernoulli(\"y_obs\", p=p, observed=correctness, dims=\"obs_id\")\n        \n        # Sampling\n        trace = pm.sample(1000, tune=500, target_accept=0.90, chains=3, cores=1, random_seed=rng1, idata_kwargs={\"log_likelihood\": True})\n        posterior_predictive = pm.sample_posterior_predictive(trace, random_seed=rng2, return_inferencedata=False)\n        \n        return model, posterior_predictive, trace \nHere are the inferred params. \n p[0]                      0.723\np[1]                      0.726\np[2]                      0.523\np[3]                      0.488\np[4]                      0.501\np[5]                      0.695\np[6]                      0.696\np[7]                      0.693\np[8]                      0.726\np[9]                      0.676\nquestion_difficulty[0]   -0.610\nquestion_difficulty[1]   -0.441\nquestion_difficulty[2]   -0.507\nquestion_difficulty[3]    0.010\nquestion_difficulty[4]   -0.023\nquestion_difficulty[5]   -0.016\nstudent_ability[0]        0.583\nstudent_ability[1]        0.597\nstudent_ability[2]       -0.498\nstudent_ability[3]        0.583\nstudent_ability[4]        0.310\nstudent_ability[5]        0.006 \nDon't literally describe the model verbatim but use it to conceptually motivate your explanation.The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial.",
+        "role:assistant, messaage:The statistical model suggests that a student's ability and a question's difficulty influence the likelihood of a correct answer. Each student has an inherent ability level, and each question has a difficulty level. The probability of a student answering correctly is higher if their ability exceeds the question's difficulty.\n\nFrom the inferred parameters, we see that students 0, 1, and 3 have higher ability levels, making them more likely to answer questions correctly. Student 2 has a lower ability, indicating they might struggle more. Questions 0, 1, and 2 have negative difficulty values, suggesting they are easier compared to others.\n\nThe probabilities (p values) indicate the likelihood of correctness for specific student-question pairs. For instance, p[0] and p[1] are high, meaning students 0 and 1 are likely to answer their respective questions correctly. Conversely, lower p values suggest a lower probability of correctness.\n\nIn summary, to predict if a student will answer correctly, consider both the student's ability and the question's difficulty. Higher student ability and lower question difficulty increase the chances of a correct answer."
+    ],
+    "naive_messages": [
+        "role:system, messaage:Your goal is to predict the correctness of a student's answer to a specific question. Respond with 1 if you think the student will respond correctly and with 0 if you think the student will answer incorrectly.You will be provided with a student ID and a question ID. Respond with 1 if you think the student will respond correctly and with 0 if you think the student will answer incorrectly.Here is what you know about the enivronment:\nThe statistical model suggests that a student's ability and a question's difficulty influence the likelihood of a correct answer. Each student has an inherent ability level, and each question has a difficulty level. The probability of a student answering correctly is higher if their ability exceeds the question's difficulty.\n\nFrom the inferred parameters, we see that students 0, 1, and 3 have higher ability levels, making them more likely to answer questions correctly. Student 2 has a lower ability, indicating they might struggle more. Questions 0, 1, and 2 have negative difficulty values, suggesting they are easier compared to others.\n\nThe probabilities (p values) indicate the likelihood of correctness for specific student-question pairs. For instance, p[0] and p[1] are high, meaning students 0 and 1 are likely to answer their respective questions correctly. Conversely, lower p values suggest a lower probability of correctness.\n\nIn summary, to predict if a student will answer correctly, consider both the student's ability and the question's difficulty. Higher student ability and lower question difficulty increase the chances of a correct answer.",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWill student 5 answer question 3 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format required from above :\n<answer>your answer</answer>.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWill student 2 answer question 5 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format required from above :\n<answer>your answer</answer>.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWill student 3 answer question 5 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format required from above :\n<answer>your answer</answer>.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWill student 2 answer question 4 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format required from above :\n<answer>your answer</answer>.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWill student 4 answer question 2 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format required from above :\n<answer>your answer</answer>.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWill student 5 answer question 0 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format required from above :\n<answer>your answer</answer>.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWill student 4 answer question 1 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format required from above :\n<answer>your answer</answer>.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWill student 1 answer question 2 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format required from above :\n<answer>your answer</answer>.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWill student 1 answer question 2 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format required from above :\n<answer>your answer</answer>.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWill student 5 answer question 0 correctly? Respond with correct format in 0 or 1.\nAnswer in the following format required from above :\n<answer>your answer</answer>.",
+        "role:assistant, messaage:<answer>0</answer>"
+    ]
+}

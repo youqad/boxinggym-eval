@@ -1,0 +1,204 @@
+{
+    "config": {
+        "seed": 2,
+        "include_prior": false,
+        "use_ppl": false,
+        "llms": {
+            "model_name": "qwen2.5-7b-instruct",
+            "temperature": 0.0,
+            "max_tokens": 512
+        },
+        "exp": {
+            "num_experiments": [
+                10
+            ],
+            "experiment_type": "discovery"
+        },
+        "envs": {
+            "num_evals": 10,
+            "env_name": "irt",
+            "goal_name": "direct_discovery",
+            "com_limit": 200,
+            "env_params": {
+                "num_students": 6,
+                "num_questions": 6,
+                "mode": "2pl"
+            }
+        }
+    },
+    "data": {
+        "results": [
+            [
+                [
+                    0.4,
+                    0.48989794855663565
+                ],
+                [
+                    "The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [2, 4]?",
+                    "The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [1, 1]?",
+                    "The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [1, 1]?",
+                    "The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [0, 1]?",
+                    "The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [4, 5]?",
+                    "The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [2, 5]?",
+                    "The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [3, 4]?",
+                    "The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [2, 2]?",
+                    "The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [4, 0]?",
+                    "The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [4, 0]?"
+                ],
+                [
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                [
+                    "0",
+                    "0",
+                    "0",
+                    "1",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0",
+                    "0"
+                ]
+            ]
+        ],
+        "queries": [
+            "[0, 0]",
+            "[0, 5]",
+            "[0, 1]",
+            "[0, 1]",
+            "[0, 1]",
+            "[0, 2]",
+            "[1, 0]",
+            "[1, 1]",
+            "[1, 2]",
+            "[2, 0]",
+            "[2, 1]",
+            "[2, 2]",
+            "[3, 0]",
+            "[3, 1]"
+        ],
+        "observations": [
+            1,
+            1,
+            "You cannot query this observation, try again.",
+            "You cannot query this observation, try again.",
+            "You cannot query this observation, try again.",
+            1,
+            1,
+            "You cannot query this observation, try again.",
+            1,
+            1,
+            0,
+            "You cannot query this observation, try again.",
+            0,
+            1
+        ],
+        "successes": [
+            true,
+            true,
+            false,
+            false,
+            false,
+            true,
+            true,
+            false,
+            true,
+            true,
+            true,
+            false,
+            true,
+            true
+        ],
+        "explanations": [
+            "Based on the observations, the function appears to return 1 when the first input is 0, regardless of the second input. When the first input is greater than 0, the function returns 0 if the second input is 0, and it returns 0 for the observed combination of [3, 1]. Given this pattern, we can hypothesize that the function returns 1 only when the first input is 0. For other combinations, the function returns 0. Therefore, the prediction for any input [a, b] where \\(a > 0\\) is 0, and for inputs where \\(a = 0\\), the prediction is 1. This pattern suggests that the function might be checking if the first input is 0 and returning 1 if true, otherwise returning 0."
+        ],
+        "eigs": [],
+        "programs": []
+    },
+    "scientist_messages": [
+        "role:system, messaage:The environment maps two integers to a boolean value. The first integer ranges from 0 to 5, and the second integer ranges from 0 to 5.\nThe function outputs a boolean 0 or 1.\nYour goal is to conduct experiments and explain the environment to the user so that they can achieve their goal.The goal of the user is to be able to reliably predict the boolean output (0 or 1) of the environment for different integer inputs. Conduct experiments to learn about the environment.\nMake observations by specifying an input in the following format: [integer 1, integer 2]\nYou can think before making an observation by providing your thoughts in <thought>.\n\nHere is an example:\n<thought> your thought </thought>\n<observe>[1, 3]</observe>\nWhen asked to answer a question about the environement, respond in the format specified in the question.\n<thought> your thought</thought>\n<answer> your answer </answer>\n",
+        "role:user, messaage:Think about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\n<thought>your thought</thought>\n<observe> your observation</observe>\nMake an observation now.",
+        "role:assistant, messaage:<thought>Since the input integers range from 0 to 5, I will start by observing the boundary values to understand if the function behaves differently at these points.</thought>\n<observe>[0, 0]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Given that the first observation resulted in a boolean output of 1 for the input [0, 0], it suggests that the function might have specific behavior at the boundaries. To further understand the function, I should observe other boundary values. Specifically, I will observe the input [0, 5] since it involves another boundary point.</thought>\n<observe>[0, 5]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Observing the boundary points [0, 0] and [0, 5] both resulted in a boolean output of 1. This suggests that the function might consistently return 1 for the first input being 0. To test this hypothesis, I should observe other boundary points where the first input is 0, such as [0, 1], [0, 2], [0, 3], [0, 4], and [0, 5]. However, since [0, 5] already gave a result of 1, I will proceed with [0, 1] to see if there's any variation.</thought>\n<observe>[0, 1]</observe>",
+        "role:user, messaage:You cannot query this observation, try again.",
+        "role:assistant, messaage:<thought>I understand that I need to observe other boundary points where the first input is 0. Let's proceed with [0, 1] to check if the function returns 1 consistently for the first input being 0.</thought>\n<observe>[0, 1]</observe>",
+        "role:user, messaage:You cannot query this observation, try again.",
+        "role:assistant, messaage:<thought>I will observe the input [0, 1] to check if the function returns 1 when the first input is 0.</thought>\n<observe>[0, 1]</observe>",
+        "role:user, messaage:Result: You cannot query this observation, try again.\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>I will observe the input [0, 1] to check if the function returns 1 when the first input is 0. Since direct observation is not possible, I will choose another boundary point where the first input is 0, such as [0, 2], to gather more information.</thought>\n<observe>[0, 2]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Observing the input [0, 2] resulted in a boolean output of 1, which suggests that the function consistently returns 1 when the first input is 0. To further confirm this pattern and explore other possibilities, I will observe the input [1, 0] to see if the function behaves differently when the first input is not 0.</thought>\n<observe>[1, 0]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Observing the input [1, 0] also resulted in a boolean output of 1. This suggests that the function might consistently return 1 regardless of the first input. To further investigate, I will observe the input [1, 1] to see if there are any variations when both inputs are non-zero.</thought>\n<observe>[1, 1]</observe>",
+        "role:user, messaage:You cannot query this observation, try again.",
+        "role:assistant, messaage:<thought>I will observe the input [1, 1] to check if the function returns 1 when both inputs are non-zero. Since direct observation is not possible, I will choose another input point to gather more information. Let's observe [1, 2] to see if there are any variations when the first input is 1 and the second input is greater than 0.</thought>\n<observe>[1, 2]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Observing the input [1, 2] resulted in a boolean output of 1. This suggests that the function consistently returns 1 for all tested inputs. To further confirm this pattern, I will observe the input [2, 0] to see if the function behaves the same way when the first input is 2 and the second input is 0.</thought>\n<observe>[2, 0]</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>Observing the input [2, 0] also resulted in a boolean output of 1. This further confirms that the function consistently returns 1 for all tested inputs. To ensure there are no exceptions, I will observe the input [2, 1] to see if the function behaves the same way when the first input is 2 and the second input is 1.</thought>\n<observe>[2, 1]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>The result of [2, 1] is 0, which indicates that the function does not always return 1. This suggests that the function's behavior depends on both inputs. To better understand the function, I will observe the input [2, 2] to see if there is a pattern or if the function returns 0 only for certain combinations.</thought>\n<observe>[2, 2]</observe>",
+        "role:user, messaage:You cannot query this observation, try again.",
+        "role:assistant, messaage:<thought>I will observe the input [2, 2] to further understand the function's behavior. Since direct observation is not possible, I will choose another input point to gather more information. Let's observe [3, 0] to see if the function returns 0 for other combinations where the first input is greater than 0.</thought>\n<observe>[3, 0]</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought>The result of [3, 0] is 0, which suggests that the function returns 0 when the first input is greater than 0 and the second input is 0. To further understand the function, I will observe the input [3, 1] to see if the function returns 0 for other combinations where the first input is greater than 0 and the second input is non-zero.</thought>\n<observe>[3, 1]</observe>",
+        "role:user, messaage:Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. \nThey will make predictions based solely on your explanation, so provide as much detail as possible. You CANNOT provide your own experiments or observations.\nLimit your explanation to 200 words.",
+        "role:assistant, messaage:Based on the observations, the function appears to return 1 when the first input is 0, regardless of the second input. When the first input is greater than 0, the function returns 0 if the second input is 0, and it returns 0 for the observed combination of [3, 1]. Given this pattern, we can hypothesize that the function returns 1 only when the first input is 0. For other combinations, the function returns 0. Therefore, the prediction for any input [a, b] where \\(a > 0\\) is 0, and for inputs where \\(a = 0\\), the prediction is 1. This pattern suggests that the function might be checking if the first input is 0 and returning 1 if true, otherwise returning 0."
+    ],
+    "naive_messages": [
+        "role:system, messaage:Your goal is to predict the boolean output of the environment for different integer inputs.You will be provided with two integer inputs. Respond with 1 if you think the student will respond correctly and with 0 if you think the student will answer incorrectly.Here is what you know about the enivronment:\nBased on the observations, the function appears to return 1 when the first input is 0, regardless of the second input. When the first input is greater than 0, the function returns 0 if the second input is 0, and it returns 0 for the observed combination of [3, 1]. Given this pattern, we can hypothesize that the function returns 1 only when the first input is 0. For other combinations, the function returns 0. Therefore, the prediction for any input [a, b] where \\(a > 0\\) is 0, and for inputs where \\(a = 0\\), the prediction is 1. This pattern suggests that the function might be checking if the first input is 0 and returning 1 if true, otherwise returning 0.",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [2, 4]?\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [1, 1]?\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [1, 1]?\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [0, 1]?\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [4, 5]?\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [2, 5]?\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [3, 4]?\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [2, 2]?\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [4, 0]?\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>0</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nWhat is the output of the environment at input [4, 0]?\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:0",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>0</answer>"
+    ]
+}

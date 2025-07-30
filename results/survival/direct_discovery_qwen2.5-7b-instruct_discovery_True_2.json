@@ -1,0 +1,183 @@
+{
+    "config": {
+        "seed": 2,
+        "include_prior": true,
+        "use_ppl": false,
+        "llms": {
+            "model_name": "qwen2.5-7b-instruct",
+            "temperature": 0.0,
+            "max_tokens": 512
+        },
+        "exp": {
+            "num_experiments": [
+                10
+            ],
+            "experiment_type": "discovery"
+        },
+        "envs": {
+            "num_evals": 10,
+            "env_name": "survival",
+            "goal_name": "direct_discovery",
+            "com_limit": 200,
+            "env_params": {
+                "num_patients": 100,
+                "time_upper_bound": 10
+            }
+        }
+    },
+    "data": {
+        "results": [
+            [
+                [
+                    0.5,
+                    0.5
+                ],
+                [
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 8.822681635073542, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 0.3904632088711768, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 9.504617607234557, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 0.90978512981708, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 8.108139207340393, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 3.9340584583681517, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 4.712958633301218, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 1.564787761370261, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 1.4464923222274317, is the patient alive or dead? Respond using a binary value 0 or 1.",
+                    "The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 1.447492639829846, is the patient alive or dead? Respond using a binary value 0 or 1."
+                ],
+                [
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    0
+                ],
+                [
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1",
+                    "1"
+                ]
+            ]
+        ],
+        "queries": [
+            "50",
+            "21",
+            "30",
+            "45",
+            "34",
+            "31",
+            "27",
+            "28",
+            "29",
+            "32"
+        ],
+        "observations": [
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+        ],
+        "successes": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+        ],
+        "explanations": [
+            "Given that all the patients observed so far have resulted in 1, indicating they are no longer alive, it suggests that the majority of patients in this dataset have succumbed to their condition. However, to provide a more comprehensive understanding, let's consider the time since surgery and metastasis status for the remaining patients.\n\nPatient ID 32 has a time since surgery of 0.69 and metastasis status of 1. This patient is likely to be among those who have died, as the presence of metastasis is a strong indicator of poor prognosis. Given the pattern observed so far, we can infer that even early-stage metastasis can lead to a negative outcome.\n\nTo make a prediction, we need to focus on the key factors: time since surgery and metastasis status. If a patient has metastasis, the likelihood of survival is significantly reduced, regardless of the time since surgery. For a patient without metastasis, the survival rate might be higher, but the exact duration would require more data points.\n\nIn summary, based on the available data, if a patient has metastasis, the prediction is likely to be death (1). If a patient does not have metastasis, further analysis would be needed to determine the survival probability, but the presence of metastasis is a critical factor to consider."
+        ],
+        "eigs": [],
+        "programs": []
+    },
+    "scientist_messages": [
+        "role:system, messaage:There are breast cancer patients where, for each patient, an amount of time has passed since they received surgery and their cancer has either metastasized or not.\nYour goal is to conduct experiments and explain the environment to the user.The goal of the user is to be able to predict whether a breast cancer patient will survive given the time since they\nreceived surgery and whether their cancer has metastasized.\nThere are 100, and the time since surgery and status of metastasization are given\nby below. 0 or 1 indicates whether the cancer metastasized. \n0: 4.88, 1\n1: 1.40, 0\n2: 4.72, 0\n3: 8.88, 0\n4: 5.82, 1\n5: 9.81, 1\n6: 1.80, 1\n7: 5.58, 0\n8: 3.47, 1\n9: 0.07, 0\n10: 1.66, 0\n11: 9.35, 1\n12: 0.11, 1\n13: 5.14, 0\n14: 7.50, 1\n15: 3.59, 0\n16: 7.12, 1\n17: 6.85, 0\n18: 2.62, 1\n19: 6.52, 1\n20: 5.82, 1\n21: 6.35, 0\n22: 3.63, 1\n23: 1.33, 1\n24: 1.40, 0\n25: 3.91, 1\n26: 3.13, 0\n27: 7.49, 0\n28: 9.33, 0\n29: 9.56, 1\n30: 0.20, 0\n31: 3.97, 0\n32: 0.69, 1\n33: 6.67, 1\n34: 5.36, 0\n35: 6.77, 1\n36: 3.90, 1\n37: 9.08, 1\n38: 2.03, 0\n39: 2.02, 1\n40: 1.05, 0\n41: 3.09, 1\n42: 1.05, 1\n43: 0.84, 0\n44: 1.17, 0\n45: 1.12, 1\n46: 6.51, 1\n47: 9.29, 1\n48: 2.41, 0\n49: 6.24, 0\n50: 9.75, 1\n51: 9.21, 1\n52: 8.90, 0\n53: 2.34, 0\n54: 3.28, 1\n55: 5.79, 0\n56: 4.38, 0\n57: 6.67, 0\n58: 5.83, 0\n59: 5.36, 1\n60: 8.10, 0\n61: 1.19, 0\n62: 6.26, 1\n63: 3.67, 0\n64: 3.42, 1\n65: 5.93, 1\n66: 5.89, 0\n67: 3.90, 0\n68: 1.26, 1\n69: 9.24, 1\n70: 0.08, 1\n71: 7.31, 1\n72: 8.78, 1\n73: 8.28, 1\n74: 2.51, 0\n75: 5.84, 0\n76: 9.78, 1\n77: 9.16, 1\n78: 4.40, 1\n79: 9.96, 1\n80: 2.32, 1\n81: 1.48, 1\n82: 6.09, 1\n83: 3.16, 1\n84: 3.14, 0\n85: 3.88, 1\n86: 1.12, 0\n87: 2.67, 1\n88: 2.19, 0\n89: 0.05, 1\n90: 6.48, 0\n91: 5.27, 0\n92: 1.86, 0\n93: 8.50, 1\n94: 7.49, 1\n95: 0.92, 0\n96: 5.56, 1\n97: 3.35, 1\n98: 0.40, 1\n99: 6.13, 1\n\nYou may check whether a patient is alive by providing a patient ID where the ID ranges from 0 to 99. Make observations by specifying a single integer ID. If the patient is alive, the output will be 0, otherwise 1, if the the patient is dead.\nYou can think before you choose to decide which ID you want to observe.\n\nHere is an example:\n<thought> your thought </thought>\n<observe>1</observe>\nWhen asked to answer a question about the environment, respond in the format specified in the question.\n<thought> your thought</thought>\n<answer> your answer </answer>\n",
+        "role:user, messaage:Think about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\n<thought>your thought</thought>\n<observe> your observation</observe>\nMake an observation now.",
+        "role:assistant, messaage:<thought> To start, I will observe a patient ID that is neither at the beginning nor the end of the list. This will help me understand the distribution and variability in the data. I will choose ID 50 as it is in the middle of the range (0 to 99).</thought>\n<observe>50</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Since the result for patient ID 50 is 1, indicating that the patient is no longer alive, I should observe a patient who is still alive to understand the characteristics of living patients. I will choose ID 21, which is also in the middle but on the other side of the list to ensure a balanced view.</thought>\n<observe>21</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Since both patient IDs 50 and 21 resulted in 1, indicating that both patients are no longer alive, I should observe a patient who is still alive to understand the characteristics of living patients. I will choose ID 30, which is another middle point and has been observed to be alive previously.</thought>\n<observe>30</observe>",
+        "role:user, messaage:Result: 0\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Since patient ID 30 resulted in 0, indicating that the patient is still alive, I should observe another patient who is alive to further understand the characteristics of living patients. I will choose ID 45, which is another middle point and has not been observed yet.</thought>\n<observe>45</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Since patient ID 45 resulted in 1, indicating that the patient is no longer alive, I should observe another patient who is still alive to further understand the characteristics of living patients. I will choose ID 34, which is another middle point and has not been observed yet.</thought>\n<observe>34</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Since both patient IDs 45 and 34 resulted in 1, indicating that both patients are no longer alive, I should observe another patient who is still alive to further understand the characteristics of living patients. I will choose ID 31, which is another middle point and has not been observed yet.</thought>\n<observe>31</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Since all the observed patients (IDs 45, 34, and 31) resulted in 1, indicating that they are no longer alive, I should observe a patient who is still alive to understand the characteristics of living patients better. I will choose ID 27, which is another middle point and has not been observed yet.</thought>\n<observe>27</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Since all the observed patients (IDs 45, 34, 31, and 27) resulted in 1, indicating that they are no longer alive, I should observe a patient who is still alive to understand the characteristics of living patients better. I will choose ID 28, which is another middle point and has not been observed yet.</thought>\n<observe>28</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Since all the observed patients (IDs 45, 34, 31, 27, and 28) resulted in 1, indicating that they are no longer alive, I should observe a patient who is still alive to understand the characteristics of living patients better. I will choose ID 29, which is another middle point and has not been observed yet.</thought>\n<observe>29</observe>",
+        "role:user, messaage:Result: 1\nThink about where to observe next. Articulate your strategy for choosing measurements in <thought>.\nProvide a new measurement point in the format:\nThought: <thought>\n<observe> your observation (remember the type of inputs accepted)</observe>",
+        "role:assistant, messaage:<thought> Since all the observed patients (IDs 45, 34, 31, 27, 28, and 29) resulted in 1, indicating that they are no longer alive, I should observe a patient who is still alive to understand the characteristics of living patients better. I will choose ID 32, which is another middle point and has not been observed yet.</thought>\n<observe>32</observe>",
+        "role:user, messaage:Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. \nThey will make predictions based solely on your explanation, so provide as much detail as possible. You cannot provide your own experiments or observations.\nLimit your explanation to 200 words.",
+        "role:assistant, messaage:Given that all the patients observed so far have resulted in 1, indicating they are no longer alive, it suggests that the majority of patients in this dataset have succumbed to their condition. However, to provide a more comprehensive understanding, let's consider the time since surgery and metastasis status for the remaining patients.\n\nPatient ID 32 has a time since surgery of 0.69 and metastasis status of 1. This patient is likely to be among those who have died, as the presence of metastasis is a strong indicator of poor prognosis. Given the pattern observed so far, we can infer that even early-stage metastasis can lead to a negative outcome.\n\nTo make a prediction, we need to focus on the key factors: time since surgery and metastasis status. If a patient has metastasis, the likelihood of survival is significantly reduced, regardless of the time since surgery. For a patient without metastasis, the survival rate might be higher, but the exact duration would require more data points.\n\nIn summary, based on the available data, if a patient has metastasis, the prediction is likely to be death (1). If a patient does not have metastasis, further analysis would be needed to determine the survival probability, but the presence of metastasis is a critical factor to consider."
+    ],
+    "naive_messages": [
+        "role:system, messaage:Your goal is to predict whether a breast cancer patient will survive given the time since they received surgery and whether their cancer has metastasized.\nRespond with a binary value 0 or 1. Make assumptions about the environment and provide your best guess.\nHere is an example:\n<thought> your thought </thought>\n<answer>1</answer>Here is what you know about the environment:\nGiven that all the patients observed so far have resulted in 1, indicating they are no longer alive, it suggests that the majority of patients in this dataset have succumbed to their condition. However, to provide a more comprehensive understanding, let's consider the time since surgery and metastasis status for the remaining patients.\n\nPatient ID 32 has a time since surgery of 0.69 and metastasis status of 1. This patient is likely to be among those who have died, as the presence of metastasis is a strong indicator of poor prognosis. Given the pattern observed so far, we can infer that even early-stage metastasis can lead to a negative outcome.\n\nTo make a prediction, we need to focus on the key factors: time since surgery and metastasis status. If a patient has metastasis, the likelihood of survival is significantly reduced, regardless of the time since surgery. For a patient without metastasis, the survival rate might be higher, but the exact duration would require more data points.\n\nIn summary, based on the available data, if a patient has metastasis, the prediction is likely to be death (1). If a patient does not have metastasis, further analysis would be needed to determine the survival probability, but the presence of metastasis is a critical factor to consider.",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 8.822681635073542, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 0.3904632088711768, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 9.504617607234557, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 0.90978512981708, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 8.108139207340393, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 3.9340584583681517, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 1 and the time since surgery = 4.712958633301218, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 1.564787761370261, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 1.4464923222274317, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>",
+        "role:user, messaage:The result of the latest experiment you ran to make observations is 1.\nGiven the metastasized status = 0 and the time since surgery = 1.447492639829846, is the patient alive or dead? Respond using a binary value 0 or 1.\nAnswer in the following format:\n<answer>ONLY a number with no explanations or text</answer>.",
+        "role:assistant, messaage:1",
+        "role:user, messaage:Please stick to the specified format and respond using <answer> tags. Make assumptions and provide your best guess. Your previous response was not valid.",
+        "role:assistant, messaage:<answer>1</answer>"
+    ]
+}
