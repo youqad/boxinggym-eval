@@ -185,11 +185,11 @@ Here is an example:
 They will make predictions based solely on your explanation, so provide as much detail as possible. You CANNOT provide your own experiments or observations.
 Limit your explanation to {com_limit} words"""
         if use_ppl:
-            description += f"To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
+            description += "To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
             description += f"Here is the statistical model. \n {str_prob_prog} \n"
             description += f"Here are the inferred params. \n {params_summary_str} \n"
-            description += f"Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
-            description += f"The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
+            description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
+            description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
     
 class Peregrines:
@@ -301,19 +301,19 @@ Example:
     
     def get_description(self):
         if self.include_prior:
-            return f""""
+            return """"
 The trajectory of the peregrine population breeding in the french jura from 1964 to 2003'
 """
         else:
-            return f""""
+            return """"
 x1 is the input and y is the output
 """
 
     def get_ordered_column_names(self):
         if self.include_prior:
-            return ["year", "C"]
+            return ["Year", "Falcon_Population"]
         else:
-            return ["x1", "y"]
+            return ["Input", "Output"]
     
     def get_ordered_features(self):
         return self.get_ordered_column_names()[:-1] 
@@ -323,11 +323,13 @@ x1 is the input and y is the output
 
     def format_column_description(self):
         if self.include_prior:
-            return (f"The observations are: \n -C: Population counts of Peregrines \n"
-                f"The input values are \n -year: year \n"
-                f"Use the values of the input values to help you model the observations. ")
+            return ("The observations are: \n -Falcon_Population: Population counts of Peregrines \n"
+                "The input values are \n -Year: year \n"
+                "Use the values of the input values to help you model the observations. ")
         else:
-            return ""
+            return ("The observations are: \n -Output \n"
+                    "The input values are \n -Input \n"
+                    "Use the values of the input values to help you model the observations. ")
 
 
 if __name__ == "__main__":

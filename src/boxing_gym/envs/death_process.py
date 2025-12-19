@@ -37,7 +37,7 @@ class DirectDeath(Goal):
             question = f"What is the number of infected individuals at time {time}?"
         else:
             question = f"What is the output of the environment at input {time}?"
-        question = " Respond with a positive integer."
+        question += " Respond with a positive integer."
         return question, infected_num
     
     def evaluate_predictions(self, predictions, measurements):
@@ -154,11 +154,11 @@ They will make predictions based solely on your explanation, so provide as much 
 Limit your explanation to {com_limit} words."""
 
         if use_ppl:
-            description += f"To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
-            description += f"Here is the statistical model. \n {str_prob_prog} \n"
-            description += f"Here are the inferred params. \n {params_summary_str} \n"
-            description += f"Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
-            description += f"The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
+            description += "To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters.\n"
+            description += f"Here is the statistical model.\n{str_prob_prog}\n"
+            description += f"Here are the inferred params.\n{params_summary_str}\n"
+            description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
+            description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
     
 
@@ -175,16 +175,16 @@ class InfectionRate(Goal):
         if include_prior:
             goal_description = "Your goal is to be able to reliably predict the infection rate of the disease. Conduct experiments to learn about the environment and make predictions based on your observations. The infection rate is a positive real number. It is the rate at which healthy individuals become infected. Specifically, probability of a person being infected is proportional to 1-exp(-theta*x), where theta is the infection rate and x is the time."
         else:
-            raise NotImplementedError("This goal is not supported without prior information.")
+            goal_description = "Your goal is to be able to reliably predict the latent parameter theta that governs the system's outputs. Conduct experiments to learn about the environment and make predictions based on your observations. Theta is a positive real number."
         description = self.env.get_system_message(include_prior, goal_description)
         return description
     
     def get_goal_eval_question(self, include_prior):
         if include_prior:
-            question = f"What is the infection rate?"
+            question = "What is the infection rate?"
         else:
-            raise NotImplementedError("This goal is not supported without prior information.")
-        question = " Respond with a positive real number."
+            question = "What is the latent parameter theta?"
+        question += " Respond with a positive real number."
         return question, self.env.theta
 
     def evaluate_predictions(self, predictions, measurements):
@@ -376,9 +376,9 @@ You are observing a positive integer (with a maximum value of {self.N}) for a po
 
     def get_ordered_column_names(self):
         if self.include_prior:
-            return ["x", "infection_num"]
+            return ["Time", "Infected_Count"]
         else:
-            return ["x1", "y"]
+            return ["Input", "Output"]
     
     def get_ordered_features(self):
         return self.get_ordered_column_names()[:-1] 
@@ -388,13 +388,13 @@ You are observing a positive integer (with a maximum value of {self.N}) for a po
             Crucial make sure these descriptions are consistent with the ordered column names
         '''
         if self.include_prior:
-            return (f"The observations are: \n -infection_num: number of infected people at time x \n"
-                    f"The input values are \n -x: time \n"
-                    f"Use the values of the input values to help you model the observations. ")
+            return ("The observations are: \n -Infected_Count: number of infected people at time x \n"
+                    "The input values are \n -Time: time \n"
+                    "Use the values of the input values to help you model the observations. ")
         else:
-            return (f"The observations are: \n -y \n"
-                    f"The input values are \n -x1 \n"
-                    f"Use the values of the input values to help you model the observations. ")
+            return ("The observations are: \n -Output \n"
+                    "The input values are \n -Input \n"
+                    "Use the values of the input values to help you model the observations. ")
 
 if __name__ == "__main__":
     env = DeathProcess()

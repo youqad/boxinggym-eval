@@ -3,11 +3,13 @@ import re
 
 import numpy as np
 import pymc as pm
-import openai
+import litellm
 from scipy.stats import norm
 
 from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
+from ..agents.model_config import get_model_config
+from ..agents.litellm_utils import call_llm_sync
 
 class DirectEmotionPrediction(Goal):
     def __init__(self, env):
@@ -21,7 +23,7 @@ class DirectEmotionPrediction(Goal):
         if include_prior:
             goal_description = "Your goal is to predict how the participant thinks the player feels after each spin of the wheel."
         else:
-            raise ValueError("Emotion prediction task requires prior information. Please set include_prior to True.")
+            goal_description = "Your goal is to predict the output values (y1-y8) based on the input features (x1-x7)."
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
     
@@ -32,19 +34,22 @@ class DirectEmotionPrediction(Goal):
             prize_lower = 0
             prizes = np.random.uniform(prize_lower, prize_upper, 3)
             probs = np.random.dirichlet(np.ones(3))
-            win = np.random.choice([0, 1, 2])
+            # Use the realized prize value (not an index) as the 'win' feature.
+            win_idx = int(np.random.choice([0, 1, 2]))
+            win = float(prizes[win_idx])
             _, emotion_values = self.env.step(prizes, probs, win)
             self.eval_points.append((prizes, probs, win, emotion_values))
         else:
             prizes, probs, win, emotion_values = self.eval_points[self.eval_pointer]
         self.eval_pointer += 1
-        question = f"""\nQuestion:The wheel has three possible outcomes with the following probabilities:
+        if include_prior:
+            question = f"""\nQuestion:The wheel has three possible outcomes with the following probabilities:
 {prizes[0]:.1f}: {probs[0]:.2f}
 {prizes[1]:.1f}: {probs[1]:.2f}
 {prizes[2]:.1f}: {probs[2]:.2f}
-The player has spun the wheel and landed on {prizes[win]}.
+The player has spun the wheel and landed on {win}.
 How would the participant predict the player's emotions after this spin?"""
-        format_instructions = """Provide values for the emotions in the following format on a scale of 1 (low)-9 (high):
+            format_instructions = """Provide values for the emotions in the following format on a scale of 1 (low)-9 (high):
 Happiness: {happiness}/9
 Sadness: {sadness}/9
 Anger: {anger}/9
@@ -53,6 +58,21 @@ Fear: {fear}/9
 Disgust: {disgust}/9
 Contentment: {contentment}/9
 Disappointment: {disappointment}/9"""
+        else:
+            question = f"""\nQuestion:Given the following input features:
+x1={prizes[0]:.1f}, x2={prizes[1]:.1f}, x3={prizes[2]:.1f}
+x4={probs[0]:.2f}, x5={probs[1]:.2f}, x6={probs[2]:.2f}
+x7={win:.1f} (the realized outcome value).
+Predict the 8 output values."""
+            format_instructions = """Provide values for the outputs in the following format on a scale of 1 (low)-9 (high):
+y1: {y1}/9
+y2: {y2}/9
+y3: {y3}/9
+y4: {y4}/9
+y5: {y5}/9
+y6: {y6}/9
+y7: {y7}/9
+y8: {y8}/9"""
         question += "\n" + format_instructions
         return question, emotion_values
     
@@ -61,10 +81,35 @@ Disappointment: {disappointment}/9"""
         parsed_response = []
         for response in predictions:
             try:
-                response = re.search(r'Happiness: (.*?)/9\nSadness: (.*?)/9\nAnger: (.*?)/9\nSurprise: (.*?)/9\nFear: (.*?)/9\nDisgust: (.*?)/9\nContentment: (.*?)/9\nDisappointment: (.*?)/9', response)
-                response = [float(response.group(i)) for i in range(1, 9)]
-            except:
-                raise ValueError("Invalid response format. Please provide values for all emotions.")
+                if self.env.include_prior:
+                    # Try strict regex first
+                    match = re.search(r'Happiness: (.*?)/9\nSadness: (.*?)/9\nAnger: (.*?)/9\nSurprise: (.*?)/9\nFear: (.*?)/9\nDisgust: (.*?)/9\nContentment: (.*?)/9\nDisappointment: (.*?)/9', response)
+                    if match:
+                        response = [float(match.group(i)) for i in range(1, 9)]
+                    else:
+                        # Fallback: extract all numbers and hope we get 8 values
+                        numbers = re.findall(r'(\d+(?:\.\d+)?)\s*/\s*9', response)
+                        if len(numbers) >= 8:
+                            response = [float(n) for n in numbers[:8]]
+                        else:
+                            # Default to mid-scale (5.0) for unparsable responses
+                            response = [5.0] * 8
+                else:
+                    # Try strict regex first
+                    match = re.search(r'y1: (.*?)/9\ny2: (.*?)/9\ny3: (.*?)/9\ny4: (.*?)/9\ny5: (.*?)/9\ny6: (.*?)/9\ny7: (.*?)/9\ny8: (.*?)/9', response)
+                    if match:
+                        response = [float(match.group(i)) for i in range(1, 9)]
+                    else:
+                        # Fallback: extract all numbers and hope we get 8 values
+                        numbers = re.findall(r'(\d+(?:\.\d+)?)\s*/\s*9', response)
+                        if len(numbers) >= 8:
+                            response = [float(n) for n in numbers[:8]]
+                        else:
+                            # Default to mid-scale (5.0) for unparsable responses
+                            response = [5.0] * 8
+            except Exception:
+                # Final fallback: treat as worst prediction (mid-scale)
+                response = [5.0] * 8
             parsed_response.append(response)
         # convert measurements to list
         gts = []
@@ -222,16 +267,14 @@ class DirectEmotionNaive(DirectEmotionPrediction):
         if include_prior:
             goal_description += "The goal of the user is to be able to predict how the participant thinks the player feels after each spin of the wheel."
         else:
-            raise ValueError("Emotion prediction task requires prior information. Please set include_prior to True.")
+            goal_description += "The goal of the user is to be able to predict the output values (y1-y8) based on the input features."
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
     
     def get_naive_system_message(self, include_prior):
         if include_prior:
             goal_description = "Your goal is to predict how the participant thinks the player feels after each spin of the wheel."
-        else:
-            raise ValueError("Emotion prediction task requires prior information. Please set include_prior to True.")
-        format_instructions = """Provide values for the emotions in the following format on a scale of 1 (low)-9 (high):
+            format_instructions = """Provide values for the emotions in the following format on a scale of 1 (low)-9 (high):
 Happiness: {happiness}/9
 Sadness: {sadness}/9
 Anger: {anger}/9
@@ -243,6 +286,20 @@ Disappointment: {disappointment}/9
 You may think before prividing your answer. Here is an example:
 <thought>your thought</thought>
 <answer>your answer in the specified format</answer>"""
+        else:
+            goal_description = "Your goal is to predict the output values based on the input features."
+            format_instructions = """Provide values for the outputs in the following format on a scale of 1 (low)-9 (high):
+y1: {y1}/9
+y2: {y2}/9
+y3: {y3}/9
+y4: {y4}/9
+y5: {y5}/9
+y6: {y6}/9
+y7: {y7}/9
+y8: {y8}/9
+You may think before providing your answer. Here is an example:
+<thought>your thought</thought>
+<answer>your answer in the specified format</answer>"""
         description = goal_description + '\n' + format_instructions
         description += "Here is what you know about the environment:\n"
         return description    
@@ -252,24 +309,25 @@ You may think before prividing your answer. Here is an example:
 They will make predictions based solely on your explanation, so provide as much detail as possible. You CANNOT provide your own experiments or observations.
 Limit your explanation to {com_limit} words"""
         if use_ppl:
-            description += f"To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
+            description += "To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
             description += f"Here is the statistical model. \n {str_prob_prog} \n"
             description += f"Here are the inferred params. \n {params_summary_str} \n"
-            description += f"Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
-            description += f"The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
+            description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
+            description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
 
         return description
     
 
 class EmotionFromOutcome:
-    def __init__(self, model_name="gpt-4o"):
+    def __init__(self, model_name="gpt-5.2"):
         self.model_name = model_name
         self.env_name = "emotion"
-
-        if "gpt-4o" in model_name:
-            self.llm = openai.OpenAI()
-        else:
-            raise ValueError("Model not supported")
+        # Configure LiteLLM provider routing for any supported model (incl. GPT‑5).
+        cfg = get_model_config(model_name)
+        self.api_base = cfg.get("api_base")
+        self.api_key = cfg.get("api_key")
+        litellm.drop_params = True
+        litellm.set_verbose = False
         self.system = """You are observing a user play a game where they spin a wheel.
 The wheel has three possible outcomes (monetary values), and the probabilities of landing on each are known to you and the player. 
 You are observing the player play the game and the outcomes.
@@ -303,7 +361,7 @@ Only talk about the most salient emotions.
 Start with "The player might be feeling...because..." and provide a description of the player's emotions and a reason."""
         self.model = self._build_model()
         self.reset()
-    
+
     def _build_model(self):
         with pm.Model() as model:
             # Priors for regression coefficients
@@ -355,17 +413,34 @@ When asked to answer a question about the environment, respond in the format spe
 <answer> your answer </answer>
 """
         else:
-            raise ValueError("Emotion prediction task requires prior information. Please set include_prior to True.")
+            message = f"""You are conducting experiments to understand a system that produces 8 output values (y1-y8) based on input features.
+{goal}
+You may query the system by providing input values in the following format:
+<observe>x: [x1, x2, x3],
+x4_x5_x6: [x4, x5, x6] (weights should sum to 1),
+outcome: index (0, 1, or 2)</observe>
+Input values should be in the range 0-100.
+You can think before making an observation by providing your thoughts in <thought>.
+
+Here is an example:
+<thought> your thought </thought>
+<observe>x: [10, 20, 30],
+x4_x5_x6: [0.2, 0.3, 0.5],
+outcome: 2</observe>
+When asked to answer a question about the environment, respond in the format specified in the question.
+<thought> your thought </thought>
+<answer> your answer </answer>
+"""
         return message
 
     def sample_random_input(self):
         prizes = np.random.uniform(0, 100, 3)
         probs = np.random.dirichlet(np.ones(3))
-        win = np.random.choice([0, 1, 2])
+        win_idx = int(np.random.choice([0, 1, 2]))
         # convert to list, ints
         prizes = prizes.tolist()
         probs = probs.tolist()
-        win = int(win)
+        win = float(prizes[win_idx])
         return prizes, probs, win
         
     def step(self, prizes, probs, win):
@@ -418,53 +493,108 @@ When asked to answer a question about the environment, respond in the format spe
         # call the LLM to generate a response
         query = self.user_template.format(v1=prizes[0], p1=probs[0], v2=prizes[1], p2=probs[1], v3=prizes[2], p3=probs[2], outcome=win, **emotions)
         # print(query)
-        if "gpt-4o" in self.model_name:
-            messages = [
-                {
-                    "role": "system",
-                    "content": [
-                        {
-                            "type": "text",
-                            "value": self.system
-                        }
-                    ]
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "value": query
-                        }
-                    ]
-                }
-            ]
-            full_response = self.llm.chat.completions.create(model=self.model_name, messages=messages, max_tokens=512, temperature=0.7)#.content[0].text
-            response = full_response.choices[0].message.content
+        response = call_llm_sync(
+            model_name=self.model_name,
+            system_text=self.system,
+            user_text=query,
+            api_base=self.api_base,
+            api_key=self.api_key,
+            max_tokens=512,
+            temperature=0.7,
+        )
         response = f"The participant responded with: {response}\n"
         return response, emotions 
     
     def validate_input(self, input_string):
+        """
+        Parse and validate an observation query.
+
+        Supported formats (robust to imperfect LLM formatting):
+          1) Prior mode (recommended):
+             prizes: [v1, v2, v3], probs: [p1, p2, p3], win: <idx>
+          2) Non-prior mode (recommended):
+             x: [x1, x2, x3], x4_x5_x6: [x4, x5, x6], outcome: <idx>
+          3) Fallback numeric list:
+             [x1, x2, x3, x4, x5, x6, outcome_idx]
+
+        Returns (prizes, probs, win_value) on success, else an error string.
+        """
+        text = str(input_string or "")
+
+        def _parse_number_list_fallback(s: str):
+            nums = re.findall(r"-?\d+(?:\.\d+)?", s)
+            if len(nums) < 7:
+                return None
+            vals = [float(x) for x in nums[:7]]
+            prizes_ = vals[0:3]
+            probs_ = vals[3:6]
+            idx_ = int(round(vals[6]))
+            return prizes_, probs_, idx_
+
+        prizes = None
+        probs = None
+        idx = None
+
+        # 1) Keyed formats (accept both prior and non-prior keyword variants).
         try:
-            prizes = re.search(r'prizes: \[(.*?)\]', input_string).group(1)
-            prizes = list(map(float, prizes.split(',')))
-            probs = re.search(r'probs: \[(.*?)\]', input_string).group(1)
-            probs = list(map(float, probs.split(',')))
-            # parse the win idx integer
-            win_idx = re.search(r'win:\s*(\d+)', input_string).group(1)
-            win_idx = int(win_idx)
-        except:
-            return "Invalid input format. Please provide values for 'prizes', 'probs', and 'win' in the correct format."
-        if sum(probs) != 1:
-            return "Probabilities should sum to 1."
-        
-        if win_idx not in [0, 1, 2]:
-            return "Invalid value for 'win'. Please provide 0, 1, or 2."
-        
-        win = prizes[win_idx]
-        prizes = np.array(prizes)
-        probs = np.array(probs)
-        return prizes, probs, win
+            prizes_match = re.search(r"(?:prizes|x)\s*:\s*\[(.*?)\]", text, flags=re.IGNORECASE)
+            probs_match = re.search(r"(?:probs|p|x4_x5_x6)\s*:\s*\[(.*?)\]", text, flags=re.IGNORECASE)
+            idx_match = re.search(r"(?:win|outcome)\s*:\s*(\d+)", text, flags=re.IGNORECASE)
+            if prizes_match and probs_match and idx_match:
+                prizes = list(map(float, prizes_match.group(1).split(",")))
+                probs = list(map(float, probs_match.group(1).split(",")))
+                idx = int(idx_match.group(1))
+        except Exception:
+            prizes = None
+            probs = None
+            idx = None
+
+        # 2) Fallback numeric list format.
+        if prizes is None or probs is None or idx is None:
+            parsed = _parse_number_list_fallback(text)
+            if parsed is None:
+                if self.include_prior:
+                    return (
+                        "Invalid input format. Please provide either:\n"
+                        "  prizes: [v1, v2, v3], probs: [p1, p2, p3], win: <0|1|2>\n"
+                        "or\n"
+                        "  [v1, v2, v3, p1, p2, p3, idx]"
+                    )
+                else:
+                    return (
+                        "Invalid input format. Please provide either:\n"
+                        "  x: [x1, x2, x3], x4_x5_x6: [x4, x5, x6], outcome: <0|1|2>\n"
+                        "or\n"
+                        "  [x1, x2, x3, x4, x5, x6, outcome_idx]"
+                    )
+            prizes, probs, idx = parsed
+
+        # Basic shape checks.
+        if len(prizes) != 3 or len(probs) != 3:
+            return "Expected 3 prize values and 3 probabilities."
+
+        if idx not in [0, 1, 2]:
+            return "Invalid outcome index. Please provide 0, 1, or 2."
+
+        prizes_arr = np.array(prizes, dtype=float)
+        probs_arr = np.array(probs, dtype=float)
+
+        if not np.all(np.isfinite(prizes_arr)) or not np.all(np.isfinite(probs_arr)):
+            return "Prize/probability values must be finite numbers."
+
+        if np.any(probs_arr < 0):
+            return "Probabilities must be non-negative."
+
+        s = float(probs_arr.sum())
+        if not np.isfinite(s) or s <= 0:
+            return "Probabilities must sum to a positive value."
+
+        # Be tolerant to LLM rounding (e.g., 0.33,0.33,0.33). Renormalize.
+        if not np.isclose(s, 1.0, atol=1e-3):
+            probs_arr = probs_arr / s
+
+        win = float(prizes_arr[idx])
+        return prizes_arr, probs_arr, win
         
     def run_experiment(self, input_string):
         design = self.validate_input(input_string)
@@ -493,30 +623,56 @@ When asked to answer a question about the environment, respond in the format spe
         if self.include_prior:
             return "The environment models the eight emotions after spinning a wheel and receiving a prize. We give the probabilities and the values of the prizes."
         else:
-            raise ValueError("Emotion prediction task requires prior information. Please set include_prior to True.")
+            return "The environment models a system that produces 8 output values (y1-y8) based on 7 input features (x1-x7)."
 
     def describe_data_columns(self):
         return self.format_column_description()
 
     def get_ordered_column_names(self):
         if self.include_prior:
-            return ["prize_1", "prize_2", "prize_3", "prob_1", "prob_2", "prob_3", "win", "happiness", "sadness", "anger", "surprise", "fear", "disgust", "contentment", "disappointment"]
+            return ["Prize_1", "Prize_2", "Prize_3", "Prob_1", "Prob_2", "Prob_3", "win", "Happiness", "Sadness", "Anger", "Surprise", "Fear", "Disgust", "Contentment", "Disappointment"]
         else:
-            return ["x1", "x2", "x3", "p1", "p2", "p3", "y1", "y2", "y3", "y4", "y5", "y6", "y7", "y8"]
+            return ["Input_1", "Input_2", "Input_3", "Input_4", "Input_5", "Input_6", "Input_7", "Output_1", "Output_2", "Output_3", "Output_4", "Output_5", "Output_6", "Output_7", "Output_8"]
     
     def get_ordered_features(self):
-        return self.get_ordered_column_names()[:-1] 
+        # This environment has input features and 8 outputs (emotions).
+        # Do not infer features via "all but last column" (would incorrectly treat
+        # most emotion outputs as features).
+        if self.include_prior:
+            # 7 input features in prior mode
+            return [
+                "Prize_1",
+                "Prize_2",
+                "Prize_3",
+                "Prob_1",
+                "Prob_2",
+                "Prob_3",
+                "win",
+            ]
+        else:
+            # 7 input features in no-prior mode (x7 maps to "win")
+            return [
+                "Input_1",
+                "Input_2",
+                "Input_3",
+                "Input_4",
+                "Input_5",
+                "Input_6",
+                "Input_7",
+            ]
 
     def format_column_description(self):
         '''
             Crucial make sure these descriptions are consistent with the ordered column names
         '''
         if self.include_prior:
-            return (f"The observations are: \n on Likert scale from 1-9 \n -happiness: happiness value \n -sadness: sadness value \n -anger: anger value \n -surprise: surprise value \n -fear: fear value \n -disgust: disgust value \n -contentment: contentment value \n -disappointment: disappointment value \n"   
-                    f"The input values are \n -win: how much you win (ie 1 to 1 correspondence with wheel section you land on) \n -prize_1: value of prize 1 -prize_2: value of prize 2 -prize_3: value of prize 3 \n -prob_1: probability of prize 1 -prob_2: probability of prize 2 -prob_3: probability of prize 3 \n"    
-                    f"Use the values of the input values to help you model the observations. ")
+            return ("The observations are: \n on Likert scale from 1-9 \n -Happiness: happiness value \n -Sadness: sadness value \n -Anger: anger value \n -Surprise: surprise value \n -Fear: fear value \n -Disgust: disgust value \n -Contentment: contentment value \n -Disappointment: disappointment value \n"
+                    "The input values are \n -Prize_1 \n -Prize_2 \n -Prize_3 \n -Prob_1 \n -Prob_2 \n -Prob_3 \n -win \n"
+                    "Use the values of the input values to help you model the observations. ")
         else:
-            return ""
+            return ("The observations are: \n -Output_1 \n -Output_2 \n -Output_3 \n -Output_4 \n -Output_5 \n -Output_6 \n -Output_7 \n -Output_8 \n"
+                    "The input values are \n -Input_1 \n -Input_2 \n -Input_3 \n -Input_4 \n -Input_5 \n -Input_6 \n -Input_7 \n"
+                    "Use the values of the input values to help you model the observations. ")
 
 
 if __name__ == "__main__":

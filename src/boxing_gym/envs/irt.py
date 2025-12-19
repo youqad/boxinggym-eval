@@ -82,12 +82,11 @@ class DirectCorrectness(Goal):
 
 
                 def likelihood(si, qi, ri):
+                    alpha = alphai[si]
+                    beta = betai[qi]
                     if self.env.mode == '1pl':
-                        alpha = alphai[si]
-                        beta = betai[qi]
-                    elif self.env.mode == '2pl':
-                        alpha = alphai[si]
-                        beta = betai[qi]
+                        pi = pm.math.invlogit(alpha - beta)
+                    elif self.env.mode in ['2pl', '3pl']:
                         gamma = gammai[qi]
                         pi = pm.math.invlogit(gamma * (alpha - beta))
                     return pm.Bernoulli('responsei', p=pi, observed=ri)
@@ -101,10 +100,16 @@ class DirectCorrectness(Goal):
             
             alphas = trace['alpha_inf']
             betas = trace['beta_inf']
-            gammas = trace['gamma_inf']
-            shuffling = list(zip(alphas, betas, gammas))
-            random.shuffle(shuffling)
-            alphas, betas, gammas = zip(*shuffling)            
+            if self.env.mode in ['2pl', '3pl']:
+                gammas = trace['gamma_inf']
+                shuffling = list(zip(alphas, betas, gammas))
+                random.shuffle(shuffling)
+                alphas, betas, gammas = zip(*shuffling)
+            else:
+                gammas = None
+                shuffling = list(zip(alphas, betas))
+                random.shuffle(shuffling)
+                alphas, betas = zip(*shuffling)
             self.update_parameter_cache[tuple(existing_data)] = (alphas, betas, gammas)
         else:
             alphas, betas, gammas = self.update_parameter_cache[tuple(existing_data)]
@@ -112,13 +117,14 @@ class DirectCorrectness(Goal):
         log_likelihoods = []
         updated_alpha_samples = alphas[:num_outer_samples]
         updated_beta_samples = betas[:num_outer_samples]
-        updated_gamma_samples = gammas[:num_outer_samples]
+        if self.env.mode in ['2pl', '3pl']:
+            updated_gamma_samples = gammas[:num_outer_samples]
 
         for n in range(num_outer_samples):
             # Calculate the log-likelihood for the new query point only
             if self.env.mode == '1pl':
                 prob = sigmoid(updated_alpha_samples[n][student_id] - updated_beta_samples[n][question_id])
-            elif self.env.mode == '2pl':
+            elif self.env.mode in ['2pl', '3pl']:
                 prob = sigmoid(updated_gamma_samples[n][question_id] *
                                (updated_alpha_samples[n][student_id] - updated_beta_samples[n][question_id]))
 
@@ -127,12 +133,16 @@ class DirectCorrectness(Goal):
 
             inner_alphas = alphas[num_outer_samples + n*num_inner_samples:num_outer_samples + (n+1)*num_inner_samples]
             inner_betas = betas[num_outer_samples + n*num_inner_samples:num_outer_samples + (n+1)*num_inner_samples]
-            inner_gammas = gammas[num_outer_samples + n*num_inner_samples:num_outer_samples + (n+1)*num_inner_samples]
+            if self.env.mode in ['2pl', '3pl']:
+                inner_gammas = gammas[num_outer_samples + n*num_inner_samples:num_outer_samples + (n+1)*num_inner_samples]
             # Calculate the marginal log-likelihood for the new query point only
             marginal_log_likelihoods = []
             for m in range(num_inner_samples):
-                prob = sigmoid(inner_gammas[m][question_id] *
-                                (inner_alphas[m][student_id] - inner_betas[m][question_id]))
+                if self.env.mode == '1pl':
+                    prob = sigmoid(inner_alphas[m][student_id] - inner_betas[m][question_id])
+                elif self.env.mode in ['2pl', '3pl']:
+                    prob = sigmoid(inner_gammas[m][question_id] *
+                                    (inner_alphas[m][student_id] - inner_betas[m][question_id]))
 
                 prob = prob if sampled_choice == 1 else 1 - prob
                 marginal_log_likelihood = np.log(prob)
@@ -196,11 +206,11 @@ They will make predictions based solely on your explanation, so provide as much 
 Limit your explanation to {com_limit} words."""
 
         if use_ppl:
-            description += f"To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
+            description += "To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
             description += f"Here is the statistical model. \n {str_prob_prog} \n"
             description += f"Here are the inferred params. \n {params_summary_str} \n"
-            description += f"Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
-            description += f"The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
+            description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
+            description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
 
 class BestStudent(Goal):
@@ -213,14 +223,14 @@ class BestStudent(Goal):
         if include_prior:
             goal_description = "Your goal is to be able to identify the student with the highest ability. Respond with the student ID of the student you think has the highest ability. Conduct experiments to learn about the environment and make predictions based on your observations."
         else:
-            raise ValueError("The naive agent cannot be evaluated without prior knowledge.")
+            goal_description = "Your goal is to be able to identify the row entity with the highest cumulative performance score. Respond with the row ID (0-indexed integer) of the entity you think has the highest score. Conduct experiments to learn about the environment and make predictions based on your observations."
         description = self.env.get_system_message(include_prior, goal_description)
         return description
     
     def get_goal_eval_question(self, include_prior):
         # get student with highest ability
         student_id = np.argmax(self.env.responses.sum(axis=1))
-        question = f"Who is the student with the highest ability?"
+        question = "Who is the student with the highest ability?"
         return question, student_id
     
     def evaluate_predictions(self, predictions, measurements):
@@ -242,15 +252,15 @@ class DifficultQuestion(Goal):
         if include_prior:
             goal_description = "Your goal is to be able to identify the most difficult question. Respond with the question ID of the question you think is the most difficult. Conduct experiments to learn about the environment and make predictions based on your observations."
         else:
-            raise ValueError("The agent cannot be evaluated without prior knowledge.")
+            goal_description = "Your goal is to be able to identify the column with the lowest cumulative score. Respond with the column ID (0-indexed integer) of the column you think has the lowest total. Conduct experiments to learn about the environment and make predictions based on your observations."
         description = self.env.get_system_message(include_prior, goal_description)
         return description
 
     def get_goal_eval_question(self, include_prior):
         # get question with lowest ability
         question_id = np.argmin(self.env.responses.sum(axis=0))
-        question = f"Which question is the most difficult?"
-        question += f" Respond with the question ID."
+        question = "Which question is the most difficult?"
+        question += " Respond with the question ID."
         return question, question_id
     
     def evaluate_predictions(self, predictions, measurements):
@@ -272,7 +282,7 @@ class DiscriminatingQuestion(Goal):
         if include_prior:
             goal_description = "Your goal is to be able to identify the most discriminating question, that can discriminate among students' abilities the most. Respond with the question ID of the question you think is the most discriminating. Conduct experiments to learn about the environment and make predictions based on your observations."
         else:
-            raise ValueError("The agent cannot be evaluated without prior knowledge.")
+            goal_description = "Your goal is to be able to identify the column with the highest variance across rows. Respond with the column ID (0-indexed integer) of the column you think has the highest variability. Conduct experiments to learn about the environment and make predictions based on your observations."
         description = self.env.get_system_message(include_prior, goal_description)
         return description
     
@@ -280,8 +290,8 @@ class DiscriminatingQuestion(Goal):
         # get question with highest discrimination from 2PL model
         gamma = np.std(self.env.responses, axis=0)
         question_id = np.argmax(gamma)
-        question = f"Which question is the most discriminating?"
-        question += f" Respond with the question ID."
+        question = "Which question is the most discriminating?"
+        question += " Respond with the question ID."
         return question, question_id
     
     def evaluate_predictions(self, predictions, measurements):
@@ -298,7 +308,7 @@ class IRT:
         self.num_students = num_students
         self.num_questions = num_questions
         self.mode = mode
-        self.restricted_pair = restricted_pair
+        self.restricted_pair = restricted_pair or []  # Prevent TypeError on membership checks
         self.reset()
         self.env_name = "irt"
 
@@ -433,7 +443,7 @@ You will receive observations about the student-question pairs [student_id, ques
 The environment will respond with the correctness (binary response) of the student's answer to the question.
 """
         else:
-            return f""""
+            return """"
 The environment models a binary response to a tuple of two positive integer values.
 """
 
@@ -442,20 +452,22 @@ The environment models a binary response to a tuple of two positive integer valu
 
     def get_ordered_column_names(self):
         if self.include_prior:
-            return ["student_id", "question_id", "correctness"]
+            return ["Student_ID", "Question_ID", "Correctness"]
         else:
-            return ["x1", "x2", "y"]
+            return ["Input_1", "Input_2", "Output"]
     
     def get_ordered_features(self):
         return self.get_ordered_column_names()[:-1] 
 
     def format_column_description(self):
         if self.include_prior:
-            return (f"The observations are: \n -correctness: student 's choice between delayed or immediate reward. \n"
-                    f"The input values are \n -student_id: student id \n -question_id: question id"
-                    f"Use the values of the input values to help you model the observations. ")
+            return ("The observations are: \n -Correctness: whether the student answered correctly (1) or not (0) \n"
+                    "The input values are \n -Student_ID: student id \n -Question_ID: question id \n"
+                    "Use the values of the input values to help you model the observations. ")
         else:
-            return ""
+            return ("The observations are: \n -Output \n"
+                    "The input values are \n -Input_1 \n -Input_2 \n"
+                    "Use the values of the input values to help you model the observations. ")
 
 
 if __name__ == "__main__":

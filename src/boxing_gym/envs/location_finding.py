@@ -90,7 +90,7 @@ Here is an example.
                 # Define the likelihood function
                 def likelihood(xi, obs_y):
                     intensity = self.env.b
-                    for k in range(self.env.dim):
+                    for k in range(self.env.num_sources):
                         distance_squared = pm.math.sum((theta[k] - xi) ** 2)
                         intensity += self.env.alpha / (self.env.m + distance_squared)
                     return pm.Normal('signals', mu=intensity, sigma=self.env.sigma, observed=obs_y)
@@ -196,7 +196,7 @@ Your goal is to be able to reliably predict the signal intensity (scalar-values)
             goal_description = f"""
 Your goal is to be able to reliably predict a scalar-valued floating-point number for any given {self.env.dim}-dimensional vector.
 """
-        format_instructions = f"""
+        format_instructions = """
 You will be provided with a set of inputs to this environment and will be tasked with predicting the output for each input.
 You must give number values. You may also think before providing your predictions.
 You must respond with a single number! 
@@ -205,13 +205,13 @@ Here is an example:
 <thought>your thought</thought>
 <answer>1</answer>"""
         description = goal_description + '\n' + format_instructions
-        description = "Here is what you know about the environment:\n"
+        description += "Here is what you know about the environment:\n"
         return description    
     
     def get_comm_prompt(self, include_prior, com_limit=300, use_ppl=False, str_prob_prog=None, params_summary_str=None):    
         extra_prompt = ""
         if include_prior:
-            extra_prompt = f"""
+            extra_prompt = """
 Importantly, they need to be able to predict the intensity without knowing the source locations.
 Do not give an extremely detailed protocol for making predictions but rather general heuristic guidelines that do not require detailed calculations0.
 Emphasize how you can make predictions without knowing the source locations.
@@ -224,11 +224,11 @@ Limit your explanation to {com_limit} words.
 
 """
         if use_ppl:
-            description += f"To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
+            description += "To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
             description += f"Here is the statistical model. \n {str_prob_prog} \n"
             description += f"Here are the inferred params. \n {params_summary_str} \n"
-            description += f"Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
-            description += f"The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
+            description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
+            description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
     
 
@@ -242,20 +242,29 @@ class SourceGoal(Goal):
         self.norm_sigma = 1.15385
     
     def get_system_message(self, include_prior):
-        if not include_prior:
-            raise ValueError("SourceGoal requires prior knowledge.")
-        goal_description = f"""
-Your goal is to be able to predict the locations ({self.env.dim}-dimensional coordinates) of {self.env.num_sources} signal sources. 
+        if include_prior:
+            goal_description = f"""
+Your goal is to be able to predict the locations ({self.env.dim}-dimensional coordinates) of {self.env.num_sources} signal sources.
+"""
+        else:
+            goal_description = f"""
+Your goal is to be able to predict {self.env.num_sources} sets of {self.env.dim}-dimensional latent parameters that govern the system's scalar outputs.
 """
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
     
     def get_goal_eval_question(self, include_prior):
-        assert include_prior, "SourceGoal requires prior knowledge."
-        true_theta = self.env.true_theta 
-        question = f"""
-Please predict {self.env.num_sources} {self.env.dim}-dimensional coordinates of the signal sources. 
-Format your prediction as a list of {self.env.num_sources} lists of {self.env.dim} values. Answer up to two decimal places. 
+        true_theta = self.env.true_theta
+        if include_prior:
+            question = f"""
+Please predict {self.env.num_sources} {self.env.dim}-dimensional coordinates of the signal sources.
+Format your prediction as a list of {self.env.num_sources} lists of {self.env.dim} values. Answer up to two decimal places.
+Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range(self.env.dim)]) + ']' for _ in range(self.env.num_sources)])}]'
+"""
+        else:
+            question = f"""
+Please predict {self.env.num_sources} sets of {self.env.dim}-dimensional latent parameters.
+Format your prediction as a list of {self.env.num_sources} lists of {self.env.dim} values. Answer up to two decimal places.
 Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range(self.env.dim)]) + ']' for _ in range(self.env.num_sources)])}]'
 """
         return question, true_theta 
@@ -298,7 +307,7 @@ Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range
                 # Define the likelihood function
                 def likelihood(xi, obs_y):
                     intensity = self.env.b
-                    for k in range(self.env.dim):
+                    for k in range(self.env.num_sources):
                         distance_squared = pm.math.sum((theta[k] - xi) ** 2)
                         intensity += self.env.alpha / (self.env.m + distance_squared)
                     return pm.Normal('signals', mu=intensity, sigma=self.env.sigma, observed=obs_y)
@@ -499,9 +508,9 @@ Make observations by specifying a single point where you want to observe in a {s
 
     def get_ordered_column_names(self):
         if self.include_prior:
-            return ["x1", "x2", "signal_strength"]
+            return ["Coordinate_1", "Coordinate_2", "Signal_Intensity"]
         else:
-            return ["x1", "x2", "y"]
+            return ["Input_1", "Input_2", "Output"]
     
     def get_ordered_features(self):
         return self.get_ordered_column_names()[:-1] 
@@ -511,11 +520,13 @@ Make observations by specifying a single point where you want to observe in a {s
             Crucial make sure these descriptions are consistent with the ordered column names
         '''
         if self.include_prior:
-            return (f"The observations are: \n -signal_strength: signal strength at the x1, x2 location \n"
-                    f"The input values are \n -x1: x1 coordinate \n -x2: x2 coordinate \n"
-                    f"Use the values of the input values to help you model the observations. ")
+            return ("The observations are: \n -Signal_Intensity: signal strength at the location \n"
+                    "The input values are \n -Coordinate_1: 1st dimension coordinate \n -Coordinate_2: 2nd dimension coordinate \n"
+                    "Use the values of the input values to help you model the observations. ")
         else:
-            return ""
+            return ("The observations are: \n -Output \n"
+                    "The input values are \n -Input_1 \n -Input_2 \n"
+                    "Use the values of the input values to help you model the observations. ")
 
 if __name__ == "__main__":
     env = Signal(3, 2)

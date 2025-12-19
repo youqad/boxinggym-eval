@@ -1,9 +1,8 @@
 import random
 
 import numpy as np
-from scipy.stats import norm, halfnorm, expon
+from scipy.stats import norm, halfnorm
 import pymc as pm
-import matplotlib.pyplot as plt
 
 from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
@@ -74,8 +73,10 @@ Remember, the decisions are not deterministic."""
                 parsed_predictions.append(None)
         correctness = [parsed_predictions[i]==measurements[i] for i in range(len(predictions))]
         accuracy = sum(correctness) / len(correctness)
-        std = np.std(np.array(correctness))
-        return (accuracy, std)
+        error_rate = 1 - accuracy
+        # Std of error indicators (1 for incorrect, 0 for correct)
+        std = np.std(np.array([0 if c else 1 for c in correctness]))
+        return (error_rate, std)
 
     def expected_information_gain(self, query_point, num_outer_samples=1000, num_inner_samples=10):
         print(f"query_point: {query_point}")
@@ -197,7 +198,7 @@ Here is an example:
 <thought>your thought</thought>
 <answer>1</answer>"""
         description = goal_description + '\n' + format_instructions
-        description = "Here is what you know about the environment:\n"
+        description += "Here is what you know about the environment:\n"
         return description    
     
     def get_comm_prompt(self, include_prior, com_limit=300, use_ppl=False, str_prob_prog="", params_summary_str=""):
@@ -205,11 +206,11 @@ Here is an example:
 They will make predictions based solely on your explanation, so provide as much detail as possible. You cannot provide your own experiments or observations.
 Limit your explanation to {com_limit} words."""
         if use_ppl:
-            description += f"To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
+            description += "To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
             description += f"Here is the statistical model. \n {str_prob_prog} \n"
             description += f"Here are the inferred params. \n {params_summary_str} \n"
-            description += f"Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
-            description += f"The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
+            description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
+            description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
 
 class DiscountGoal(Goal):
@@ -222,20 +223,25 @@ class DiscountGoal(Goal):
         self.norm_sigma = 4.3
     
     def get_system_message(self, include_prior):
-        if not include_prior:
-            raise ValueError("DiscountGoal requires prior knowledge.")
-        goal_description = """Your goal is to predict the discount factor k that characterizes a person\'s perception of future reward in decision making. 
+        if include_prior:
+            goal_description = """Your goal is to predict the discount factor k that characterizes a person\'s perception of future reward in decision making.
 Remember, the decisions are not deterministic.
 This is how the discount factor is applied in the environment:
 V0 = iR
 V1 = dR / (1 + k * Days)"""
+        else:
+            goal_description = """Your goal is to predict the latent parameter k that governs the system's binary responses.
+The system's behavior is not deterministic.
+The parameter k affects how the system values the three input parameters."""
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
     
     def get_goal_eval_question(self, include_prior):
-        assert include_prior, "DiscountGoal requires prior knowledge."
         (k, _) = self.env.truth
-        question = "What is the discount factor k that characterizes the person's behavior?"
+        if include_prior:
+            question = "What is the discount factor k that characterizes the person's behavior?"
+        else:
+            question = "What is the latent parameter k that governs the system's behavior?"
         question += " Respond with the float value for k."
         return question, k
     
@@ -333,12 +339,12 @@ V1 = dR / (1 + k * Days)"""
         errs = []
         for _ in range(N):
             self.env.reset()
-            k_truth = env.truth[0]
-            k_pred = np.random.normal(env.k_mean, env.k_std)
+            k_truth = self.env.truth[0]
+            k_pred = np.random.normal(self.env.k_mean, self.env.k_std)
             err = (k_truth - k_pred) ** 2
             errs.append(err)
         stderr = np.std(errs)
-        meanerr = env.k_std**2
+        meanerr = self.env.k_std**2
         return meanerr, stderr
 
 class TemporalDiscount:
@@ -466,9 +472,9 @@ Example:
 
     def get_ordered_column_names(self):
         if self.include_prior:
-            return ["ir", "dr", "days", "Choice"]
+            return ["Immediate_Reward", "Delayed_Reward", "Delay_Days", "Choice"]
         else:
-            return ["x1", "x2", "x3", "y"]
+            return ["Input_1", "Input_2", "Input_3", "Output"]
     
     def get_ordered_features(self):
         return self.get_ordered_column_names()[:-1] 
@@ -478,11 +484,13 @@ Example:
             Crucial make sure these descriptions are consistent with the ordered column names
         '''
         if self.include_prior:
-            return (f"The observations are: \n -Choice: Person's choice between delayed or immediate reward. \n"
-                    f"The input values are \n -ir: reward you get immediately \n -dr: reward you get after certain number of days \n -days: number of days you have to wait for the delayed reward \n"
-                    f"Use the values of the input values to help you model the observations. ")
+            return ("The observations are: \n -Choice: Person's choice between delayed (1) or immediate (0) reward. \n"
+                    "The input values are \n -Immediate_Reward: reward you get immediately \n -Delayed_Reward: reward you get after certain number of days \n -Delay_Days: number of days you have to wait for the delayed reward \n"
+                    "Use the values of the input values to help you model the observations. ")
         else:
-            return ""
+            return ("The observations are: \n -Output \n"
+                    "The input values are \n -Input_1 \n -Input_2 \n -Input_3 \n"
+                    "Use the values of the input values to help you model the observations. ")
 
 if __name__ == "__main__":
     predictions = []
@@ -560,4 +568,3 @@ if __name__ == "__main__":
     # plt.legend()
     # plt.grid(True)
     # plt.show()
-

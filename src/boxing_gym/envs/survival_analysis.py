@@ -63,8 +63,10 @@ class DirectGoal(Goal):
                 parsed_predictions.append(None)
         correctness = [parsed_predictions[i]==measurements[i] for i in range(len(predictions))]
         accuracy = sum(correctness) / len(correctness)
-        std = np.std(np.array(correctness))
-        return (accuracy, std)
+        error_rate = 1 - accuracy
+        # Std of error indicators (1 for incorrect, 0 for correct)
+        std = np.std(np.array([0 if c else 1 for c in correctness]))
+        return (error_rate, std)
 
     def expected_information_gain(self, query_point, num_outer_samples=1000, num_inner_samples=10):
         print("EIG for query point", query_point)
@@ -148,25 +150,6 @@ class DirectGoal(Goal):
         err_mean, err_std = self.evaluate_predictions(pred, measurements)
         return err_mean, err_std
 
-    def get_norm_factors(self):
-        N = 10000    
-        errs = []
-        measurements = []
-        import logging
-        import tqdm
-        logger = logging.getLogger("pymc")
-        logger.setLevel(logging.WARNING)
-        for i in tqdm.tqdm(range(N)):
-            if i % 100 == 0:
-                self.env.reset()
-            inp = self.env.sample_random_input()
-            out = self.env.step(inp)
-            measurements.append(out)
-        mu = np.mean(measurements)
-        pred = [str(mu)] * N
-        err_mean, err_std = self.evaluate_predictions(pred, measurements)
-        return err_mean, err_std
-
 class DirectGoalNaive(DirectGoal):
     def __init__(self, env):
         super().__init__(env)
@@ -201,11 +184,11 @@ They will make predictions based solely on your explanation, so provide as much 
 Limit your explanation to {com_limit} words."""
 
         if use_ppl:
-            description += f"To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
+            description += "To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
             description += f"Here is the statistical model. \n {str_prob_prog} \n"
             description += f"Here are the inferred params. \n {params_summary_str} \n"
-            description += f"Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
-            description += f"The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
+            description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
+            description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
 
 class SurvivalAnalysis:
@@ -360,22 +343,22 @@ There is an output of the function at one of the listed inputs which range from 
 
     def get_ordered_column_names(self):
         if self.include_prior:
-            return ["metastasized_status", "time_surgery", "outcome"]
+            return ["Metastasized_Status", "Time_Since_Surgery", "Outcome"]
         else:
-            return ["x1", "x2", "y"]
+            return ["Input_1", "Input_2", "Output"]
     
     def get_ordered_features(self):
         return self.get_ordered_column_names()[:-1] 
 
     def format_column_description(self):
         if self.include_prior:
-            return (f"The observations are: \n -outcome: whether patient died \n"
-                    f"The input values are \n -time_surgery: time since surgery \n -metastasized_status: whether the cancer metastasized."
-                    f"Use the values of the input values to help you model the observations. ")
+            return ("The observations are: \n -Outcome: whether patient died (1) or lived (0) \n"
+                    "The input values are \n -Time_Since_Surgery: time since surgery \n -Metastasized_Status: whether the cancer metastasized (1) or not (0)."
+                    "Use the values of the input values to help you model the observations. ")
         else:
-            return (f"The observations are: \n -y: observation \n"
-                    f"The input values are \n -x1 \n -x2 "
-                    f"Use the values of the input values to help you model the observations. ")
+            return ("The observations are: \n -Output \n"
+                    "The input values are \n -Input_1 \n -Input_2 "
+                    "Use the values of the input values to help you model the observations. ")
     
 if __name__ == "__main__":
     env = SurvivalAnalysis(100, 10)

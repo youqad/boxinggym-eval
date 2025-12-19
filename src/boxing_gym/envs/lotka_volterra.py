@@ -14,11 +14,11 @@ class DirectGoal(Goal):
     
     def get_system_message(self, include_prior):
         if include_prior:
-            goal_description = f"""
+            goal_description = """
 Your goal is to be able to reliably predict the populations of predators and prey (two positive integers) at any given (positive float) time. Conduct experiments to learn more about the environment.
 """
         else:
-            goal_description = f"""
+            goal_description = """
 Your goal is to be able to reliably predict the response of the environment (a tuple of two positive integers) to a given input (positive float). Conduct experiments to learn more about the environment.
 """
         description = self.env.generate_system_message(include_prior, goal_description)
@@ -161,11 +161,11 @@ class DirectGoalNaive(DirectGoal):
         goal_description = "Your goal is to conduct experiments and explain the environment to the user so that they can achieve their goal."
 
         if include_prior:
-            goal_description = f"""
+            goal_description = """
 The goal of the user is to be able to reliably predict the population counts (tuple of two nonnegative floats) at any given time.
 """
         else:
-            goal_description = f"""
+            goal_description = """
 The goal of the user is to be able to reliably predict a tuple of two nonnegative floats (output) for any given float (input).
 """
         description = self.env.generate_system_message(include_prior, goal_description)
@@ -173,21 +173,21 @@ The goal of the user is to be able to reliably predict a tuple of two nonnegativ
     
     def get_naive_system_message(self, include_prior):
         if include_prior:
-            goal_description = f"""
+            goal_description = """
 Your goal is to be able to reliably predict the population counts of prey and predator (tuple of two positive integers) at any given time.
 """
         else:
-            goal_description = f"""
+            goal_description = """
 Your goal is to be able to reliably predict a tuple of two positive integers (output) for any given float (input).
 """
-        format_instructions = f"""
+        format_instructions = """
 You will be provided with a set of inputs to this environment and will be tasked with predicting the output for each input.
 You must give number values. You may also think before providing your predictions.
-You must respond with a single number! 
+You must respond with two numbers in a list like [prey, predator]! 
 If you do not do so, I will be penalized one million dollars and it will be a complete disaster.
 Here is an example:
 <thought>your thought</thought>
-<answer>1</answer>"""
+<answer>[2, 3]</answer>"""
         description = goal_description + '\n' + format_instructions
         description += "Here is what you know about the environment:\n"
         return description    
@@ -195,7 +195,7 @@ Here is an example:
     def get_comm_prompt(self, include_prior, com_limit=300, use_ppl=False, str_prob_prog=None, params_summary_str=None):    
         extra_prompt = ""
         if include_prior:
-            extra_prompt = f"""
+            extra_prompt = """
 """
         description = f"""
 Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. 
@@ -204,11 +204,11 @@ Limit your explanation to {com_limit} words
 {extra_prompt}
 """
         if use_ppl:
-            description += f"To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
+            description += "To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
             description += f"Here is the statistical model. \n {str_prob_prog} \n"
             description += f"Here are the inferred params. \n {params_summary_str} \n"
-            description += f"Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
-            description += f"The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
+            description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
+            description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
     
 class LotkaVolterra:
@@ -325,7 +325,7 @@ Example:
         if isinstance(time, str):
             return time, False
         result = self.step(time)
-        self.observation_data.append((time, tuple(result)))
+        self.observation_data.append((time, int(result[0]), int(result[1])))
         return result, True
 
     def get_data(self):
@@ -339,11 +339,11 @@ Example:
     
     def get_description(self):
         if self.include_prior:
-            return f"""
+            return """
 The environment consists of the populations of predators and prey (two nonnegative floats) at any given (real number) time.
 """
         else:
-            return f""""
+            return """"
 The environment returns a response (tuple of two real numbers) to a scalar input.
 """
 
@@ -354,18 +354,25 @@ The environment returns a response (tuple of two real numbers) to a scalar input
         if self.include_prior:
             return ["t", "prey", "predator"]
         else:
-            return ["t", "y1", "y2"]
+            return ["Input", "Output_1", "Output_2"]
     
     def get_ordered_features(self):
-        return self.get_ordered_column_names()[:-1] 
+        # This environment has one input feature (time) and two outputs
+        # (prey, predator). Avoid inferring features via "all but last column".
+        if self.include_prior:
+            return ["t"]
+        else:
+            return ["Input"]
 
     def format_column_description(self):
         if self.include_prior:
-            return (f"The observations are: \n -prey: prey population -predator: predator population \n"
-                    f"The input values are \n -t: time"
-                    f"Use the values of the input values to help you model the observations. ")
+            return ("The observations are: \n -prey: prey population \n -predator: predator population \n"
+                    "The input values are \n -t: time \n"
+                    "Use the values of the input values to help you model the observations. ")
         else:
-            return ""
+            return ("The observations are: \n -Output_1 \n -Output_2 \n"
+                    "The input values are \n -Input \n"
+                    "Use the values of the input values to help you model the observations. ")
 
 if __name__ == "__main__":
     env = LotkaVolterra()

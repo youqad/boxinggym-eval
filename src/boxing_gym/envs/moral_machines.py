@@ -3,11 +3,12 @@ import random
 
 import numpy as np
 import pymc as pm
-from scipy.stats import norm
-import openai
+import litellm
 
 from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
+from ..agents.model_config import get_model_config
+from ..agents.litellm_utils import call_llm_sync
 
 class DirectPrediction(Goal):
     def __init__(self, env):
@@ -21,7 +22,7 @@ class DirectPrediction(Goal):
         if include_prior:
             goal_description = "Your goal is to be able to predict the choice of the participant in the Moral Machine experiment based on the descriptions of the characters in each group and the intervention the car would take. Conduct experiments to gather data and build a model that can predict the participant's choice."
         else:
-            raise ValueError("Goal description not provided.")
+            goal_description = "Your goal is to be able to predict the binary choice output based on the input features describing two groups and an intervention. Conduct experiments to gather data and build a model that can predict the binary output."
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
         
@@ -50,28 +51,47 @@ class DirectPrediction(Goal):
         else:
             group1, group2, intervention, choice = self.eval_points[self.eval_pointer]
         self.eval_pointer += 1
-        assert include_prior == True, "Include prior must be True for this goal."
-        question = f"""\n Question: The participant was presented with the following scenario:
+        if include_prior:
+            question = f"""\n Question: The participant was presented with the following scenario:
 Group 1: {group1}
 Group 2: {group2}
 Intervention: {intervention}
 What choice do you predict the participant made? (1 for group 1, 2 for group 2)"""
+        else:
+            question = f"""\n Question: Given the following input features describing two groups and an intervention:
+Group 1: {group1}
+Group 2: {group2}
+Intervention: {intervention}
+What is the binary output? (1 or 2)"""
         return question, choice
     
     def evaluate_predictions(self, predictions, measurements):
         parsed_predictions = []
         for p in predictions:
-            if "2" in p:
-                parsed_predictions.append(2)
-            elif "1" in p:
-                parsed_predictions.append(1)
+            # Strip and get last character for strict parsing
+            p_clean = p.strip()
+            # Try to find standalone 1 or 2
+            match = re.search(r'\b([12])\b', p_clean)
+            if match:
+                parsed_predictions.append(int(match.group(1)))
             else:
-                print("prediction not parsed", p)
-                parsed_predictions.append(None)
-        correctness = [parsed_predictions[i]==measurements[i] for i in range(len(predictions))]
-        accuracy = sum(correctness) / len(correctness)
-        std = np.std(np.array(correctness))
-        return (accuracy, std)
+                # Fallback: check last character if it's a digit
+                last_char = p_clean[-1] if p_clean else ''
+                if last_char in ['1', '2']:
+                    parsed_predictions.append(int(last_char))
+                else:
+                    print("prediction not parsed", p)
+                    parsed_predictions.append(None)
+        # Count only non-None predictions for correctness
+        correctness = [parsed_predictions[i]==measurements[i] for i in range(len(predictions)) if parsed_predictions[i] is not None]
+        if len(correctness) > 0:
+            accuracy = sum(correctness) / len(predictions)  # Penalize unparsable as incorrect
+            std = np.std(np.array([1 if parsed_predictions[i]==measurements[i] else 0 for i in range(len(predictions))]))
+        else:
+            accuracy = 0.0
+            std = 0.0
+        # Return error rate (1-accuracy) to align with other environments that return error metrics
+        return (1-accuracy, std)
     
     def expected_information_gain(self, query_point, num_outer_samples=100, num_inner_samples=10):
         group1, group2, intervention = query_point
@@ -250,7 +270,7 @@ class DirectPredictionNaive(DirectPrediction):
         if include_prior:
             goal_description += "The goal of the user is to be able to predict the choice of the participant in the Moral Machine experiment based on the descriptions of the characters in each group and the intervention the car would take to save a group."
         else:
-            raise ValueError("Moral prediction task requires prior information. Please set include_prior to True.")
+            goal_description += "The goal of the user is to be able to predict the binary choice output based on the input features describing two groups and an intervention."
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
     
@@ -262,7 +282,10 @@ The intervention the car can take ('swerve' or 'stay'). The two groups involved 
 The participant can provide their choice of which group to save (1 for group 1, 2 for group 2).
 """
         else:
-            raise ValueError("Morals task requires prior information. Please set include_prior to True.")
+            goal_description = """Your goal is to predict a binary choice (1 or 2) based on input features describing two groups and an intervention type.
+The input features describe characteristics of two groups and an action ('swerve' or 'stay').
+The output is a choice between group 1 and group 2.
+"""
         format_instructions = """Answer the question in the following format:
 1 for group 1, 2 for group 2
 You may think before prividing your answer. Here is an example:
@@ -278,22 +301,24 @@ They will make predictions based solely on your explanation, so provide as much 
 Limit your explanation to {com_limit} words"""
 
         if use_ppl:
-            description += f"To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
+            description += "To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
             description += f"Here is the statistical model. \n {str_prob_prog} \n"
             description += f"Here are the inferred params. \n {params_summary_str} \n"
-            description += f"Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
-            description += f"The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
+            description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
+            description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
 
         return description
 
 class MoralMachine:
-    def __init__(self, model_name="gpt-4o"):
+    def __init__(self, model_name="gpt-5.2"):
         self.model_name = model_name
         self.env_name = "moral"
-        if "gpt-4o" in model_name:
-            self.llm = openai.OpenAI()
-        else:
-            raise ValueError("Model not supported")
+        # Configure LiteLLM provider routing for any supported model (incl. GPT‑5).
+        cfg = get_model_config(model_name)
+        self.api_base = cfg.get("api_base")
+        self.api_key = cfg.get("api_key")
+        litellm.drop_params = True
+        litellm.set_verbose = False
         self.characters = ['stroller', 'boy', 'girl', 'pregnant_woman', 'male_doctor', 'female_doctor',
                         'female_athlete', 'male_athlete', 'female_executive', 'male_executive',
                         'large_woman', 'large_man', 'homeless', 'old_man', 'old_woman', 'criminal', 'dog', 'cat']
@@ -327,9 +352,9 @@ Translate the decision that is shown to you in natural language and provide reas
 Only talk about the most salient reasons for the decision.
 The sentence should be concise and should not refer to the importance factors/values directly.
 Start with "I choose to save group 1/group 2 because...". Be concise and faithful to the importance weights.
-"""
+	"""
         self.reset()
-        
+
     def _build_model(self):
         with pm.Model() as model:
             # Priors for regression coefficients
@@ -405,7 +430,28 @@ When asked to answer a question about the environment, respond in the format spe
 <answer> your answer </answer>
 """
         else:
-            message = goal_description
+            message = f"""{goal_description}
+You may query the system by providing the feature values for two groups and an intervention type. The system will provide a binary choice output (1 or 2).
+Provide the features in the following format:
+<observe>
+Group 1: [entity1, entity2, ...]
+Group 2: [entity1, entity2, ...]
+Intervention: intervention_type (swerve or stay)
+</observe>
+Entities can be any of: {', '.join(self.characters)}
+You can reflect before making an observation by providing your thoughts in <thought>.
+
+Here is an example:
+<thought> This configuration tests a specific pattern in the binary choices. </thought>
+<observe>
+Group 1: [boy, girl]
+Group 2: [elderly_man, elderly_woman]
+Intervention: swerve
+</observe>
+When asked to answer a question about the environment, respond in the format specified in the question.
+<thought> your thought </thought>
+<answer> your answer </answer>
+"""
         return message
     
     def _get_char_attr(self, character):
@@ -505,30 +551,15 @@ When asked to answer a question about the environment, respond in the format spe
                         beta_intervention=self.beta_intervention)
         # print(system)
         # print(query)
-        if "gpt-4o" in self.model_name:
-            messages = [
-                {
-                    "role": "system",
-                    "content": [
-                        {
-                            "type": "text",
-                            "value": system
-                        }
-                    ]
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "value": query
-                        }
-                    ]
-                }
-            ]
-            full_response = self.llm.chat.completions.create(model=self.model_name, messages=messages, max_tokens=512, temperature=0.7)#.content[0].text
-            response = full_response.choices[0].message.content
-
+        response = call_llm_sync(
+            model_name=self.model_name,
+            system_text=system,
+            user_text=query,
+            api_base=self.api_base,
+            api_key=self.api_key,
+            max_tokens=512,
+            temperature=0.7,
+        )
         response = f"The participant responded with: {response}\n"
         
         return response, choice
@@ -602,7 +633,7 @@ The participant is queried for their decision by providing the descriptions of t
 The characters can be any of the following: {self.characters}
 """
         else:
-            return f""""""
+            return """"""
 
     def describe_data_columns(self):
         return self.format_column_description()
@@ -610,17 +641,17 @@ The characters can be any of the following: {self.characters}
     def get_ordered_column_names(self):
         if self.include_prior:
             return [
-                "group1_group2_count_diff", 
-                "group1_group2_gender_diff", 
-                "group1_group2_age_diff", 
-                "group1_group2_social_status_diff", 
-                "group1_group2_fitness_diff", 
-                "group1_group2_species_diff", 
-                "intervention",
-                "choice",
+                "Human_Count_Diff", 
+                "Gender_Diff", 
+                "Age_Diff", 
+                "Social_Status_Diff", 
+                "Fitness_Diff", 
+                "Species_Diff", 
+                "Intervention",
+                "Choice",
             ]
         else:
-            return ["x1", "x2", "x3", "x4", "x5", "x6", "intervention", "y"]
+            return ["Input_1", "Input_2", "Input_3", "Input_4", "Input_5", "Input_6", "Input_7", "Output"]
     
     def get_ordered_features(self):
         return self.get_ordered_column_names()[:-1] 
@@ -632,19 +663,22 @@ The characters can be any of the following: {self.characters}
         if self.include_prior:
             description = (
             "The observations are:\n"
-            "- choice: participant's choice on which group to save (2 for group 2 or 1 for group 1) \n"
+            "-Choice: participant's choice on which group to save (2 for group 2 or 1 for group 1) \n"
             "The input values are:\n"
-            "-group1_group2_count_diff: gender difference between the two groups\n"
-            "-group1_group2_gender_diff: gender difference between the two groups\n"
-            "-group1_group2_age_diff: age difference between the two groups\n"
-            "-group1_group2_social_status_diff: social status difference between the two groups\n"
-            "-group1_group2_fitness_diff: fitness difference between the two groups\n"
-            "-group1_group2_species_diff: species difference between the two groups\n"
-            "-intervention: the intervention required to save the group (1 for swerve or 0 for stay) \n"
+            "-Human_Count_Diff: human count difference between the two groups\n"
+            "-Gender_Diff: gender difference between the two groups\n"
+            "-Age_Diff: age difference between the two groups\n"
+            "-Social_Status_Diff: social status difference between the two groups\n"
+            "-Fitness_Diff: fitness difference between the two groups\n"
+            "-Species_Diff: species difference between the two groups\n"
+            "-Intervention: the intervention required to save the group (1 for swerve or 0 for stay) \n"
+            "Use the values of the input values to help you model the observations."
         )
             return description
         else:
-            return ""
+            return ("The observations are: \n -Output \n"
+                    "The input values are \n -Input_1 \n -Input_2 \n -Input_3 \n -Input_4 \n -Input_5 \n -Input_6 \n -Input_7 \n"
+                    "Use the values of the input values to help you model the observations. ")
 
 
 if __name__ == "__main__":

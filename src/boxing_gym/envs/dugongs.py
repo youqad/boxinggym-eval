@@ -1,4 +1,3 @@
-import json
 import random
 import re
 
@@ -64,7 +63,7 @@ Here is an example.
                 p = float(p)
             except:
                 # use regex to extract last float
-                p = re.findall(r"[-+]?\d*\.\d+|\d+", p)[-1]
+                p = float(re.findall(r"[-+]?\d*\.\d+|\d+", p)[-1])
             parsed_predictions.append(p)
         se = (np.array(parsed_predictions) - np.array(measurements)) ** 2
         mse = np.mean(se)
@@ -178,11 +177,11 @@ They will make predictions based solely on your explanation, so provide as much 
 Limit your explanation to {com_limit} words."""
 
         if use_ppl:
-            description += f"To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
+            description += "To make your explanation clearer and more informative, look at the statistical model (written in pymc) designed by a colleague for the experimental data and the inferred parameters. \n"
             description += f"Here is the statistical model. \n {str_prob_prog} \n"
             description += f"Here are the inferred params. \n {params_summary_str} \n"
-            description += f"Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
-            description += f"The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
+            description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
+            description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
     
 class Dugongs:
@@ -289,7 +288,7 @@ Example:
     
     def get_description(self):
         if self.include_prior:
-            return f"""The ages and lengths of 27 captured dugongs (sea cows)"""
+            return """The ages and lengths of 27 captured dugongs (sea cows)"""
         else:
             return "x and Y are the input and output values of the environment."
 
@@ -298,18 +297,18 @@ Example:
 
     def get_ordered_column_names(self):
         if self.include_prior:
-            return ["x", "Y"]
+            return ["Age", "Length"]
         else:
-            return ["x", "Y"]
+            return ["Input", "Output"]
     
     def get_ordered_features(self):
         return self.get_ordered_column_names()[:-1] 
 
     def format_column_description(self):
         if self.include_prior:
-            return (f"The observations are: \n -Y: length of dugong (sea cows) \n"
-                f"The input values are \n -x: age of dugong (sea cows). \n"
-                f"Use the input values to help you model the observations. ")
+            return ("The observations are: \n -Length: length of dugong (sea cows) \n"
+                "The input values are \n -Age: age of dugong (sea cows). \n"
+                "Use the input values to help you model the observations. ")
         else:
             return ""
 
