@@ -1,4 +1,9 @@
-llm: GPT4-V  # model to use
+defaults:
+  - _self_
+  - llms: gpt-4o  # default LLM config (can override with llms=glm-4.6 etc.)
+
+llm: ${llms.model_name}
+
 experiment: box_loop # experiment type
 num_rounds: 1  # optimization rounds to run
 proposal_temperature: 0.0  # temperature for proposing
@@ -15,3 +20,13 @@ vision_only: false
 use_vision: false
 num_proposals: 1
 
+diagnostics:
+  # Thresholds for reporting sampling issues back to the proposer.
+  # - rhat_warn: max R-hat above this is flagged (ideal is ~1.00).
+  # - ess_warn: min effective sample size below this is flagged (higher is better).
+  # - max_messages: keep at most this many recent diagnostics.
+  # - include_logger_warnings: include PyMC/ArviZ warning log messages.
+  rhat_warn: 1.01
+  ess_warn: 100
+  max_messages: 5
+  include_logger_warnings: true
