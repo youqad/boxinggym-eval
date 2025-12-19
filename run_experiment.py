@@ -1,335 +1,333 @@
-import os
-import importlib
+import argparse
 import logging
-import json
+import os
+import sys
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+logging.basicConfig(level=logging.WARNING)
+for name in (
+    "pytensor.tensor.blas",
+    "pytensor.tensor.blas_headers",
+):
+    _logger = logging.getLogger(name)
+    _logger.setLevel(logging.ERROR)
+    _logger.propagate = False
+
+from dotenv import load_dotenv
 import random
 
 import numpy as np
-import tqdm
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 import hydra
-import pymc as pm
-import arviz as az
 
-from boxing_gym.agents.agent import LMExperimenter
-import boxing_gym.envs.location_finding as location_finding
-import boxing_gym.envs.hyperbolic_temporal_discount as hyperbolic_temporal_discount
-import boxing_gym.envs.death_process as death_process
-import boxing_gym.envs.irt as irt
-import boxing_gym.envs.survival_analysis as survival_analysis
-import boxing_gym.envs.peregrines as peregrines
-import boxing_gym.envs.dugongs as dugongs
-import boxing_gym.envs.lotka_volterra as lotka_volterra
-import boxing_gym.envs.moral_machines as moral_machines
-import boxing_gym.envs.emotion as emotion
-from boxing_gym.agents.box_loop_helper import construct_features
+REPO_ROOT = Path(__file__).resolve().parent
+SRC_ROOT = REPO_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
-try:
-    from boxing_gym.agents.model_search import run_box_loop
-except ImportError:
-    print("Could not import model_search, make sure you have the correct version of the box-loop repo")
-    pass
-logging.basicConfig(level=logging.WARNING)
+from boxing_gym.experiment.utils import _import_real_module
+from boxing_gym.experiment.loop import iterative_experiment
+from boxing_gym.experiment.step_logger import StepLogger
+from boxing_gym.experiment.run_helpers import (
+    build_env_goal,
+    build_results_payload,
+    collect_observations,
+    collect_results_payload,
+    compute_z_results,
+    create_agents,
+    pre_generate_eval_points,
+)
+from boxing_gym.experiment.ppl_utils import extract_ppl_artifacts
+from boxing_gym.experiment.run_io import (
+    build_output_filename,
+    ensure_output_dir,
+    write_results,
+    write_run_artifact_index,
+)
+from boxing_gym.experiment.wandb_logging import init_wandb, log_wandb_results
 
+load_dotenv(override=True)
+os.environ.setdefault("WANDB_DIR", str(REPO_ROOT / "wandb-dir"))
 
-MAX_TRIES = 3
+# import optional modules lazily (avoid side effects on --help)
+wandb = None
+weave = None
 
-def augment_scientist_with_ppl(scientist, 
-                               proposed_programs_all, 
-                               critic_info_all, critic_mode=False):
-    assert len(proposed_programs_all[-1]) > 0
-    
-    program_dict = proposed_programs_all[-1][0]
-    str_prob_prog = program_dict['str_prob_prog']
-
-    prompt_msg = f"""
-To help guide your experimentation, your brilliant colleague has proposed the following program for the data.
-Use this program to guide your experimentation.
-Program: {str_prob_prog} \n
-
-"""
-    if critic_mode:
-        assert len(critic_info_all[-1]) > 0
-        str_hypotheses = critic_info_all[-1][0]['str_hypotheses']
-        synthesis = critic_info_all[-1][0]['synthesis']
-        prompt_msg += f"""
-Here is criticism of the previous model: 
-{str_hypotheses} \n
-{synthesis} \n
-"""
-
-    system_message = scientist.system
-    system_message += f"\n {prompt_msg}"
-    print(f"system_message: {system_message}")
-    scientist.messages[0]['content'] = [{"type": "text", "text": system_message}]
-    
-def iterative_experiment(
-        goal, 
-        scientist, 
-        num_experiments, 
-        num_evals, 
-        include_prior, 
-        naive_agent=None, 
-        com_limit=None, 
-        check_eig=False,
-        use_ppl=False,
-):
-    results = []
-    queries = []
-    observations = []
-    successes = []
-    explanations = []
-    eigs = []
-    proposed_programs_all = [[]]
-    critic_info_all = []
-
-    if 0 in num_experiments:
-        final_results = "You cannot make observations now. Make assumptions and provide your best guess to the following query."
-
-        if use_ppl:
-            if naive_agent is not None:
-                result, explanation = evaluate_naive_explanation(final_results, goal, scientist, naive_agent, num_evals, include_prior, com_limit, use_ppl=use_ppl)
-                explanations.append(explanation)
-            else:
-                result = ppl_evaluate(final_results, goal, scientist, num_evals, include_prior, proposed_programs_all, critic_info_all, prior_mode=True, critic_mode=False)
-                augment_scientist_with_ppl(scientist, proposed_programs_all, critic_info_all, critic_mode=False)
-        else:
-            if naive_agent is not None:
-                result, explanation = evaluate_naive_explanation(final_results, goal, scientist, naive_agent, num_evals, include_prior, com_limit)
-                explanations.append(explanation)
-            else:
-                result = evaluate(final_results, goal, scientist, num_evals, include_prior)
-
-        results.append(result)
-        
-    observation = None
-    for i in tqdm.tqdm(range(num_experiments[-1])):                
-        success = False
-        observe = scientist.generate_actions(observation)
-        queries.append(observe)
-        observation, success = goal.env.run_experiment(observe)
-        observations.append(observation)
-        successes.append(success)
-        tries = 1
-        while not success and tries < MAX_TRIES:
-            observe, _ = scientist.prompt_llm_and_parse(observation, True)
-            queries.append(observe)
-            observation, success = goal.env.run_experiment(observe)
-            observations.append(observation)
-            successes.append(success)
-            if not success:
-                tries += 1
-
-        if success and check_eig:
-            query_point = goal.env.validate_input(observe)
-            eig = goal.expected_information_gain(query_point)
-            eigs.append(eig)
-
-        if i+1 in num_experiments:
-            final_results = f"The final result is {observation}."
-            if use_ppl:
-                if naive_agent is not None:
-                    result, explanation = evaluate_naive_explanation(final_results, goal, scientist, naive_agent, num_evals, include_prior, com_limit, use_ppl=use_ppl)
-                    explanations.append(explanation)
-                else:
-                    result = ppl_evaluate(final_results, goal, scientist, num_evals, include_prior, proposed_programs_all, critic_info_all, critic_mode=True)
-                    augment_scientist_with_ppl(scientist, proposed_programs_all, critic_info_all, critic_mode=True)
-
-            else:
-                if naive_agent is not None:
-                    result, explanation = evaluate_naive_explanation(final_results, goal, scientist, naive_agent, num_evals, include_prior, com_limit)
-                    explanations.append(explanation)
-                else:
-                    result = evaluate(final_results, goal, scientist, num_evals, include_prior)
-            results.append(result)
+CONF_ROOT = REPO_ROOT / "conf"
 
 
-    return results, queries, observations, successes, explanations, eigs, proposed_programs_all
+def _list_config_stems(subdir: str) -> List[str]:
+    path = CONF_ROOT / subdir
+    if not path.exists():
+        return []
+    return sorted(p.stem for p in path.glob("*.yaml"))
 
-def get_gen_model(gen_code):
-    with open("ppl_gen_model.py", 'w') as file:
-        file.write(gen_code)
-    importlib.invalidate_caches()
-    import src.boxing_gym.agents.ppl_gen_model as ppl_gen_model
-    importlib.reload(ppl_gen_model)
-    from src.boxing_gym.agents.ppl_gen_model import gen_model
-    return gen_model
 
-def get_ppl_prediction(env, program_dict, question, prior_mode):
+def _load_default_profiles() -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    try:
+        from omegaconf import OmegaConf
+    except Exception:
+        return None, None, None
+    config_path = CONF_ROOT / "config.yaml"
+    if not config_path.exists():
+        return None, None, None
+    try:
+        cfg = OmegaConf.load(config_path)
+    except Exception:
+        return None, None, None
+    default_env = None
+    default_exp = None
+    default_llm = None
+    defaults = getattr(cfg, "defaults", None) or []
+    for item in defaults:
+        if isinstance(item, dict):
+            if "envs" in item:
+                default_env = item.get("envs")
+            if "exp" in item:
+                default_exp = item.get("exp")
+            if "llms" in item:
+                default_llm = item.get("llms")
+    return default_env, default_exp, default_llm
 
-    if prior_mode:
-        str_prob_prog = program_dict['str_prob_prog']
-        prior_model = get_gen_model(str_prob_prog)
-        observed_df = construct_features(env, data=[question])
-        model, prior_predictive = prior_model(observed_df)
-        assert "y_obs" in prior_predictive
 
-        if env.env_name == "irt":
-            return str(1 if prior_predictive['y_obs'].mean() >= 0.5 else 0)
+def _is_discovery_env(env_name: Optional[str]) -> bool:
+    if not env_name:
+        return False
+    return str(env_name).endswith("_discovery")
 
-        elif env.env_name == "moral":
-            return str(2 if prior_predictive['y_obs'].mean() >= 0.5 else 1)
-        else:
-            return str(prior_predictive['y_obs'].mean())
 
-    else:
-        model = program_dict['model']
-        ordered_features = env.get_ordered_features() 
-        trace = program_dict['trace']
-        
-        if env.env_name == "location_finding":
-            question = question[0]
-        elif env.env_name == "moral":
-            assert 1 == 1
-        else:
-            assert len(ordered_features) == len(question)
+def _print_rich_help(env_choices: List[str], exp_choices: List[str], llm_choices: List[str]) -> None:
+    console = Console()
+    console.print(Panel.fit("[bold]BoxingGym run_experiment[/]"))
+    console.print("Usage:")
+    console.print("  [cyan]python run_experiment.py[/] [flags] [hydra overrides]\n")
 
-        if env.env_name == "moral":
-            group1 = question[0]
-            group2 = question[1]
-            intervention = question[2]
-            row = []
-            for attribute in ["count", "gender", "age", "social_status", "fitness", "species"]:
-                attribute_diff = env.calculate_attr_diff(group1, group2, attribute)
-                row.append(attribute_diff)
-            data_dict = {}
-            for i in range(0, len(row)):
-                data_dict[ordered_features[i]] = np.array([row[i]])
-            data_dict['intervention'] = np.array([1]) if intervention == 'swerve' else np.array([0])
+    table = Table(title="Options", show_header=True, header_style="bold")
+    table.add_column("Flag", style="cyan", no_wrap=True)
+    table.add_column("Description")
+    table.add_column("Default")
+    table.add_row("--env", "Environment config (conf/envs/*.yaml)", "config default")
+    table.add_row("--exp", "Experiment config (conf/exp/*.yaml)", "config default")
+    table.add_row("--llm", "LLM config (conf/llms/*.yaml)", "config default")
+    table.add_row("--seed", "Random seed", "config default")
+    table.add_row("--num-experiments", "Budgets (e.g. 0 5 10)", "conf/exp/*.yaml")
+    table.add_row("--num-evals", "Eval questions", "conf/envs/*.yaml")
+    table.add_row("--include-prior / --no-include-prior", "Include the prior", "config default")
+    table.add_row("--use-ppl / --no-use-ppl", "Use PPL/Box's Loop", "config default")
+    table.add_row("--temperature", "LLM temperature (llms.temperature)", "conf/llms/*.yaml")
+    table.add_row("--max-tokens", "LLM max tokens (llms.max_tokens)", "conf/llms/*.yaml")
+    table.add_row("--api-base", "Override llms.api_base", "None")
+    table.add_row("--api-key", "Override llms.api_key", "None")
+    table.add_row("--custom-llm-provider", "Override llms.custom_llm_provider", "None")
+    table.add_row("--com-limit", "Comms word limit (envs.com_limit)", "conf/envs/*.yaml")
+    table.add_row("--env-param key=value", "Override envs.env_params.<key>", "None")
+    table.add_row("--override key=value", "Raw Hydra override", "None")
+    table.add_row("--list-envs / --list-exps / --list-llms", "List configs", "None")
+    table.add_row("-h, --help", "Show this help and exit", "")
+    console.print(table)
 
-        else:
-            data_dict = {}
-            for i in range(0, len(question)):
-                data_dict[ordered_features[i]] = np.array([question[i]])
-            
-        
-        with model:
-            pm.set_data(data_dict)
-            post_pred = pm.sample_posterior_predictive(trace, var_names=['y_obs'], return_inferencedata=False)
-            assert 'y_obs' in post_pred
-            numerical_pred = post_pred['y_obs'].flatten().mean()
-            if env.env_name == "irt":
-                print('env name is irt')
-                numerical_pred = 1 if numerical_pred >= 0.5 else 0
+    console.print("\nExamples:")
+    console.print("  [cyan]python run_experiment.py --env hyperbolic_direct --exp oed --llm gpt-4o[/]")
+    console.print("  [cyan]python run_experiment.py --env dugongs_direct_discovery --num-experiments 1 --num-evals 1 --no-use-ppl[/]")
+    console.print("  [cyan]python run_experiment.py envs=dugongs_direct_discovery exp.num_experiments=[1] envs.num_evals=1 use_ppl=false[/]")
 
-            if env.env_name == "moral":
-                print('env name is moral')
-                numerical_pred = 2 if numerical_pred >= 0.5 else 1
-            
-            prediction = str(numerical_pred)
-        return prediction
+    if env_choices:
+        console.print(f"\nEnvs ({len(env_choices)}): {', '.join(env_choices)}")
+    if exp_choices:
+        console.print(f"Exps ({len(exp_choices)}): {', '.join(exp_choices)}")
+    if llm_choices:
+        console.print(f"LLMs ({len(llm_choices)}): {', '.join(llm_choices)}")
 
-def ppl_evaluate(final_results, goal, scientist, num_evals, include_prior, proposed_programs_all, critic_info_all, prior_mode=False, critic_mode=False):
 
-    if not prior_mode:
-        goal.env.get_df()
+def _print_list(title: str, items: List[str]) -> None:
+    console = Console()
+    if not items:
+        console.print(f"[yellow]No {title} found.[/]")
+        return
+    table = Table(title=title, show_header=False)
+    table.add_column("Name", style="cyan")
+    for item in items:
+        table.add_row(item)
+    console.print(table)
 
-    if len(critic_info_all) > 0:
-        if len(critic_info_all[-1]) > 0:
-            prev_str_hypotheses = critic_info_all[-1][0]['str_hypotheses']
-            prev_synthesis = critic_info_all[-1][0]['synthesis']
-        else:
-            prev_str_hypotheses = None
-            prev_synthesis = None
 
-    else:
-        prev_str_hypotheses = None
-        prev_synthesis = None
+def _parse_int_list(values: Optional[List[str]]) -> Optional[List[int]]:
+    if not values:
+        return None
+    out: List[int] = []
+    for v in values:
+        for part in str(v).split(","):
+            part = part.strip()
+            if not part:
+                continue
+            out.append(int(part))
+    return out or None
 
-    proposed_programs, critic_info = run_box_loop(env=goal.env, 
-                                                  prior_mode=prior_mode,
-                                                  critic_mode=critic_mode,
-                                                  prev_synthesis=prev_synthesis,
-                                                  prev_str_hypotheses=prev_str_hypotheses,
-                                                  warm_start_examples=proposed_programs_all[-1])
 
-    proposed_programs_all.append(proposed_programs)
-    critic_info_all.append(critic_info)
+def _parse_env_params(values: Optional[List[str]]) -> List[str]:
+    overrides = []
+    for item in values or []:
+        if "=" not in item:
+            raise ValueError(f"--env-param must be key=value, got: {item}")
+        key, val = item.split("=", 1)
+        key = key.strip()
+        val = val.strip()
+        if not key:
+            raise ValueError(f"--env-param key is empty: {item}")
+        overrides.append(f"envs.env_params.{key}={val}")
+    return overrides
 
-    assert len(proposed_programs_all[-1]) > 0
-    program_dict = proposed_programs_all[-1][0]
 
-    predictions, gts, questions = [], [], []
-    print(f"running {num_evals} evals")
-    goal.eval_pointer = 0 # reset pointer, some goals have a static eval set
-    for _ in tqdm.tqdm(range(num_evals)):
-        _, _= goal.get_goal_eval_question(include_prior)
+def _build_arg_parser(env_choices: List[str], exp_choices: List[str], llm_choices: List[str]) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("-h", "--help", action="store_true")
+    parser.add_argument("--env", choices=env_choices or None)
+    parser.add_argument("--exp", choices=exp_choices or None)
+    parser.add_argument("--llm", choices=llm_choices or None)
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("--num-experiments", nargs="+")
+    parser.add_argument("--num-evals", type=int)
+    parser.add_argument("--temperature", type=float)
+    parser.add_argument("--max-tokens", type=int)
+    parser.add_argument("--api-base")
+    parser.add_argument("--api-key")
+    parser.add_argument("--custom-llm-provider")
+    parser.add_argument("--com-limit", type=int)
+    parser.add_argument("--env-param", action="append", default=[])
+    parser.add_argument("--override", action="append", default=[])
 
-        input_output_tuple = goal.eval_points[goal.eval_pointer-1]
-        question = input_output_tuple[:-1]
-        gt = input_output_tuple[-1]
-        prediction = get_ppl_prediction(goal.env, program_dict, question, prior_mode)
+    prior_group = parser.add_mutually_exclusive_group()
+    prior_group.add_argument("--include-prior", action="store_true")
+    prior_group.add_argument("--no-include-prior", action="store_true")
 
-        gts.append(gt)
-        questions.append(str(question))
-        predictions.append(prediction)
-        print(f"prediction: {prediction}, gt: {gt}")
-    
+    ppl_group = parser.add_mutually_exclusive_group()
+    ppl_group.add_argument("--use-ppl", action="store_true")
+    ppl_group.add_argument("--no-use-ppl", action="store_true")
 
-    return goal.evaluate_predictions(predictions, gts), questions, gts, predictions
+    parser.add_argument("--list-envs", action="store_true")
+    parser.add_argument("--list-exps", action="store_true")
+    parser.add_argument("--list-llms", action="store_true")
+    return parser
 
-def evaluate(final_results, goal, scientist, num_evals, include_prior):
-    predictions, gts, questions = [], [], []
-    print(f"running {num_evals} evals")
-    goal.eval_pointer = 0 # reset pointer, some goals have a static eval set
-    for i in tqdm.tqdm(range(num_evals)):
-        question, gt = goal.get_goal_eval_question(include_prior)
-        question = final_results + '\n' + question
-        prediction = scientist.generate_predictions(question)
-        gts.append(gt)
-        questions.append(question)
-        predictions.append(prediction)
-        print(f"prediction: {prediction}, gt: {gt}")
-    return goal.evaluate_predictions(predictions, gts), questions, gts, predictions
 
-def evaluate_naive_explanation(
-        final_results, 
-        goal, scientist, 
-        naive_agent, 
-        num_evals, 
-        include_prior, 
-        com_limit,
-        use_ppl=False,
-):
-    if use_ppl:
-        goal.env.get_df()
-        proposed_programs, _ = run_box_loop(
-            env=goal.env, 
-            warm_start_examples=None
+def run_cli(argv: Optional[List[str]] = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    env_choices = _list_config_stems("envs")
+    exp_choices = _list_config_stems("exp")
+    llm_choices = _list_config_stems("llms")
+    default_env, default_exp, default_llm = _load_default_profiles()
+
+    parser = _build_arg_parser(env_choices, exp_choices, llm_choices)
+    args, unknown = parser.parse_known_args(argv)
+
+    if args.help:
+        _print_rich_help(env_choices, exp_choices, llm_choices)
+        return 0
+
+    if args.list_envs:
+        _print_list("Envs (conf/envs)", env_choices)
+        return 0
+    if args.list_exps:
+        _print_list("Experiments (conf/exp)", exp_choices)
+        return 0
+    if args.list_llms:
+        _print_list("LLMs (conf/llms)", llm_choices)
+        return 0
+
+    exp_name = args.exp or default_exp
+    env_name = args.env or default_env
+
+    # Warn about mismatched discovery configs (non-fatal)
+    console = Console()
+    if exp_name == "discovery" and env_name and not _is_discovery_env(env_name):
+        console.print(
+            f"[yellow]Warning:[/] exp=discovery usually expects a *_discovery env config. "
+            f"Got env={env_name!r}. Consider --env {env_name}_discovery or --exp oed."
         )
-        str_prob_prog = proposed_programs[0]['str_prob_prog']
-        trace = proposed_programs[0]['trace']
-        params_summary_str = az.summary(trace)['mean'].to_string()
-        request_prompt = goal.get_comm_prompt(
-            com_limit=com_limit, 
-            include_prior=include_prior, 
-            use_ppl=use_ppl, 
-            str_prob_prog=str_prob_prog,
-            params_summary_str=params_summary_str,
+    if exp_name and exp_name != "discovery" and _is_discovery_env(env_name):
+        console.print(
+            f"[yellow]Warning:[/] env={env_name!r} is a discovery config but exp={exp_name!r}. "
+            f"Consider --exp discovery or a non-discovery env config."
         )
-    else:
-        str_prob_prog = None
-        request_prompt = goal.get_comm_prompt(com_limit=com_limit, include_prior=include_prior)
 
-    print(f"request prompt: {request_prompt}")
-    explanation = scientist.prompt_llm(request_prompt)
-    print(f"explanation: {explanation}")
-    naive_system_message = goal.get_naive_system_message(include_prior)
-    naive_system_message += explanation
-    print(f"naive_system_message: {naive_system_message}")
-    naive_agent.set_system_message(naive_system_message)
-    return evaluate(final_results, goal, naive_agent, num_evals, include_prior), explanation
+    overrides: List[str] = []
+    if args.env:
+        overrides.append(f"envs={args.env}")
+    if args.exp:
+        overrides.append(f"exp={args.exp}")
+    if args.llm:
+        overrides.append(f"llms={args.llm}")
+    if args.seed is not None:
+        overrides.append(f"seed={args.seed}")
+    num_experiments = _parse_int_list(args.num_experiments)
+    if num_experiments is not None:
+        overrides.append(f"exp.num_experiments={num_experiments}")
+    if args.num_evals is not None:
+        overrides.append(f"envs.num_evals={args.num_evals}")
+    if args.temperature is not None:
+        overrides.append(f"llms.temperature={args.temperature}")
+    if args.max_tokens is not None:
+        overrides.append(f"llms.max_tokens={args.max_tokens}")
+    if args.api_base:
+        overrides.append(f"llms.api_base={args.api_base}")
+    if args.api_key:
+        overrides.append(f"llms.api_key={args.api_key}")
+    if args.custom_llm_provider:
+        overrides.append(f"llms.custom_llm_provider={args.custom_llm_provider}")
+    if args.com_limit is not None:
+        overrides.append(f"envs.com_limit={args.com_limit}")
+    if args.include_prior:
+        overrides.append("include_prior=true")
+    if args.no_include_prior:
+        overrides.append("include_prior=false")
+    if args.use_ppl:
+        overrides.append("use_ppl=true")
+    if args.no_use_ppl:
+        overrides.append("use_ppl=false")
+    overrides.extend(_parse_env_params(args.env_param))
+    overrides.extend(args.override or [])
+
+    # pass remaining args (Hydra overrides, -m, hydra.* options) through unchanged
+    hydra_args = overrides + unknown
+    sys.argv = [sys.argv[0]] + hydra_args
+
+    # minimal rich run banner for clarity
+    console = Console()
+    if hydra_args:
+        console.print(Panel.fit("[bold]Starting BoxingGym run[/]"))
+        table = Table(show_header=False)
+        table.add_column("Key", style="cyan")
+        table.add_column("Value")
+        for item in hydra_args:
+            table.add_row("override", item)
+        console.print(table)
+
+    main()
+    return 0
+
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(config: DictConfig):
+    global wandb, weave
+    if wandb is None:
+        wandb = _import_real_module("wandb", "init")
+    if weave is None:
+        weave = _import_real_module("weave", "init")
     seed = config.seed
     print(f"seed: {seed}")
     random.seed(seed)
-    # np.random.seed(int(seed))
+    np.random.seed(int(seed))
 
     model_name = config.llms.model_name
     temperature = config.llms.temperature
     max_tokens = config.llms.max_tokens
+    api_base = config.llms.get("api_base", None)
+    api_key = config.llms.get("api_key", None)
+    custom_llm_provider = config.llms.get("custom_llm_provider", None)
     num_experiments = config.exp.num_experiments
     env_params = config.envs.env_params
     experiment_type = config.exp.experiment_type
@@ -339,128 +337,153 @@ def main(config: DictConfig):
     goal_name = config.envs.goal_name
     com_limit = config.envs.com_limit
     check_eig = False
-    use_ppl= config.use_ppl
+    use_ppl = config.use_ppl
 
-    nametoenv = {    
-        "location_finding": location_finding.Signal,
-        "hyperbolic_temporal_discount": hyperbolic_temporal_discount.TemporalDiscount,
-        "death_process": death_process.DeathProcess,
-        "irt": irt.IRT,
-        "survival": survival_analysis.SurvivalAnalysis,
-        "dugongs": dugongs.Dugongs,
-        "peregrines": peregrines.Peregrines,
-        "morals": moral_machines.MoralMachine,
-        "emotion": emotion.EmotionFromOutcome,
-        "lotka_volterra": lotka_volterra.LotkaVolterra,
-    }
-    nameenvtogoal = {
-        ("hyperbolic_temporal_discount", "direct"): hyperbolic_temporal_discount.DirectGoal,
-        ("hyperbolic_temporal_discount", "discount"): hyperbolic_temporal_discount.DiscountGoal,
-        ("hyperbolic_temporal_discount", "direct_discovery"): hyperbolic_temporal_discount.DirectGoalNaive,
-        ("location_finding", "direct"): location_finding.DirectGoal,
-        ("location_finding", "source"): location_finding.SourceGoal,
-        ("location_finding", "direct_discovery"): location_finding.DirectGoalNaive,
-        ("death_process", "direct"): death_process.DirectDeath,
-        ("death_process", "direct_discovery"): death_process.DirectDeathNaive,
-        ("death_process", "infection"): death_process.InfectionRate,
-        ("irt", "direct"): irt.DirectCorrectness,
-        ("irt", "direct_discovery"): irt.DirectCorrectnessNaive,
-        ("irt", "best_student"): irt.BestStudent,
-        ("irt", "difficult_question"): irt.DifficultQuestion,
-        ("irt", "discriminate_question"): irt.DiscriminatingQuestion,
-        ("survival", "direct"): survival_analysis.DirectGoal,
-        ("survival", "direct_discovery"): survival_analysis.DirectGoalNaive,
-        ("dugongs", "direct"): dugongs.DirectGoal,
-        ("dugongs", "direct_discovery"): dugongs.DirectGoalNaive,
-        ("peregrines", "direct"): peregrines.DirectGoal,
-        ("peregrines", "direct_discovery"): peregrines.DirectGoalNaive,
-        ("emotion", "direct"): emotion.DirectEmotionPrediction,
-        ("emotion", "direct_discovery"): emotion.DirectEmotionNaive,
-        ("morals", "direct"): moral_machines.DirectPrediction,
-        ("morals", "direct_discovery"): moral_machines.DirectPredictionNaive,
-        ("lotka_volterra", "direct"): lotka_volterra.DirectGoal,
-        ("lotka_volterra", "direct_discovery"): lotka_volterra.DirectGoalNaive,
-    }
+    wandb_ctx = init_wandb(
+        config=config,
+        model_name=model_name,
+        env_name=env_name,
+        goal_name=goal_name,
+        experiment_type=experiment_type,
+        seed=seed,
+        wandb_module=wandb,
+        weave_module=weave,
+    )
 
-    env = nametoenv[env_name](**env_params)
-    env.include_prior = include_prior
-    goal = nameenvtogoal[(env_name, goal_name)](env)
+    env, goal, nametoenv, nameenvtogoal = build_env_goal(
+        env_name=env_name,
+        goal_name=goal_name,
+        env_params=env_params,
+        include_prior=include_prior,
+    )
 
-    scientist_agent = LMExperimenter(model_name=model_name, temperature=temperature, max_tokens=max_tokens)
-    naive_agent = None
-    if experiment_type == "discovery":
-        naive_agent = LMExperimenter(model_name=model_name, temperature=temperature, max_tokens=max_tokens)
+    pre_generate_eval_points(
+        goal=goal,
+        nametoenv=nametoenv,
+        nameenvtogoal=nameenvtogoal,
+        env_name=env_name,
+        goal_name=goal_name,
+        env_params=env_params,
+        include_prior=include_prior,
+        num_evals=num_evals,
+        seed=seed,
+    )
+
+    scientist_agent, naive_agent = create_agents(
+        experiment_type=experiment_type,
+        model_name=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        api_base=api_base,
+        api_key=api_key,
+        custom_llm_provider=custom_llm_provider,
+    )
 
     system_message = goal.get_system_message(include_prior)
     scientist_agent.set_system_message(system_message)
-    
-    print(f"running {num_experiments} experiments")
-    all_data = iterative_experiment(goal, scientist_agent, num_experiments, num_evals, include_prior, naive_agent, com_limit, check_eig, use_ppl)
 
-    # store all data with config
+    norm_mu = getattr(goal, "norm_mu", None)
+    norm_sigma = getattr(goal, "norm_sigma", None)
+
+    step_logger = None
+    if wandb_ctx.run is not None and wandb is not None:
+        step_logger = StepLogger(
+            wandb_module=wandb,
+            wandb_run=wandb_ctx.run,
+            start_time=wandb_ctx.start_time,
+        )
+
+    print(f"running {num_experiments} experiments")
+    all_data = iterative_experiment(
+        goal,
+        scientist_agent,
+        num_experiments,
+        num_evals,
+        include_prior,
+        naive_agent,
+        com_limit,
+        check_eig,
+        use_ppl,
+        step_logger=step_logger,
+        norm_mu=norm_mu,
+        norm_sigma=norm_sigma,
+    )
+
+    z_results = compute_z_results(
+        all_data=all_data,
+        num_experiments=num_experiments,
+        norm_mu=norm_mu,
+        norm_sigma=norm_sigma,
+        env_name=env_name,
+        goal_name=goal_name,
+    )
+
     scientist_messages = scientist_agent.all_messages
     naive_messages = None
     if experiment_type == "discovery":
         naive_messages = naive_agent.all_messages
-    
-    results = []
-    for d in all_data[0]:
-        new_d1, new_d2 = None, None
-        if isinstance(d[0], np.ndarray):
-            new_d1 = d[0].tolist()
-        else:
-            new_d1 = d[0]
-        if isinstance(d[1], np.ndarray):
-            new_d2 = d[1].tolist()
-        else:
-            new_d2 = d[1]
-        results.append([new_d1, new_d2])
-    
-    # convert observations to list
-    observations = []
-    for i in range(len(all_data[2])):
-        new_obs = None
-        if isinstance(all_data[2][i], np.ndarray):
-            new_obs = all_data[2][i].tolist()
-        else:
-            new_obs = all_data[2][i]
-        observations.append(new_obs)
 
-    only_programs = []
-    for elem in all_data[-1]:
-        try:
-            if len(elem) > 0:
-                only_programs.append(elem[0]['full_llm_response'])
-        except:
-            continue
+    results = collect_results_payload(all_data)
+    observations = collect_observations(all_data)
 
+    ppl_artifacts = extract_ppl_artifacts(all_data, use_ppl)
 
-    store_dict = {
-        "config": OmegaConf.to_container(config, resolve=True),
-        "data": {
-            "results": all_data[0],
-            "queries": all_data[1],
-            "observations": all_data[2],
-            "successes": all_data[3],
-            "explanations": all_data[4],
-            "eigs": all_data[5],
-            "programs": only_programs,
-        },
-        "scientist_messages": scientist_messages,
-        "naive_messages": naive_messages
-    }
-    res_dir = f"results/{env_name}"
+    final_dict = build_results_payload(
+        config=config,
+        wandb_meta=wandb_ctx.meta,
+        results=results,
+        z_results=z_results,
+        norm_mu=norm_mu,
+        norm_sigma=norm_sigma,
+        all_data=all_data,
+        observations=observations,
+        ppl_artifacts=ppl_artifacts,
+        scientist_messages=scientist_messages,
+        naive_messages=naive_messages,
+    )
 
-    if use_ppl:
-        model_name = model_name+"-boxloop"
-    res_filename = f"{goal_name}_{model_name}_{experiment_type}_{include_prior}_{seed}_critic=True.json"
-    if not os.path.exists(res_dir):
-        os.makedirs(res_dir)
-    with open(os.path.join(res_dir, res_filename), 'w') as f:
-        json.dump(store_dict, f, indent=4)
+    output_filename = build_output_filename(
+        env_name=env_name,
+        goal_name=goal_name,
+        model_name=model_name,
+        experiment_type=experiment_type,
+        include_prior=include_prior,
+        seed=seed,
+        use_ppl=use_ppl,
+        wandb_meta=wandb_ctx.meta,
+    )
+    ensure_output_dir(output_filename)
+
+    log_wandb_results(
+        ctx=wandb_ctx,
+        wandb_module=wandb,
+        output_filename=output_filename,
+        all_data=all_data,
+        z_results=z_results,
+        num_experiments=num_experiments,
+        env_name=env_name,
+        goal_name=goal_name,
+        experiment_type=experiment_type,
+        include_prior=include_prior,
+        seed=seed,
+        use_ppl=use_ppl,
+        system_message=system_message,
+        scientist_agent=scientist_agent,
+        naive_agent=naive_agent,
+        ppl_artifacts=ppl_artifacts,
+        goal=goal,
+    )
+
+    write_results(final_dict, output_filename)
+    print(f"Results saved to {output_filename}")
+    try:
+        if wandb_ctx.run is not None:
+            write_run_artifact_index(output_filename, wandb_ctx.meta)
+    except Exception:
+        pass
 
     print(model_name)
     print("finished successfully :)")
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(run_cli())
