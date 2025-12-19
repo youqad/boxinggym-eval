@@ -1,0 +1,39 @@
+program: run_experiment.py
+project: boxing-gym
+name: test_metrics_quick
+method: grid
+
+metric:
+  goal: minimize
+  name: eval/z_mean
+
+# Quick test: 1 model × 1 env × 1 seed = 1 run
+parameters:
+  llms:
+    value: deepseek-chat
+  envs:
+    value: dugongs_direct
+  exp:
+    value: oed
+  seed:
+    value: 99
+  include_prior:
+    value: true
+  use_ppl:
+    value: false
+  llms.max_tokens:
+    value: 512
+  exp.num_experiments:
+    value: "[0,2]"
+  envs.num_evals:
+    value: 2
+  hydra.job.chdir:
+    value: false
+
+command:
+  - ${env}
+  - uv
+  - run
+  - python
+  - ${program}
+  - ${args_no_hyphens}

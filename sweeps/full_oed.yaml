@@ -1,0 +1,67 @@
+program: run_experiment.py
+project: boxing-gym
+name: full_oed
+method: random
+
+metric:
+  goal: minimize
+  name: eval/z_mean
+
+# Full OED sweep: 7 models × 13 envs × 5 seeds × 4 modes = 1,820 runs
+# Tests all OED configurations (prior × ppl) with full compute
+# Uses default budgets [0, 1, 3, 5, 7, 10] from conf/exp/oed.yaml
+
+parameters:
+  llms:
+    values:
+      - gpt-4o
+      - gpt-5.1-codex-mini
+      - deepseek-v3.2
+      - glm-4.6
+      - minimax-m2
+      - kimi-k2-thinking
+      - bedrock-qwen3-32b
+
+  envs:
+    values:
+      # Core trio (paper main results)
+      - dugongs_direct
+      - peregrines_direct
+      - lotka_volterra_direct
+      # Extended environments
+      - hyperbolic_direct        # choice goal
+      - hyperbolic_discount      # discount goal
+      - location_finding_direct  # signal goal
+      - location_finding_source  # source_location goal
+      - death_process_direct     # num_infected goal
+      - death_process_infection  # infection_rate goal
+      - irt_direct               # correctness goal
+      - survival_direct          # survival goal
+      - emotion_direct           # prediction goal
+      - morals_direct            # judgement goal
+
+  exp:
+    value: oed
+
+  seed:
+    values: [1, 2, 3, 4, 5]  # Paper uses 5 independent runs
+
+  include_prior:
+    values: [true, false]  # Grid over prior
+
+  use_ppl:
+    values: [false, true]  # Grid over PPL (Box's Loop)
+
+  llms.max_tokens:
+    value: 512
+
+  hydra.job.chdir:
+    value: false
+
+command:
+  - ${env}
+  - uv
+  - run
+  - python
+  - ${program}
+  - ${args_no_hyphens}

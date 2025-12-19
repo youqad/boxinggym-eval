@@ -1,0 +1,48 @@
+program: run_experiment.py
+project: boxing-gym
+name: trio_discovery_budget10
+method: grid
+
+metric:
+  goal: minimize
+  name: eval/z_mean
+
+# Discovery trio validation: 7 models × 3 environments × 5 seeds = 105 runs
+# Discovery mode: scientist explains findings to naive agent
+parameters:
+  llms:
+    values:
+      - gpt-4o
+      - gpt-5.1-codex-mini
+      - deepseek-v3.2
+      - glm-4.6
+      - minimax-m2
+      - kimi-k2-thinking
+      - bedrock-qwen3-32b
+  envs:
+    values:
+      - dugongs_direct_discovery
+      - peregrines_direct_discovery
+      - lotka_volterra_direct_discovery
+  exp:
+    value: discovery
+  seed:
+    values: [1, 2, 3, 4, 5]  # Paper uses 5 independent runs
+  include_prior:
+    value: true
+  use_ppl:
+    value: false
+  llms.max_tokens:
+    value: 512
+  exp.num_experiments:
+    value: "[10]"
+  hydra.job.chdir:
+    value: false
+
+command:
+  - ${env}
+  - uv
+  - run
+  - python
+  - ${program}
+  - ${args_no_hyphens}

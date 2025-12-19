@@ -1,0 +1,57 @@
+program: run_experiment.py
+project: boxing-gym
+name: paper_replication_oed_no_prior
+method: grid
+
+metric:
+  goal: minimize
+  name: eval/z_mean
+
+# OED without prior (no Box's Loop)
+# 7 models × 13 envs × 5 seeds = 455 runs
+# Uses default budgets [0, 1, 3, 5, 7, 10] from conf/exp/oed.yaml
+parameters:
+  llms:
+    values:
+      - gpt-4o
+      - gpt-5.1-codex-mini
+      - deepseek-v3.2
+      - glm-4.6
+      - minimax-m2
+      - kimi-k2-thinking
+      - bedrock-qwen3-32b
+  envs:
+    values:
+      - dugongs_direct
+      - peregrines_direct
+      - lotka_volterra_direct
+      - hyperbolic_direct
+      - hyperbolic_discount
+      - location_finding_direct
+      - location_finding_source
+      - death_process_direct
+      - death_process_infection
+      - irt_direct
+      - survival_direct
+      - emotion_direct
+      - morals_direct
+  exp:
+    value: oed
+  seed:
+    values: [1, 2, 3, 4, 5]  # Paper uses 5 independent runs
+  include_prior:
+    value: false
+  use_ppl:
+    value: false
+  llms.max_tokens:
+    value: 512
+  hydra.job.chdir:
+    value: false
+
+command:
+  - ${env}
+  - uv
+  - run
+  - python
+  - ${program}
+  - ${args_no_hyphens}

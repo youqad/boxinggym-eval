@@ -1,0 +1,56 @@
+program: run_experiment.py
+project: boxing-gym
+name: test_oed
+method: random
+
+metric:
+  goal: minimize
+  name: eval/z_mean
+
+# Minimal OED validation: 7 models × 1 env × 2 seeds × 4 modes = 56 runs
+# Tests all OED configurations (prior × ppl) with minimal compute
+# Companion to test_discovery.yaml for complete validation
+
+parameters:
+  llms:
+    values:
+      - gpt-4o
+      - gpt-5.1-codex-mini
+      - deepseek-v3.2
+      - glm-4.6
+      - minimax-m2
+      - kimi-k2-thinking
+      - bedrock-qwen3-32b
+
+  envs:
+    values:
+      - location_finding_direct  # Representative env
+
+  exp:
+    value: oed
+
+  seed:
+    values: [1, 2]  # 2 seeds for z-score calculation
+
+  include_prior:
+    values: [true, false]  # Grid over prior
+
+  use_ppl:
+    values: [false, true]  # Grid over PPL (Box's Loop)
+
+  llms.max_tokens:
+    value: 512
+
+  exp.num_experiments:
+    value: "[0,3]"  # Minimal budgets for fast validation
+
+  hydra.job.chdir:
+    value: false
+
+command:
+  - ${env}
+  - uv
+  - run
+  - python
+  - ${program}
+  - ${args_no_hyphens}

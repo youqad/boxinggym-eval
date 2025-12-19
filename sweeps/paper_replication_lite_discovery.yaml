@@ -1,0 +1,57 @@
+program: run_experiment.py
+project: boxing-gym
+name: paper_replication_lite_discovery
+method: grid
+
+metric:
+  goal: minimize
+  name: eval/z_mean
+
+# Lite discovery validation: 7 models × 1 env × 2 seeds = 14 runs
+# Evaluates budgets [0, 3] per run → 28 total evaluations
+# Purpose: Fast validation of discovery (communication) mode
+# Compute savings: 14 vs 350 runs (discovery portion of full suite) = 96% savings
+
+parameters:
+  llms:
+    values:
+      - gpt-4o
+      - gpt-5.1-codex-mini
+      - deepseek-v3.2
+      - glm-4.6
+      - minimax-m2
+      - kimi-k2-thinking
+      - bedrock-qwen3-32b
+
+  envs:
+    values:
+      - location_finding_direct_discovery  # Discovery variant of most representative env
+
+  exp:
+    value: discovery
+
+  seed:
+    values: [1, 2]  # 2 seeds (vs 5 in full) - 60% seed reduction
+
+  include_prior:
+    value: true  # Discovery mode always uses prior
+
+  use_ppl:
+    value: false  # Discovery mode doesn't use PPL
+
+  llms.max_tokens:
+    value: 512
+
+  exp.num_experiments:
+    value: "[0,3]"  # Budget 0 (baseline) and 3 (early learning)
+
+  hydra.job.chdir:
+    value: false
+
+command:
+  - ${env}
+  - uv
+  - run
+  - python
+  - ${program}
+  - ${args_no_hyphens}

@@ -1,0 +1,58 @@
+program: run_experiment.py
+project: boxing-gym
+name: paper_replication_lite_oed
+method: grid
+
+metric:
+  goal: minimize
+  name: eval/z_mean
+
+# Comprehensive lite OED validation: 7 models × 1 env × 2 seeds × 4 OED modes = 56 runs
+# OED modes: include_prior=[true,false] × use_ppl=[false,true] = 4 combinations
+# Evaluates budgets [0, 3] per run → 112 total evaluations
+# Purpose: Fast validation of all OED variants before expensive full sweeps
+# Compute savings: 56 vs 1,530 runs (OED portion of full suite) = 96% savings
+
+parameters:
+  llms:
+    values:
+      - gpt-4o
+      - gpt-5.1-codex-mini
+      - deepseek-v3.2
+      - glm-4.6
+      - minimax-m2
+      - kimi-k2-thinking
+      - bedrock-qwen3-32b
+
+  envs:
+    values:
+      - location_finding_direct  # Most representative environment (GPT-5.2 xHigh analysis)
+
+  exp:
+    value: oed
+
+  seed:
+    values: [1, 2]  # 2 seeds (vs 5 in full) - 60% seed reduction
+
+  include_prior:
+    values: [true, false]  # Grid over prior/no-prior
+
+  use_ppl:
+    values: [false, true]  # Grid over standard OED vs Box's Loop
+
+  llms.max_tokens:
+    value: 512
+
+  exp.num_experiments:
+    value: "[0,3]"  # Budget 0 (baseline) and 3 (early learning)
+
+  hydra.job.chdir:
+    value: false
+
+command:
+  - ${env}
+  - uv
+  - run
+  - python
+  - ${program}
+  - ${args_no_hyphens}

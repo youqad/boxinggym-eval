@@ -1,0 +1,57 @@
+program: run_experiment.py
+project: boxing-gym
+name: paper_replication_discovery
+method: grid
+
+metric:
+  goal: minimize
+  name: eval/z_mean
+
+# Discovery mode (communication metric)
+# 7 models × 10 envs × 5 seeds = 350 runs
+# Budget [10] only (paper evaluates discovery at budget=10)
+parameters:
+  llms:
+    values:
+      - gpt-4o
+      - gpt-5.1-codex-mini
+      - deepseek-v3.2
+      - glm-4.6
+      - minimax-m2
+      - kimi-k2-thinking
+      - bedrock-qwen3-32b
+  envs:
+    values:
+      # Discovery variants of environments
+      - dugongs_direct_discovery
+      - peregrines_direct_discovery
+      - lotka_volterra_direct_discovery
+      - hyperbolic_direct_discovery
+      - location_finding_direct_discovery
+      - death_process_direct_discovery
+      - irt_direct_discovery
+      - survival_direct_discovery
+      - emotion_direct_discovery
+      - morals_direct_discovery
+  exp:
+    value: discovery
+  seed:
+    values: [1, 2, 3, 4, 5]  # Paper uses 5 independent runs
+  include_prior:
+    value: true
+  use_ppl:
+    value: false
+  llms.max_tokens:
+    value: 512
+  exp.num_experiments:
+    value: "[10]"
+  hydra.job.chdir:
+    value: false
+
+command:
+  - ${env}
+  - uv
+  - run
+  - python
+  - ${program}
+  - ${args_no_hyphens}

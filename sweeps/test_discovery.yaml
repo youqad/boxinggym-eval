@@ -1,0 +1,56 @@
+program: run_experiment.py
+project: boxing-gym
+name: test_discovery
+method: random
+
+metric:
+  goal: minimize
+  name: eval/z_mean
+
+# Minimal discovery validation: 7 models × 1 env × 2 seeds = 14 runs
+# Tests discovery mode (scientist explains to naive agent)
+# Companion to test_oed.yaml for complete validation
+
+parameters:
+  llms:
+    values:
+      - gpt-4o
+      - gpt-5.1-codex-mini
+      - deepseek-v3.2
+      - glm-4.6
+      - minimax-m2
+      - kimi-k2-thinking
+      - bedrock-qwen3-32b
+
+  envs:
+    values:
+      - location_finding_direct_discovery  # Representative env
+
+  exp:
+    value: discovery
+
+  seed:
+    values: [1, 2]  # 2 seeds for z-score calculation
+
+  include_prior:
+    value: true  # Discovery mode uses prior
+
+  use_ppl:
+    value: false  # Discovery mode doesn't use PPL
+
+  llms.max_tokens:
+    value: 512
+
+  exp.num_experiments:
+    value: "[0,3]"  # Minimal budgets for fast validation
+
+  hydra.job.chdir:
+    value: false
+
+command:
+  - ${env}
+  - uv
+  - run
+  - python
+  - ${program}
+  - ${args_no_hyphens}
