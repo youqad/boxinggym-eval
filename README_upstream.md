@@ -32,9 +32,7 @@ BoxingGym is a benchmarking framework designed to evaluate the capabilities of l
 - [Running Experiments](#running-experiments)
 - [Configuration System](#configuration-system)
 - [Analysis Tools](#analysis-tools)
-- [Benchmark Dashboard](#benchmark-dashboard)
 - [Contributing](#contributing)
-- [Quick Reference](#quick-reference)
 
 ## Key Features
 
@@ -47,7 +45,7 @@ BoxingGym is a benchmarking framework designed to evaluate the capabilities of l
 
 ## Installation
 
-### UV quick start
+### UV Quick Start (No Conda)
 
 ```bash
 git clone https://github.com/kanishkg/boxing-gym.git
@@ -62,23 +60,25 @@ uv pip install --python .venv/bin/python -e .
 uv run python -c "import boxing_gym; print('boxing_gym import OK')"
 ```
 
-Use `uv run` for most scripts:
+Run with uv (recommended):
 
 ```bash
 # Aggregate and plot results
 make aggregate plot
 
 # Or run scripts directly
-uv run python run_experiment.py --help
-uv run python run_experiment.py --env hyperbolic_direct --exp oed --llm gpt-4o
-uv run python run_experiment.py seed=1 exp=oed envs=hyperbolic_direct  # Hydra override style
+uv run run_experiment.py --help
+uv run run_experiment.py seed=1 exp=oed envs=hyperbolic_direct
 ```
 
-Python 3.11 is required. PyMC is pinned in `requirements.txt`. Set API keys for the LLM backends you use.
+Requirements:
+- Python >= 3.11 (tested)
+- PyMC for probabilistic modeling (installed via requirements.txt)
+- OpenAI/Anthropic/DeepSeek API keys for LLM agents
 
 ---
 
-If you want the old pip flow, it's below.
+If you prefer legacy instructions, the original pip flow is below for reference.
 
 ```bash
 git clone https://github.com/kanishkg/boxing-gym.git
@@ -110,7 +110,7 @@ BoxingGym includes the following environments, each with multiple goal configura
 
 ## Environment Implementation Example
 
-Let's examine the **Hyperbolic Temporal Discount** environment in detail to understand how environments work:
+Example: **Hyperbolic Temporal Discount** environment.
 
 ### 1. Environment Structure
 
@@ -322,34 +322,10 @@ Higher accuracy indicates clearer, more informative explanations produced by the
 
 ## Running Experiments
 
-### CLI
-
-```bash
-uv run python run_experiment.py \
-    --env hyperbolic_direct \
-    --exp oed \
-    --llm gpt-4o \
-    --seed 1 \
-    --num-experiments 0 5 10 \
-    --num-evals 10 \
-    --include-prior
-```
-
-Help:
-
-```bash
-uv run python run_experiment.py --help
-uv run python run_experiment.py --list-envs
-uv run python run_experiment.py --list-exps
-uv run python run_experiment.py --list-llms
-```
-
 ### Basic Experiment
 
-Hydra overrides still work:
-
 ```bash
-uv run python run_experiment.py \
+python run_experiment.py \
     seed=1 \
     llms=gpt-4o \
     include_prior=true \
@@ -366,7 +342,7 @@ Use the provided shell scripts:
 bash scripts/hyperbolic.sh
 
 # Run with Box's Loop for model building
-uv run python run_experiment.py \
+python run_experiment.py \
     seed=1 \
     llms=gpt-4o \
     include_prior=true \
@@ -379,10 +355,10 @@ uv run python run_experiment.py \
 
 ```bash
 # First run experiments
-uv run python run_experiment.py ...
+python run_experiment.py ...
 
 # Then calculate EIG regret
-uv run python scripts/run_eig_regret.py \
+python run_eig_regret.py \
     seed=1 \
     num_random=100 \ # number of samples for the MC estimate
     box=false
@@ -437,12 +413,9 @@ Results are saved as JSON files:
 ```
 results/
 └── hyperbolic_temporal_discount/
-    ├── env=hyperbolic_temporal_discount_goal=direct_model=gpt-4o_exp=oed_prior=true_seed=1_YYYYMMDD_HHMMSS-no_wandb.json      # Main results
-    └── regret_env=hyperbolic_temporal_discount_goal=direct_model=gpt-4o_exp=oed_prior=true_seed=1_YYYYMMDD_HHMMSS-no_wandb.json  # EIG analysis
+    ├── direct_gpt-4o_oed_true_1.json      # Main results
+    └── regret_direct_gpt-4o_oed_true_1.json  # EIG analysis
 ```
-
-Filename format:
-`env={env}_goal={goal}_model={model}_exp={experiment_type}_prior={true|false}_seed={seed}_{YYYYMMDD_HHMMSS}-{wandb_run_id|no_wandb}.json`
 
 ### Result File Contents
 
@@ -470,14 +443,26 @@ The `analysis/` directory contains Jupyter notebooks for:
 - Visualizing EIG Regret
 - Statistical significance testing
 
-Quick checks or plots:
+## Results Utilities
 
-```bash
-uv run python scripts/standardize_discovery.py results/<env>/<file>.json
-make all  # or: make aggregate && make plot
-```
+- Standardize to paper metric
+  - Convert any `results/*.json` to the paper’s standardized error (z) and compare to the authors’ Discovery@10 when available:
+    - `python scripts/standardize_discovery.py results/<env>/<file>.json`
 
-Dashboard: `scripts/bench_dashboard.py` (auto-installs `python-fasthtml` if needed).
+- Aggregate to CSV
+  - Scan the entire `results/` tree and write a tidy CSV for plotting:
+    - `python scripts/aggregate_results.py --out outputs/standardized_results.csv`
+
+- Plot with seaborn
+  - Produce publication‑ready figures under `outputs/plots`:
+    - `python scripts/plot_results.py --csv outputs/standardized_results.csv --outdir outputs/plots`
+
+- Make targets
+  - This repo uses a `uv`‑managed venv. The Makefile will install any missing deps into `.venv` and run the utilities:
+    - `make aggregate` → writes `outputs/standardized_results.csv`
+    - `make plot` → writes figures to `outputs/plots`
+    - `make all` → aggregate + plot
+  - Under the hood, Makefile calls: `uv pip install --python .venv/bin/python -r requirements.txt`
 
 ## Box's Loop Integration
 
@@ -511,18 +496,3 @@ If you want to contribute, please follow these steps:
 5. Push to the branch (`git push origin feature-branch`).
 6. Create a new Pull Request.
 7. For major changes, please open an issue first to discuss what you would like to change.
-
-## Quick reference
-
-```bash
-uv run python run_experiment.py --help
-uv run python run_experiment.py --list-envs
-uv run python run_experiment.py --env hyperbolic_direct --exp oed --llm gpt-4o
-BOX_LOOP_LLM="deepseek/deepseek-chat" uv run python run_experiment.py
-```
-
-New env: implement `reset()`/`step()`/`generate_system_message()` in `src/boxing_gym/envs/my_env.py`, add goals, add a `conf/envs/*` file, then register it.
-
-New LLM: drop a `conf/llms/*.yaml` and run with `llms=your_provider`.
-
-Debugging: `agents/model_search.py`, `agents/box_loop_experiment.py`, `agents/tag_parser.py`, `conf/box_loop.yaml`.
