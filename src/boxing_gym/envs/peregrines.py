@@ -301,11 +301,11 @@ Example:
     
     def get_description(self):
         if self.include_prior:
-            return """"
-The trajectory of the peregrine population breeding in the french jura from 1964 to 2003'
+            return """
+The trajectory of the peregrine population breeding in the French Jura from 1964 to 2003.
 """
         else:
-            return """"
+            return """
 x1 is the input and y is the output
 """
 
