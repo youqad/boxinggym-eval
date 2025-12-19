@@ -1,0 +1,24 @@
+# MiniMax M2 (230B MoE, 10B active)
+# $0.30/M input, $1.20/M output (free until Nov 7, 2025)
+# Requires MINIMAX_API_KEY (JWT token)
+# Uses <think>...</think> for reasoning traces
+#
+# Using OpenAI endpoint (/v1) - the Anthropic endpoint (/anthropic) fails with
+# LiteLLM when system messages are present ("unexpected keyword argument 'system'")
+
+model_name: "openai/MiniMax-M2"
+temperature: 0.0
+max_tokens: 196608
+
+api_base: "https://api.minimax.io/v1"
+api_key: ${oc.env:MINIMAX_API_KEY,null}
+
+# Model capabilities
+supports_system_message: true
+supports_thinking: true  # Uses interleaved <think>...</think> format for reasoning
+supports_streaming: true
+supports_vision: false
+supports_reasoning_details: true  # Supports reasoning_details parameter
+
+context_window: 204800  # 204K tokens
+reasoning_capable: true

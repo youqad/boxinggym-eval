@@ -1,0 +1,32 @@
+# DeepSeek V3.2 (Official successor to V3.2-Exp)
+# Released: December 1, 2025
+# GPT-5 level performance, balanced inference vs. length
+#
+# Supports both thinking and non-thinking modes:
+# - Non-thinking: Use model="deepseek/deepseek-chat"
+# - Thinking: Use model="deepseek/deepseek-reasoner" OR enable via extra_body
+#
+# Pricing: $0.028/M (cache hit), $0.28/M (cache miss) input, $0.42/M output
+# Context: 128K tokens
+# Max output: 4K default / 8K max (non-thinking), 32K default / 64K max (thinking)
+#
+# NEW in V3.2: Thinking in Tool-Use - first model to integrate thinking into tool calls
+# Requires DEEPSEEK_API_KEY environment variable
+# Get key at: https://platform.deepseek.com/
+
+model_name: "deepseek/deepseek-chat"
+temperature: 0.0
+max_tokens: 4096
+
+api_base: "https://api.deepseek.com/v1"
+api_key: ${oc.env:DEEPSEEK_API_KEY,null}
+
+supports_system_message: true
+supports_thinking: false
+supports_streaming: true
+supports_vision: false
+supports_tool_calls: true
+supports_json_output: true
+
+context_window: 128000
+reasoning_capable: false

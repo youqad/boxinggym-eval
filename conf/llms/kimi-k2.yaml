@@ -1,0 +1,32 @@
+# Kimi For Coding - Moonshot AI's coding-focused model
+# Accessed via Anthropic-compatible API
+#
+# Architecture: Kimi K2 base (1T params, 32B activated MoE)
+# Context: 262K tokens
+# Max output: 32K tokens
+#
+# API: Uses Anthropic SDK format (not OpenAI)
+# Base URL: https://api.kimi.com/coding/
+#
+# Requires MOONSHOT_API_KEY environment variable (sk-kimi-... format)
+# Get key at: https://kimi.com/coding
+
+model_name: "anthropic/kimi-for-coding"
+temperature: 0.0
+max_tokens: 32768
+
+api_base: "https://api.kimi.com/coding/"
+api_key: ${oc.env:MOONSHOT_API_KEY,null}
+
+# Required for custom endpoints
+custom_llm_provider: "anthropic"
+
+supports_system_message: true
+supports_thinking: false
+supports_streaming: true
+supports_vision: false
+supports_tool_calls: true
+supports_json_output: true
+
+context_window: 262144
+reasoning_capable: false

@@ -1,0 +1,26 @@
+# DeepSeek Reasoner (alias for deepseek-v3.2-thinking.yaml)
+# Use deepseek-v3.2-thinking.yaml for the full V3.2 thinking configuration
+# This file maintained for backward compatibility
+#
+# Critical: In multi-turn conversations, must pass reasoning_content back
+# or API returns 400 error. The agent.py handles this automatically.
+#
+# Requires DEEPSEEK_API_KEY environment variable
+# Get key at: https://platform.deepseek.com/
+
+model_name: "deepseek/deepseek-reasoner"
+temperature: 0.0
+max_tokens: 65536
+
+api_base: "https://api.deepseek.com/v1"
+api_key: ${oc.env:DEEPSEEK_API_KEY,null}
+
+supports_system_message: true
+supports_thinking: true
+supports_streaming: false
+supports_vision: false
+supports_tool_calls: true
+supports_json_output: true
+
+context_window: 128000
+reasoning_capable: true

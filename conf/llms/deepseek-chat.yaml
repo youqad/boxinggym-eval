@@ -1,0 +1,22 @@
+# DeepSeek Chat (alias for deepseek-v3.2.yaml)
+# Use deepseek-v3.2.yaml for the full V3.2 configuration
+# This file maintained for backward compatibility
+#
+# Requires DEEPSEEK_API_KEY environment variable
+# Get key at: https://platform.deepseek.com/
+
+model_name: "deepseek/deepseek-chat"
+temperature: 0.0
+max_tokens: 4096
+
+api_base: "https://api.deepseek.com/v1"
+api_key: ${oc.env:DEEPSEEK_API_KEY,null}
+
+supports_system_message: true
+supports_thinking: false
+supports_streaming: true
+supports_vision: false
+supports_tool_calls: true
+supports_json_output: true
+
+context_window: 128000

@@ -1,0 +1,41 @@
+# DeepSeek V3.2 with Thinking Mode enabled
+# Released: December 1, 2025
+# Uses deepseek-reasoner model ID for native thinking support
+#
+# Thinking mode details:
+# - Returns reasoning_content alongside content in responses
+# - Chain-of-thought from previous turns is NOT auto-concatenated
+# - Must pass reasoning_content back in multi-turn or get 400 error
+# - temperature, top_p, presence_penalty, frequency_penalty have NO effect
+#
+# NEW in V3.2: Thinking in Tool-Use - supports tool calls with reasoning
+# Multiple turns of reasoning + tool calls before final answer
+#
+# Pricing: $0.028/M (cache hit), $0.28/M (cache miss) input, $0.42/M output
+# Context: 128K tokens
+# Max output: 32K default / 64K max
+#
+# Requires DEEPSEEK_API_KEY environment variable
+# Get key at: https://platform.deepseek.com/
+
+model_name: "deepseek/deepseek-reasoner"
+temperature: 0.0
+max_tokens: 65536
+
+api_base: "https://api.deepseek.com/v1"
+api_key: ${oc.env:DEEPSEEK_API_KEY,null}
+
+supports_system_message: true
+supports_thinking: true
+supports_streaming: false
+supports_vision: false
+supports_tool_calls: true
+supports_json_output: true
+
+context_window: 128000
+reasoning_capable: true
+
+# Note: When using thinking mode, the API returns:
+# - reasoning_content: Chain-of-thought reasoning
+# - content: Final answer text
+# - tool_calls: Any function calls made

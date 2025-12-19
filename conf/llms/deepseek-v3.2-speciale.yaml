@@ -1,0 +1,47 @@
+# DeepSeek V3.2-Speciale (Maxed-out reasoning capabilities)
+# Released: December 1, 2025
+# TEMPORARY ENDPOINT - Available until December 15, 2025, 15:59 UTC
+#
+# Performance:
+# - Rivals Gemini-3.0-Pro
+# - Gold-medal level on IMO, CMO, ICPC World Finals, IOI 2025
+# - Dominates complex tasks but requires higher token usage
+#
+# Limitations:
+# - Thinking mode ONLY (no non-thinking mode)
+# - NO tool calls support
+# - NO JSON output mode
+# - NO chat prefix completion
+# - API-only (not available on App/Web)
+#
+# Pricing: Same as V3.2 ($0.028/M cache hit, $0.28/M cache miss input, $0.42/M output)
+# Context: 128K tokens
+# Max output: 128K maximum (config uses conservative 64K default)
+#
+# Requires DEEPSEEK_API_KEY environment variable
+# Get key at: https://platform.deepseek.com/
+#
+# WARNING: This endpoint expires on December 15, 2025!
+
+model_name: "deepseek/deepseek-reasoner"
+temperature: 0.0
+max_tokens: 131072
+
+# Special temporary endpoint for V3.2-Speciale
+api_base: "https://api.deepseek.com/v3.2_speciale_expires_on_20251215"
+api_key: ${oc.env:DEEPSEEK_API_KEY,null}
+
+supports_system_message: true
+supports_thinking: true
+supports_streaming: false
+supports_vision: false
+supports_tool_calls: false
+supports_json_output: false
+
+context_window: 128000
+reasoning_capable: true
+max_reasoning_tokens: 128000
+
+# Metadata
+expiration_date: "2025-12-15T15:59:00Z"
+is_temporary: true
