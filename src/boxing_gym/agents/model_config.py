@@ -1,5 +1,8 @@
 """Model configuration for LiteLLM providers.
 
+This module provides API configuration lookup for models. The actual pricing
+and model data is stored in pricing.py (single source of truth).
+
 Usage:
     from boxing_gym.agents.model_config import get_model_config
 
@@ -14,61 +17,15 @@ Usage:
 import os
 from typing import Dict, Any
 
-MODEL_CONFIGS: Dict[str, Dict[str, Any]] = {
-    # OpenAI models (default, no special config needed)
-    "gpt-4o": {"api_base": None, "api_key_var": "OPENAI_API_KEY"},
-    "gpt-4o-mini": {"api_base": None, "api_key_var": "OPENAI_API_KEY"},
-    "gpt-4": {"api_base": None, "api_key_var": "OPENAI_API_KEY"},
-    "gpt-3.5": {"api_base": None, "api_key_var": "OPENAI_API_KEY"},
-    "gpt-5": {"api_base": None, "api_key_var": "OPENAI_API_KEY"},
-    "o1": {"api_base": None, "api_key_var": "OPENAI_API_KEY"},
-    "o3": {"api_base": None, "api_key_var": "OPENAI_API_KEY"},
-
-    # DeepSeek models
-    "deepseek/deepseek-chat": {
-        "input_cost_per_token": 0.00000028,  # $0.28 / 1M tokens (cache miss)
-        "output_cost_per_token": 0.00000042, # $0.42 / 1M tokens
-        "max_tokens": 8192,                  # API limit for output
-        "litellm_provider": "deepseek",
-        "mode": "chat",
-        "api_base": "https://api.deepseek.com/v1",
-        "api_key_var": "DEEPSEEK_API_KEY",
-    },
-    "deepseek/deepseek-reasoner": {
-        "api_base": "https://api.deepseek.com/v1",
-        "api_key_var": "DEEPSEEK_API_KEY",
-    },
-
-    # Kimi/Moonshot models (uses Anthropic-compatible API format)
-    "anthropic/kimi-for-coding": {
-        "api_base": "https://api.kimi.com/coding/",
-        "api_key_var": "MOONSHOT_API_KEY",
-    },
-    "moonshot/kimi-k2": {
-        "api_base": "https://api.kimi.com/coding/",
-        "api_key_var": "MOONSHOT_API_KEY",
-    },
-
-    # MiniMax models (uses OpenAI-compatible API format)
-    "openai/MiniMax-M2": {
-        "api_base": "https://api.minimax.io/v1",
-        "api_key_var": "MINIMAX_API_KEY",
-    },
-
-    # GLM/ZhipuAI models (uses Z.AI Anthropic-compatible endpoint)
-    "anthropic/glm-4.6": {
-        "api_base": "https://api.z.ai/api/anthropic",
-        "api_key_var": "ZHIPUAI_API_KEY",
-    },
-
-    # Anthropic Claude models
-    "claude-3": {"api_base": None, "api_key_var": "ANTHROPIC_API_KEY"},
-    "claude-3.5": {"api_base": None, "api_key_var": "ANTHROPIC_API_KEY"},
-}
+# import from single source of truth
+from boxing_gym.agents.pricing import MODEL_REGISTRY, get_api_config
 
 
 def get_model_config(model_name: str) -> Dict[str, Any]:
     """Get API configuration for a model.
+
+    First checks MODEL_REGISTRY for exact match, then falls back to
+    provider-based heuristics for unknown models.
 
     Args:
         model_name: The LiteLLM model name (e.g., "deepseek/deepseek-chat")
@@ -80,16 +37,19 @@ def get_model_config(model_name: str) -> Dict[str, Any]:
             - api_key: The actual API key value (from env var) or None
             - api_key_var: Name of the env var used (for debugging)
     """
-    if model_name in MODEL_CONFIGS:
-        cfg = MODEL_CONFIGS[model_name]
-        api_key = os.environ.get(cfg["api_key_var"]) if cfg.get("api_key_var") else None
+    # check registry first (covers most cases)
+    if model_name in MODEL_REGISTRY:
+        cfg = MODEL_REGISTRY[model_name]
+        api_key_var = cfg.get("api_key_var")
+        api_key = os.environ.get(api_key_var) if api_key_var else None
         return {
             "model_name": model_name,
             "api_base": cfg.get("api_base"),
             "api_key": api_key,
-            "api_key_var": cfg.get("api_key_var"),
+            "api_key_var": api_key_var,
         }
 
+    # fallback: provider detection for unknown models
     model_lower = model_name.lower()
 
     # DeepSeek prefix match
@@ -132,6 +92,16 @@ def get_model_config(model_name: str) -> Dict[str, Any]:
             "api_key_var": "ZHIPUAI_API_KEY",
         }
 
+    # Together.AI prefix match
+    if model_lower.startswith("together_ai/") or "together" in model_lower:
+        api_key = os.environ.get("TOGETHER_API_KEY")
+        return {
+            "model_name": model_name,
+            "api_base": None,  # LiteLLM handles Together.AI routing
+            "api_key": api_key,
+            "api_key_var": "TOGETHER_API_KEY",
+        }
+
     # Claude prefix match
     if "claude" in model_lower:
         api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -142,12 +112,13 @@ def get_model_config(model_name: str) -> Dict[str, Any]:
             "api_key_var": "ANTHROPIC_API_KEY",
         }
 
-    # unknown provider: let LiteLLM handle routing and API key lookup
+    # OpenAI/default: let LiteLLM handle routing
+    api_key = os.environ.get("OPENAI_API_KEY")
     return {
         "model_name": model_name,
         "api_base": None,
-        "api_key": None,
-        "api_key_var": None,
+        "api_key": api_key,
+        "api_key_var": "OPENAI_API_KEY" if api_key else None,
     }
 
 

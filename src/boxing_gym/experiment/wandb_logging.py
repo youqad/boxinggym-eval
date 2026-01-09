@@ -3,7 +3,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 from omegaconf import OmegaConf
@@ -289,7 +289,7 @@ def _add_box_loop_stats(payload, result_entry):
             payload[f"ppl/{k}_last"] = vals[-1]
 
 
-def _build_eval_payload(result_entry, budget_i, z_by_budget):
+def _build_eval_payload(result_entry, budget_i, z_by_budget, raw_by_budget=None):
     payload = {"eval/budget": budget_i}
     try:
         eval_score = result_entry[0]
@@ -316,6 +316,17 @@ def _build_eval_payload(result_entry, budget_i, z_by_budget):
     payload["eval/mean"] = float(mean_val) if mean_val is not None else None
     payload["eval/std"] = float(std_val) if std_val is not None else None
 
+    if raw_by_budget and budget_i in raw_by_budget:
+        raw = raw_by_budget.get(budget_i) or {}
+        raw_mean = raw.get("raw_mean")
+        raw_std = raw.get("raw_std")
+        if raw_mean is not None:
+            payload["eval/mean"] = raw_mean
+            payload["eval/mse"] = raw_mean
+        if raw_std is not None:
+            payload["eval/std"] = raw_std
+            payload["eval/std_mse"] = raw_std
+
     zr = z_by_budget.get(budget_i)
     if zr:
         payload["eval/z_mean"] = zr.get("z_mean")
@@ -327,12 +338,17 @@ def _build_eval_payload(result_entry, budget_i, z_by_budget):
 
 def _log_eval_series(wandb_module, all_data, z_results, num_experiments):
     z_by_budget = {zr.get("budget"): zr for zr in z_results if isinstance(zr, dict)}
+    raw_by_budget = {
+        zr.get("budget"): zr
+        for zr in z_results
+        if isinstance(zr, dict) and zr.get("raw_mean") is not None
+    }
     for i, result_entry in enumerate(all_data[0]):
         try:
             budget_i = int(num_experiments[i]) if i < len(num_experiments) else int(num_experiments[-1])
         except Exception:
             budget_i = i
-        payload = _build_eval_payload(result_entry, budget_i, z_by_budget)
+        payload = _build_eval_payload(result_entry, budget_i, z_by_budget, raw_by_budget=raw_by_budget)
         if payload is None:
             continue
         wandb_module.log(payload)
@@ -1034,6 +1050,257 @@ def _log_ppl_results(ctx, wandb_run, wandb_module, programs, use_ppl, ppl_artifa
         logger.warning(f"PPL round stats logging failed: {e}")
 
 
+def _log_llm_calls_table(wandb_module, wandb_run, scientist_agent, naive_agent):
+    """Log LLM call history as a WandB table (independent of Weave)."""
+    columns = [
+        "agent",
+        "call_idx",
+        "model",
+        "prompt_preview",
+        "response_preview",
+        "latency_ms",
+        "prompt_tokens",
+        "completion_tokens",
+        "reasoning_tokens",
+        "cost_usd",
+        "has_reasoning",
+    ]
+    rows = []
+
+    for agent, agent_name in [(scientist_agent, "scientist"), (naive_agent, "naive")]:
+        if agent is None or not hasattr(agent, "get_call_history"):
+            continue
+        call_history = agent.get_call_history()
+        for call in call_history:
+            rows.append([
+                agent_name,
+                _safe_number(call.get("call_idx")),
+                call.get("model", ""),
+                _preview_text(call.get("prompt"), 2000),
+                _preview_text(call.get("response"), 2000),
+                _safe_number(call.get("latency_ms")),
+                _safe_number(call.get("prompt_tokens")),
+                _safe_number(call.get("completion_tokens")),
+                _safe_number(call.get("reasoning_tokens")),
+                _safe_number(call.get("cost_usd")),
+                1 if call.get("has_reasoning") else 0,
+            ])
+
+    if rows:
+        with _wandb_unseeded_random():
+            llm_calls_table = wandb_module.Table(columns=columns, data=rows)
+            wandb_run.log({"llm/calls": llm_calls_table})
+        wandb_run.summary.update({
+            "llm/total_calls_logged": len(rows),
+        })
+    return len(rows)
+
+
+def _log_conversation_history_artifact(ctx, wandb_run, wandb_module, scientist_agent, naive_agent, wandb_meta):
+    """Log full conversation history as a WandB artifact (independent of Weave)."""
+    if not hasattr(wandb_module, "Artifact") or not hasattr(wandb_run, "log_artifact"):
+        return
+
+    run_id = getattr(wandb_run, "id", None) or (wandb_meta or {}).get("run_id")
+    base_dir = getattr(wandb_run, "dir", None) or os.getcwd()
+
+    for agent, agent_name in [(scientist_agent, "scientist"), (naive_agent, "naive")]:
+        if agent is None:
+            continue
+
+        messages = getattr(agent, "all_messages", [])
+        if not messages:
+            continue
+
+        filename = f"conversation_{agent_name}_{run_id}.txt" if run_id else f"conversation_{agent_name}.txt"
+        tmp_path = os.path.join(base_dir, filename)
+
+        try:
+            with open(tmp_path, "w") as f:
+                for i, msg in enumerate(messages):
+                    f.write(f"=== Message {i} ===\n")
+                    f.write(str(msg))
+                    f.write("\n\n")
+
+            artifact_name = f"conversation_{agent_name}_{run_id}" if run_id else f"conversation_{agent_name}"
+            with _wandb_unseeded_random():
+                artifact = wandb_module.Artifact(artifact_name, type="conversation")
+                artifact.add_file(tmp_path, name=f"conversation_{agent_name}.txt")
+                artifact_result = wandb_run.log_artifact(artifact)
+                try:
+                    artifact_result.wait()
+                except Exception:
+                    pass
+            ctx.artifacts_logged.append({
+                "name": artifact.name,
+                "type": artifact.type,
+            })
+        except Exception as e:
+            ctx.artifacts_failed.append({
+                "name": f"conversation_{agent_name}",
+                "type": "conversation",
+                "error": str(e),
+            })
+            logger.warning(f"Conversation artifact logging failed for {agent_name}: {e}")
+
+
+def _log_observations_table(wandb_module, wandb_run, all_data):
+    """Log observations and queries as a WandB table."""
+    queries = all_data[1] if len(all_data) > 1 else []
+    observations = all_data[2] if len(all_data) > 2 else []
+    successes = all_data[3] if len(all_data) > 3 else []
+
+    if not queries and not observations:
+        return 0
+
+    columns = ["step_idx", "query", "observation", "success"]
+    rows = []
+
+    max_len = max(len(queries or []), len(observations or []))
+    for i in range(max_len):
+        query = queries[i] if queries and i < len(queries) else None
+        obs = observations[i] if observations and i < len(observations) else None
+        success = successes[i] if successes and i < len(successes) else None
+
+        rows.append([
+            i,
+            _preview_text(query, 5000),
+            _preview_text(obs, 5000),
+            1 if success else 0,
+        ])
+
+    if rows:
+        with _wandb_unseeded_random():
+            obs_table = wandb_module.Table(columns=columns, data=rows)
+            wandb_run.log({"experiment/observations": obs_table})
+        wandb_run.summary.update({
+            "experiment/total_observations_logged": len(rows),
+        })
+    return len(rows)
+
+
+def _log_results_artifact(ctx, wandb_run, wandb_module, output_filename, wandb_meta):
+    """Upload final results JSON as a WandB artifact."""
+    if not hasattr(wandb_module, "Artifact") or not hasattr(wandb_run, "log_artifact"):
+        return
+    if not output_filename or not os.path.exists(output_filename):
+        return
+
+    run_id = getattr(wandb_run, "id", None) or (wandb_meta or {}).get("run_id")
+
+    try:
+        artifact_name = f"results_{run_id}" if run_id else "results"
+        with _wandb_unseeded_random():
+            artifact = wandb_module.Artifact(artifact_name, type="results")
+            artifact.add_file(output_filename, name="results.json")
+            artifact_result = wandb_run.log_artifact(artifact)
+            try:
+                artifact_result.wait()
+            except Exception:
+                pass
+        ctx.artifacts_logged.append({
+            "name": artifact.name,
+            "type": artifact.type,
+        })
+    except Exception as e:
+        ctx.artifacts_failed.append({
+            "name": "results",
+            "type": "results",
+            "error": str(e),
+        })
+        logger.warning(f"Results artifact logging failed: {e}")
+
+
+def _log_call_recorder_artifact(ctx, wandb_run, wandb_module, call_recorder_path, wandb_meta):
+    """Upload the crash-resilient JSONL call log as a WandB artifact.
+
+    This is the primary source of truth for LLM calls - written per-call to disk,
+    survives crashes, includes both sync and async calls.
+    """
+    if not hasattr(wandb_module, "Artifact") or not hasattr(wandb_run, "log_artifact"):
+        return
+    if not call_recorder_path or not os.path.exists(call_recorder_path):
+        return
+
+    run_id = getattr(wandb_run, "id", None) or (wandb_meta or {}).get("run_id")
+
+    try:
+        artifact_name = f"llm_calls_jsonl_{run_id}" if run_id else "llm_calls_jsonl"
+        with _wandb_unseeded_random():
+            artifact = wandb_module.Artifact(artifact_name, type="llm_calls")
+            artifact.add_file(str(call_recorder_path), name="llm_calls.jsonl")
+            artifact_result = wandb_run.log_artifact(artifact)
+            try:
+                artifact_result.wait()
+            except Exception:
+                pass
+        ctx.artifacts_logged.append({
+            "name": artifact.name,
+            "type": artifact.type,
+            "format": "jsonl",
+            "source": "call_recorder",
+        })
+        logger.info(f"Uploaded call recorder JSONL: {call_recorder_path}")
+    except Exception as e:
+        ctx.artifacts_failed.append({
+            "name": "llm_calls_jsonl",
+            "type": "llm_calls",
+            "error": str(e),
+        })
+        logger.warning(f"Call recorder artifact logging failed: {e}")
+
+
+def _log_llm_calls_artifact(ctx, wandb_run, wandb_module, scientist_agent, naive_agent, wandb_meta):
+    """Log detailed LLM calls as a JSON artifact (full prompts/responses)."""
+    if not hasattr(wandb_module, "Artifact") or not hasattr(wandb_run, "log_artifact"):
+        return
+
+    import json
+
+    run_id = getattr(wandb_run, "id", None) or (wandb_meta or {}).get("run_id")
+    base_dir = getattr(wandb_run, "dir", None) or os.getcwd()
+
+    all_calls = []
+    for agent, agent_name in [(scientist_agent, "scientist"), (naive_agent, "naive")]:
+        if agent is None or not hasattr(agent, "get_call_history"):
+            continue
+        for call in agent.get_call_history():
+            call_with_agent = dict(call)
+            call_with_agent["agent"] = agent_name
+            all_calls.append(call_with_agent)
+
+    if not all_calls:
+        return
+
+    filename = f"llm_calls_{run_id}.json" if run_id else "llm_calls.json"
+    tmp_path = os.path.join(base_dir, filename)
+
+    try:
+        with open(tmp_path, "w") as f:
+            json.dump(all_calls, f, indent=2, default=str)
+
+        artifact_name = f"llm_calls_{run_id}" if run_id else "llm_calls"
+        with _wandb_unseeded_random():
+            artifact = wandb_module.Artifact(artifact_name, type="llm-calls")
+            artifact.add_file(tmp_path, name="llm_calls.json")
+            artifact_result = wandb_run.log_artifact(artifact)
+            try:
+                artifact_result.wait()
+            except Exception:
+                pass
+        ctx.artifacts_logged.append({
+            "name": artifact.name,
+            "type": artifact.type,
+        })
+    except Exception as e:
+        ctx.artifacts_failed.append({
+            "name": "llm_calls",
+            "type": "llm-calls",
+            "error": str(e),
+        })
+        logger.warning(f"LLM calls artifact logging failed: {e}")
+
+
 def log_wandb_results(
     ctx: WandbContext,
     wandb_module,
@@ -1052,6 +1319,7 @@ def log_wandb_results(
     naive_agent,
     ppl_artifacts,
     goal,
+    call_recorder_path: Optional[str] = None,
 ):
     if ctx.run is None or wandb_module is None:
         return
@@ -1081,6 +1349,21 @@ def log_wandb_results(
             naive_agent=naive_agent,
             start_time=ctx.start_time,
         )
+
+        # add custom endpoint info from config for easier filtering
+        try:
+            llm_cfg = wandb_run.config.get("llms", {})
+            if isinstance(llm_cfg, dict):
+                api_base = llm_cfg.get("api_base")
+                custom_provider = llm_cfg.get("custom_llm_provider")
+                if api_base:
+                    summary_data["llm/api_base"] = api_base
+                if custom_provider:
+                    summary_data["llm/custom_provider"] = custom_provider
+                summary_data["llm/is_custom_endpoint"] = bool(custom_provider or api_base)
+        except Exception:
+            pass
+
         wandb_run.summary.update(summary_data)
     except Exception as e:
         logger.debug(f"W&B summary update failed: {e}")
@@ -1099,10 +1382,40 @@ def log_wandb_results(
         wandb_meta=wandb_meta,
     )
 
+    # comprehensive WandB logging (independent of Weave)
     try:
-        wandb_module.finish()
+        _log_llm_calls_table(wandb_module, wandb_run, scientist_agent, naive_agent)
     except Exception as e:
-        logger.debug(f"W&B finish failed: {e}")
+        logger.warning(f"LLM calls table logging failed: {e}")
+
+    try:
+        _log_observations_table(wandb_module, wandb_run, all_data)
+    except Exception as e:
+        logger.warning(f"Observations table logging failed: {e}")
+
+    try:
+        _log_conversation_history_artifact(ctx, wandb_run, wandb_module, scientist_agent, naive_agent, wandb_meta)
+    except Exception as e:
+        logger.warning(f"Conversation history artifact logging failed: {e}")
+
+    try:
+        _log_llm_calls_artifact(ctx, wandb_run, wandb_module, scientist_agent, naive_agent, wandb_meta)
+    except Exception as e:
+        logger.warning(f"LLM calls artifact logging failed: {e}")
+
+    # upload crash-resilient JSONL call log (primary source of truth)
+    if call_recorder_path:
+        try:
+            _log_call_recorder_artifact(ctx, wandb_run, wandb_module, call_recorder_path, wandb_meta)
+        except Exception as e:
+            logger.warning(f"Call recorder JSONL artifact logging failed: {e}")
+
+    # upload results JSON as artifact (file must exist - written by caller before this)
+    try:
+        _log_results_artifact(ctx, wandb_run, wandb_module, output_filename, wandb_meta)
+    except Exception as e:
+        logger.warning(f"Results artifact logging failed: {e}")
+
     try:
         wandb_meta["results_file"] = output_filename
         wandb_meta["artifacts_logged"] = list(ctx.artifacts_logged)
@@ -1110,3 +1423,8 @@ def log_wandb_results(
             wandb_meta["artifacts_failed"] = list(ctx.artifacts_failed)
     except Exception:
         pass
+
+    try:
+        wandb_module.finish()
+    except Exception as e:
+        logger.debug(f"W&B finish failed: {e}")

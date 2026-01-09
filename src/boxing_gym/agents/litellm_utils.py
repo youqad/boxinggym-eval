@@ -8,9 +8,17 @@ from __future__ import annotations
 from typing import Any, Optional, List, Dict
 import os
 import re
+import logging
 
 import litellm
 
+logger = logging.getLogger(__name__)
+
+# Minimum safe max_tokens - warn if below this
+MIN_SAFE_MAX_TOKENS = 1024
+
+# pre-compiled regex for reasoning model detection
+_REASONING_MODEL_RE = re.compile(r"(^|/|\s)o\d")
 
 # safe global defaults for LiteLLM
 litellm.drop_params = True
@@ -27,7 +35,7 @@ def is_responses_api_model(model_name: str) -> bool:
     if "gpt-5" in name:
         return True
     # any OpenAI o‑series reasoning model (o1, o3, o4-mini, etc.)
-    if re.search(r"(^|/|\s)o\d", name):
+    if _REASONING_MODEL_RE.search(name):
         return True
     if "gpt-4.1" in name:
         return True
@@ -110,7 +118,7 @@ def call_llm_messages_sync(
     messages: List[Dict[str, Any]],
     api_base: Optional[str] = None,
     api_key: Optional[str] = None,
-    max_tokens: int = 512,
+    max_tokens: int = 16384,  # safe default - never use 512!
     temperature: float = 0.7,
     num_retries: int = 3,
     timeout: int = 180,
@@ -120,6 +128,21 @@ def call_llm_messages_sync(
 
     Returns the raw LiteLLM response object (ChatCompletions or Responses).
     """
+    # robust coercion: handle strings, floats, booleans
+    if max_tokens is not None and not isinstance(max_tokens, bool):
+        try:
+            max_tokens = int(float(max_tokens))  # handles "8192.0" strings
+        except (ValueError, TypeError):
+            max_tokens = 16384  # safe default on parse error
+    elif isinstance(max_tokens, bool):
+        max_tokens = 16384  # booleans are invalid
+    # clamp to safe minimum (not just warn)
+    if max_tokens is not None and max_tokens < MIN_SAFE_MAX_TOKENS:
+        logger.warning(
+            f"[{model_name}] TRUNCATION RISK: max_tokens={max_tokens} clamped to {MIN_SAFE_MAX_TOKENS}."
+        )
+        max_tokens = MIN_SAFE_MAX_TOKENS
+
     if _fake_llm_enabled():
         return {"choices": [{"message": {"content": "mock response"}}]}
 
@@ -145,6 +168,8 @@ def call_llm_messages_sync(
     effective_api_key = None if is_bedrock_bearer else api_key
 
     if is_responses_api_model(model_name):
+        # NOTE: GPT-5/o-series Responses API does NOT support temperature parameter
+        # Only default (1.0) is allowed; passing it causes 400 Bad Request
         input_text = messages_to_input_text(messages)
         return litellm.responses(
             model=model_name,
@@ -176,7 +201,7 @@ def call_llm_sync(
     user_text: str,
     api_base: Optional[str] = None,
     api_key: Optional[str] = None,
-    max_tokens: int = 512,
+    max_tokens: int = 16384,  # safe default - never use 512!
     temperature: float = 0.7,
     num_retries: int = 3,
     timeout: int = 180,

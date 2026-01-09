@@ -43,23 +43,23 @@ def _normalize_budgets(num_experiments):
 def _get_step_latency_ms(scientist, prev_latency_count: int) -> Optional[float]:
     """Get total LLM latency for this step by summing new latencies since prev_latency_count."""
     try:
-        if hasattr(scientist, "_usage_stats"):
-            latencies = scientist._usage_stats.get("latencies_ms", [])
+        if hasattr(scientist, "get_latencies_ms"):
+            latencies = scientist.get_latencies_ms()
             if len(latencies) > prev_latency_count:
                 new_latencies = latencies[prev_latency_count:]
                 return sum(new_latencies)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to get step latency: {e}")
     return None
 
 
 def _get_latency_count(scientist) -> int:
     """Get current count of latency measurements for tracking per-step latency."""
     try:
-        if hasattr(scientist, "_usage_stats"):
-            return len(scientist._usage_stats.get("latencies_ms", []))
-    except Exception:
-        pass
+        if hasattr(scientist, "get_latencies_ms"):
+            return len(scientist.get_latencies_ms())
+    except Exception as e:
+        logger.debug(f"Failed to get latency count: {e}")
     return 0
 
 
@@ -141,6 +141,7 @@ def _run_evaluation(
     prior_mode,
     critic_mode,
     log_prefix,
+    call_recorder=None,
 ):
     explanation = None
     if use_ppl:
@@ -159,6 +160,7 @@ def _run_evaluation(
                     norm_mu=norm_mu,
                     norm_sigma=norm_sigma,
                     llm_model=llm_model,
+                    call_recorder=call_recorder,
                 )
             except Exception as e:
                 logger.warning(f"{log_prefix} failed: {str(e)}")
@@ -177,6 +179,7 @@ def _run_evaluation(
                     prior_mode=prior_mode,
                     critic_mode=critic_mode,
                     llm_model=llm_model,
+                    call_recorder=call_recorder,
                 )
                 if proposed_programs_all and proposed_programs_all[-1]:
                     augment_scientist_with_ppl(scientist, proposed_programs_all, critic_info_all, critic_mode=critic_mode)
@@ -200,6 +203,7 @@ def _run_evaluation(
                     step_logger=step_logger,
                     norm_mu=norm_mu,
                     norm_sigma=norm_sigma,
+                    call_recorder=call_recorder,
                 )
             except Exception as e:
                 logger.warning(f"{log_prefix} failed: {str(e)}")
@@ -231,6 +235,7 @@ def iterative_experiment(
         step_logger: Optional["StepLogger"] = None,
         norm_mu: Optional[float] = None,
         norm_sigma: Optional[float] = None,
+        call_recorder=None,
 ):
     results = []
     queries = []
@@ -268,6 +273,7 @@ def iterative_experiment(
             prior_mode=True,
             critic_mode=False,
             log_prefix="Evaluation (prior)",
+            call_recorder=call_recorder,
         )
         if explanation is not None:
             explanations.append(explanation)
@@ -305,23 +311,30 @@ def iterative_experiment(
                 tries += 1
 
         retry_count = tries - 1
+        if tries >= MAX_TRIES and not success:
+            logger.warning(
+                f"Step {i}: exhausted {MAX_TRIES} attempts without valid input. "
+                f"Last query: {observe[:100]}... Last error: {observation}"
+            )
 
         # get step latency (sum of all LLM calls this step)
         step_latency_ms = _get_step_latency_ms(scientist, prev_latency_count)
 
         eig_value = None
         optimal_eig = None
-        if success and check_eig:
+        if success and check_eig and hasattr(goal, "expected_information_gain"):
             query_point = goal.env.validate_input(observe)
-            eig_value = goal.expected_information_gain(query_point)
-            eigs.append(eig_value)
+            # validate_input returns string on error - skip EIG if so
+            if not isinstance(query_point, str):
+                eig_value = goal.expected_information_gain(query_point)
+                eigs.append(eig_value)
 
-            # try to get optimal EIG for regret tracking (if environment supports it)
-            try:
-                if hasattr(goal, "get_optimal_eig"):
-                    optimal_eig = goal.get_optimal_eig()
-            except Exception:
-                pass  # optimal EIG not available for this environment
+                # try to get optimal EIG for regret tracking (if environment supports it)
+                try:
+                    if hasattr(goal, "get_optimal_eig"):
+                        optimal_eig = goal.get_optimal_eig()
+                except Exception:
+                    pass  # optimal EIG not available for this environment
         
         # log per-step metrics for live progress tracking
         if step_logger is not None:
@@ -366,6 +379,7 @@ def iterative_experiment(
                 prior_mode=False,
                 critic_mode=True,
                 log_prefix=f"Evaluation (iteration {i+1})",
+                call_recorder=call_recorder,
             )
             if explanation is not None:
                 explanations.append(explanation)

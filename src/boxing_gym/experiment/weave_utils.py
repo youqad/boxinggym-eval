@@ -2,9 +2,15 @@
 
 Conditional @weave_op: uses weave.op() when enabled, no-op otherwise.
 
-Use only on serializable inputs/outputs. Goal/Agent/PyMC traces break
-serialization ("Invalid Client ID digest"). LiteLLM calls are still traced
-via auto-patching, so you keep most visibility without @weave_op.
+Tracing strategy:
+- Weave auto-patching is DISABLED by default (implicitly_patch_integrations=False)
+  to ensure stability with custom LLM providers (DeepSeek, MiniMax, Kimi, GLM).
+- LiteLLM calls are traced manually via _weave_log_payload() in agent.py,
+  which logs sanitized payloads (prompt, output, usage) as "llm_call" ops.
+- Set WEAVE_IMPLICITLY_PATCH_INTEGRATIONS=true to enable auto-patching (use with caution).
+
+Use @weave_op only on functions with serializable inputs/outputs. Goal/Agent/PyMC
+traces break serialization ("Invalid Client ID digest").
 
 Usage:
     from boxing_gym.experiment.weave_utils import weave_op
@@ -13,7 +19,7 @@ Usage:
     def my_function(text: str, count: int) -> str:
         ...
 
-Avoid on:
+Avoid @weave_op on (due to serialization issues):
 - evaluate(), ppl_evaluate(), evaluate_naive_explanation()
 - iterative_experiment()
 - run_box_loop()
