@@ -82,6 +82,9 @@ class StepLogger:
 
     # last step index for aligning one-off logs
     _last_step_idx: Optional[int] = field(default=None)
+
+    # step index offset for multi-seed or resumed runs
+    _step_offset: int = field(default=0)
     
     # track if metrics have been defined
     _metrics_defined: bool = field(default=False)
@@ -129,6 +132,21 @@ class StepLogger:
                 self.log_callback(step, metrics)
             except Exception as e:
                 logger.debug(f"Log callback failed: {e}")
+
+    def set_step_offset(self, offset: int, reset_timing: bool = True) -> None:
+        """Set a global step offset (useful for multi-seed runs).
+
+        Args:
+            offset: Number of steps already completed before this segment.
+            reset_timing: If True, resets last-step timing so the next
+                step duration doesn't include time between segments.
+        """
+        try:
+            self._step_offset = max(0, int(offset))
+        except Exception:
+            self._step_offset = 0
+        if reset_timing:
+            self._last_step_time = 0.0
     
     def log_step(
         self,
@@ -153,7 +171,8 @@ class StepLogger:
             latency_ms: LLM call latency in milliseconds
         """
         now = time.time()
-        self._last_step_idx = step_idx
+        global_step_idx = step_idx + self._step_offset
+        self._last_step_idx = global_step_idx
         step_duration = now - self._last_step_time if self._last_step_time > 0 else 0
         self._last_step_time = now
         self._step_times.append(step_duration)
@@ -184,13 +203,13 @@ class StepLogger:
         # success rate: successes / steps attempted (excluding retries from denominator)
         total_steps = self._total_queries - self._total_retries
         cumulative_success_rate = self._total_successes / total_steps if total_steps > 0 else 0.0
-        avg_retries = self._total_retries / (step_idx + 1) if step_idx >= 0 else 0.0
+        avg_retries = self._total_retries / (global_step_idx + 1) if global_step_idx >= 0 else 0.0
         wall_time = now - self.start_time
         
         # build metrics payload
         # per-step (instantaneous) metrics
         metrics = {
-            "step/idx": step_idx,
+            "step/idx": global_step_idx,
             "step/success": 1 if success else 0,
             "step/retry_count": retry_count,
             "step/duration_sec": step_duration,
@@ -243,7 +262,7 @@ class StepLogger:
         
         # throughput metrics
         if wall_time > 0:
-            metrics["cumulative/steps_per_minute"] = (step_idx + 1) / (wall_time / 60.0)
+            metrics["cumulative/steps_per_minute"] = (global_step_idx + 1) / (wall_time / 60.0)
             metrics["cumulative/queries_per_minute"] = self._total_queries / (wall_time / 60.0)
         
         # average step duration (excluding first step which may include setup)
@@ -454,6 +473,12 @@ class StepLogger:
                 metrics[f"cumulative/{agent_prefix}_reasoning_fraction"] = (
                     self._cumulative_reasoning_tokens / total_cumulative
                 )
+                # reasoning efficiency: ratio of reasoning to completion tokens
+                if self._cumulative_completion_tokens > 0:
+                    metrics[f"cumulative/{agent_prefix}_reasoning_efficiency"] = (
+                        self._cumulative_reasoning_tokens / self._cumulative_completion_tokens
+                    )
+                metrics[f"{agent_prefix}/is_thinking_model"] = 1
 
         if metrics:
             self._log(metrics)  # uses step/idx from payload as x-axis per define_metric

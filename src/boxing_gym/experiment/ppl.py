@@ -1,3 +1,23 @@
+"""PPL (Probabilistic Programming Language) prediction and inference utilities.
+
+WARNING - ARCHITECTURAL NOTE (2026-01):
+    This module contains environment-specific prediction logic that dispatches
+    based on goal class names (e.g., `goal_full.endswith("hyperbolic...")`).
+
+    Goal classes in src/boxing_gym/envs/ ALSO contain probabilistic models
+    (e.g., `expected_information_gain()` methods with full PyMC definitions).
+
+    This creates potential for "split-brain" model definitions where the same
+    environment has slightly different probabilistic assumptions in different
+    code paths. Before modifying either this file OR goal class models:
+
+    1. Verify which code path is active for your use case
+    2. Ensure changes are reflected in both locations if needed
+    3. Compare trace outputs on identical seeds to verify consistency
+
+    Future work (deferred Phase 3.2): Unify model definitions into a single
+    source of truth, likely by moving prediction logic into goal classes.
+"""
 import os
 import tempfile
 import uuid

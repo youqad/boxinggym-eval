@@ -4,6 +4,7 @@ import traceback
 import logging
 import warnings
 import re
+import threading
 from typing import List
 from io import StringIO
 from itertools import chain
@@ -168,6 +169,19 @@ def propose(
   scoring_rate = after_none / num_proposals if num_proposals > 0 else 0
   logger.info(f"Percent successfuly scored programs: {scoring_rate}")
 
+  # diagnose starvation patterns (from multi-model deliberation)
+  if not experiment.prior_mode:
+    if len(programs) > 0 and after_none == 0:
+      logger.warning(
+        f"SCORING STARVATION: extracted {len(programs)} programs but none scored. "
+        "Likely invalid PyMC code (shape mismatch, sampling errors)."
+      )
+    elif after_none > 0 and after_divergence == 0:
+      logger.warning(
+        f"FILTER STARVATION: {after_none} programs scored but all filtered. "
+        "Check divergence criteria or filter_fn strictness."
+      )
+
   results = experiment.sort_fn(results)
 
   proposal_stats = {
@@ -215,12 +229,25 @@ def initialize_experiment(cfg, logger, log_dir, env, prior_mode):
     diagnostics_cfg=cfg.get("diagnostics", None),
   )
 
-def get_llms(cfg):
+def get_llms(cfg, call_recorder=None, agent_name="box_loop"):
   llm_cfg = getattr(cfg, 'llms', None) or cfg
   model_name = getattr(cfg, 'llm', None) or getattr(llm_cfg, 'model_name', None)
 
-  experiment2tokens = {"ODE": 2000, "GPs": 1500, "box_loop": 4096, "Other_ODE": 1500}
-  max_tokens = getattr(llm_cfg, 'max_tokens', None) or experiment2tokens.get(cfg.experiment, 2048)
+  # all experiments now use safe floor of 8192 - no more low legacy values
+  experiment2tokens = {"ODE": 8192, "GPs": 8192, "box_loop": 8192, "Other_ODE": 8192}
+  # robust coercion: handle None, strings, booleans, invalid values
+  max_tokens = getattr(llm_cfg, 'max_tokens', None)
+  if max_tokens is not None and not isinstance(max_tokens, bool):
+      try:
+          max_tokens = int(float(max_tokens))  # handles "8192.0" strings
+      except (ValueError, TypeError):
+          max_tokens = None
+  else:
+      max_tokens = None  # treat booleans as invalid
+  if max_tokens is None or max_tokens < 1024:
+      max_tokens = experiment2tokens.get(cfg.experiment, 8192)
+
+  is_reasoning = getattr(llm_cfg, 'reasoning_capable', None)
 
   kwargs = {}
   api_base = getattr(llm_cfg, 'api_base', None)
@@ -233,11 +260,14 @@ def get_llms(cfg):
   if custom_llm_provider:
       kwargs['custom_llm_provider'] = custom_llm_provider
 
-  return AsyncLiteLLM(model_name=model_name, max_tokens=max_tokens, **kwargs)
+  llm = AsyncLiteLLM(model_name=model_name, max_tokens=max_tokens, is_reasoning=is_reasoning, **kwargs)
+  if call_recorder is not None:
+      llm.set_call_recorder(call_recorder, agent_name=agent_name)
+  return llm
 
-def get_proposal_agent(cfg, warm_start_examples, logger):
+def get_proposal_agent(cfg, warm_start_examples, logger, call_recorder=None):
 
-  llm = get_llms(cfg)
+  llm = get_llms(cfg, call_recorder=call_recorder, agent_name="box_proposal")
 
   if cfg.warm_start:
     experiment_to_agent = {
@@ -261,8 +291,8 @@ def get_proposal_agent(cfg, warm_start_examples, logger):
     assert cfg.experiment in experiment_to_agent
     return experiment_to_agent[cfg.experiment]
 
-def get_critic_agent(cfg, logger):
-  llm = get_llms(cfg)
+def get_critic_agent(cfg, logger, call_recorder=None):
+  llm = get_llms(cfg, call_recorder=call_recorder, agent_name="box_critic")
 
   experiment_to_agent = {
       "box_loop": StanCriticLLMAgent(llm, 
@@ -313,10 +343,10 @@ def critic(
       parts = extract_text_within_markers(text, label)
       if parts:
         return parts[0].strip()
-      fenced = re.search(rf"```\\s*{re.escape(label)}\\s*\\n([\\s\\S]*?)```", text, re.IGNORECASE)
+      fenced = re.search(rf"```\s*{re.escape(label)}\s*\n([\s\S]*?)```", text, re.IGNORECASE)
       if fenced:
         return fenced.group(1).strip()
-      loose = re.search(rf"{re.escape(label)}\\s*:\\s*([\\s\\S]*?)(?:\\n\\n|$)", text, re.IGNORECASE)
+      loose = re.search(rf"{re.escape(label)}\s*:\s*([\s\S]*?)(?:\n\n|$)", text, re.IGNORECASE)
       if loose:
         return loose.group(1).strip()
       return ""
@@ -364,21 +394,32 @@ def validate_critic_state(cfg, critic_system_message, programs_to_evaluate, curr
     assert "Here are the hypotheses from the previous round" in critic_system_message
     assert "Here are the synthesis from the previous round" in critic_system_message
 
+_LLM_CONFIG_CACHE: dict[str, str | None] = {}
+_LLM_CONFIG_LOCK = threading.Lock()
+
 def _find_llm_config(model_name: str) -> str | None:
-  """Scan conf/llms/*.yaml to find config with matching model_name."""
-  conf_dir = pathlib.Path(__file__).parent.parent.parent.parent / "conf" / "llms"
-  for yaml_file in conf_dir.glob("*.yaml"):
-    try:
-      cfg = OmegaConf.load(yaml_file)
-      if getattr(cfg, 'model_name', None) == model_name:
-        return yaml_file.stem  # filename without extension
-    except Exception:
-      continue
-  return None
+  """Scan conf/llms/*.yaml to find config with matching model_name (cached, thread-safe)."""
+  with _LLM_CONFIG_LOCK:
+    if model_name in _LLM_CONFIG_CACHE:
+      return _LLM_CONFIG_CACHE[model_name]
+
+    conf_dir = pathlib.Path(__file__).parent.parent.parent.parent / "conf" / "llms"
+    result = None
+    for yaml_file in conf_dir.glob("*.yaml"):
+      try:
+        cfg = OmegaConf.load(yaml_file)
+        if getattr(cfg, 'model_name', None) == model_name:
+          result = yaml_file.stem  # filename without extension
+          break
+      except Exception:
+        continue
+
+    _LLM_CONFIG_CACHE[model_name] = result
+    return result
 
 
 # no @weave_op here; it handles PyMC objects/traces. LiteLLM calls are still traced.
-def run_box_loop(env, warm_start_examples, prior_mode=False, critic_mode=False, prev_str_hypotheses="", prev_synthesis="", llm_model=None):
+def run_box_loop(env, warm_start_examples, prior_mode=False, critic_mode=False, prev_str_hypotheses="", prev_synthesis="", llm_model=None, call_recorder=None):
 
   _suppress_ppl_warnings()
   _quiet_ppl_loggers()
@@ -415,7 +456,39 @@ def run_box_loop(env, warm_start_examples, prior_mode=False, critic_mode=False, 
   logging.basicConfig(filename=os.path.join(log_dir, log_file), level=logging.INFO, force=True)
   logger = logging.getLogger(__name__)
 
-  args_str = ', '.join(f'{key}={value}' for key, value in vars(cfg).items())
+  # filter sensitive keys from logs (api_key could leak from nested .env/config)
+  # use boundary-aware matching to avoid redacting max_tokens, prompt_tokens, etc.
+  # note: 's?' allows plurals like 'api_keys', and ($|[._-]|s$) handles trailing 's'
+  _SENSITIVE_KEY_RE = re.compile(
+      r"(^|[._-])("
+      r"api[_-]?keys?|api[_-]?secrets?|passwords?|secret[_-]?keys?|"
+      r"access[_-]?tokens?|refresh[_-]?tokens?|id[_-]?tokens?|session[_-]?tokens?|"
+      r"private[_-]?keys?|access[_-]?keys?|bearer[_-]?tokens?|"
+      r"client[_-]?secrets?|auth[_-]?tokens?|signing[_-]?keys?|credentials?|authorizations?"
+      r")($|[._-])",
+      re.IGNORECASE,
+  )
+  # keys that look sensitive but are actually hyperparameters
+  _SAFE_KEYS = {'max_tokens', 'max_output_tokens', 'prompt_tokens',
+                'completion_tokens', 'reasoning_tokens', 'total_tokens'}
+
+  def _is_sensitive(key: str) -> bool:
+      k = key.lower()
+      if k in _SAFE_KEYS:
+          return False
+      return bool(_SENSITIVE_KEY_RE.search(k))
+
+  def _redact(obj):
+      """Recursively redact sensitive keys from nested config."""
+      if isinstance(obj, dict):
+          return {k: ('***' if _is_sensitive(str(k)) else _redact(v))
+                  for k, v in obj.items()}
+      if isinstance(obj, list):
+          return [_redact(v) for v in obj]
+      return obj
+
+  safe_cfg = _redact(OmegaConf.to_container(cfg, resolve=True))
+  args_str = ', '.join(f'{key}={value}' for key, value in safe_cfg.items())
   logger.info(f'Running with these args: {args_str}')
 
   # returns a class with all the datasets and state you need to run our algo and compute metrics
@@ -427,8 +500,8 @@ def run_box_loop(env, warm_start_examples, prior_mode=False, critic_mode=False, 
     prior_mode=prior_mode,
   )
 
-  proposal_agent = get_proposal_agent(cfg, warm_start_examples=warm_start_examples, logger=logger)
-  critic_agent = get_critic_agent(cfg, logger=logger)
+  proposal_agent = get_proposal_agent(cfg, warm_start_examples=warm_start_examples, logger=logger, call_recorder=call_recorder)
+  critic_agent = get_critic_agent(cfg, logger=logger, call_recorder=call_recorder)
   
   if not os.path.exists(experiment.checkpoint_dir):
     print(f"making path: {experiment.checkpoint_dir}")
@@ -472,7 +545,6 @@ def run_box_loop(env, warm_start_examples, prior_mode=False, critic_mode=False, 
     )
 
     logger.info(f"proposal_system_message: {proposal_system_message}")
-    print(f"proposal_system_message: {proposal_system_message}")
     logger.info(f"proposal_user_message: {proposal_user_message}")
 
     validate_exemplars(cfg=cfg, round_idx=round_idx, exemplar_list=exemplar_list)
@@ -524,11 +596,11 @@ def run_box_loop(env, warm_start_examples, prior_mode=False, critic_mode=False, 
       
       if cfg.critic_exemplar_heuristic in ["recent"]:
         critic_system_message = experiment.get_system_message(
-          mode="critic", 
-          critic_strategy=cfg.critic_exemplar_heuristic,  
+          mode="critic",
+          critic_strategy=cfg.critic_exemplar_heuristic,
           vision_only=cfg.vision_only,
           prev_str_hypotheses=prev_str_hypotheses,
-          prev_synthesis=prev_str_hypotheses,
+          prev_synthesis=prev_synthesis,  # fixed: was incorrectly using prev_str_hypotheses
           )
         critic_user_message = experiment.get_user_message(
           mode="critic", 
@@ -559,10 +631,26 @@ def run_box_loop(env, warm_start_examples, prior_mode=False, critic_mode=False, 
       programs_to_evaluate = get_critic_exemplars(
         curr_programs=curr_programs, programs=programs_all, cfg=cfg, experiment=experiment)
 
-      validate_critic_state(cfg=cfg, 
-                            critic_system_message=critic_system_message, 
-                            programs_to_evaluate=programs_to_evaluate, 
-                            curr_programs=curr_programs, 
+      # guard: skip critic when no programs to evaluate (prevents misleading warnings)
+      if not programs_to_evaluate:
+        logger.warning(
+          f"Skipping critic round {round_idx}: no valid programs to evaluate. "
+          "Check upstream SCORING/FILTER STARVATION warnings for root cause."
+        )
+        critic_info.append({
+          "round_idx": round_idx,
+          "str_hypotheses": str_hypotheses,
+          "synthesis": synthesis,
+          "skipped": True
+        })
+        if round_statistics:
+          round_statistics[-1]["critic_skipped"] = True
+        continue
+
+      validate_critic_state(cfg=cfg,
+                            critic_system_message=critic_system_message,
+                            programs_to_evaluate=programs_to_evaluate,
+                            curr_programs=curr_programs,
                             programs_all=programs_all)
 
       str_hypotheses, synthesis = critic(

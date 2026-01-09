@@ -14,8 +14,15 @@ class DirectGoal(Goal):
         self.eval_points = []
         self.eval_pointer = 0
         self.update_parameters_cache = {}
-        self.norm_mu, self.norm_sigma = 10991.5464, 15725.115658658306
-    
+        # Recomputed with Beta(2,5)*4 sampling to match eval distribution
+        # Previous values (10991, 15725) were computed with uniform sampling
+        # New values: median of 5 trials with seeds [42, 123, 456, 789, 101112]
+        self.norm_mu, self.norm_sigma = 8566.62, 12530.86
+
+    def _sample_eval_time(self) -> float:
+        """Single source of truth for evaluation time sampling."""
+        return float(np.round(np.random.beta(2, 5) * 4, 1))
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = """Your goal is to be able to predict the population count of peregrines given the time. Conduct experiments to learn about the environment and make predictions based on your observations."""
@@ -26,7 +33,7 @@ class DirectGoal(Goal):
     
     def get_goal_eval_question(self, include_prior):
         if self.eval_pointer+1 > len(self.eval_points):
-            ti = np.round((np.random.beta(2, 5) * 4), 1)
+            ti = self._sample_eval_time()
             pop = self.env.step(ti)
             self.eval_points.append((ti, pop))
         else:
@@ -131,7 +138,7 @@ Here is an example.
         return eig_value
 
     def get_norm_factors(self):
-        N = 100   
+        N = 100
         errs = []
         measurements = []
         import logging
@@ -141,7 +148,8 @@ Here is an example.
         for i in tqdm.tqdm(range(N)):
             if i % 10 == 0:
                 self.env.reset()
-            inp = self.env.sample_random_input()
+            # Use same sampling distribution as get_goal_eval_question
+            inp = self._sample_eval_time()
             out = self.env.step(inp)
             print(inp, out)
             measurements.append(out)

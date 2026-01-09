@@ -99,6 +99,7 @@ def create_agents(
     api_base: str,
     api_key: str,
     custom_llm_provider: str,
+    extra_headers: dict = None,
 ):
     scientist_agent = LMExperimenter(
         model_name=model_name,
@@ -107,6 +108,7 @@ def create_agents(
         api_base=api_base,
         api_key=api_key,
         custom_llm_provider=custom_llm_provider,
+        extra_headers=extra_headers,
     )
     naive_agent = None
     if experiment_type == "discovery":
@@ -117,6 +119,7 @@ def create_agents(
             api_base=api_base,
             api_key=api_key,
             custom_llm_provider=custom_llm_provider,
+            extra_headers=extra_headers,
         )
     return scientist_agent, naive_agent
 
@@ -227,6 +230,94 @@ def compute_z_results(
             )
 
     return z_results
+
+
+def aggregate_z_results_across_seeds(
+    seed_results: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Aggregate z-results across multiple seeds.
+
+    For each budget, computes:
+    - z_mean: mean of z_means across seeds
+    - z_stderr: std of z_means / sqrt(n_seeds) (standard error)
+    - z_std: std of z_means across seeds (for reference)
+    - raw_mean: mean of raw_means across seeds
+    - raw_stderr: standard error of raw_means
+    - n_seeds: number of seeds aggregated
+    - per_seed: dict mapping seed -> z_mean for that seed
+
+    Args:
+        seed_results: List of dicts, each containing:
+            - "seed": int
+            - "z_results": list of z_result dicts (from compute_z_results)
+
+    Returns:
+        List of aggregated result dicts, one per budget.
+    """
+    if not seed_results:
+        return []
+
+    # collect all budgets across all seeds
+    budgets = set()
+    for sr in seed_results:
+        for zr in sr.get("z_results", []):
+            budget = zr.get("budget")
+            if budget is not None:
+                budgets.add(budget)
+
+    aggregated = []
+    for budget in sorted(budgets):
+        z_means = []
+        raw_means = []
+        per_seed = {}
+
+        for sr in seed_results:
+            seed = sr.get("seed")
+            for zr in sr.get("z_results", []):
+                if zr.get("budget") == budget:
+                    z_val = zr.get("z_mean")
+                    raw_val = zr.get("raw_mean")
+                    if z_val is not None:
+                        z_means.append(z_val)
+                        per_seed[seed] = z_val
+                    if raw_val is not None:
+                        raw_means.append(raw_val)
+                    break
+
+        n = len(z_means)
+        if n == 0:
+            aggregated.append({
+                "budget": budget,
+                "z_mean": None,
+                "z_stderr": None,
+                "z_std": None,
+                "raw_mean": None,
+                "raw_stderr": None,
+                "n_seeds": 0,
+                "per_seed": {},
+            })
+            continue
+
+        z_mean_agg = float(np.mean(z_means))
+        z_std_agg = float(np.std(z_means, ddof=1)) if n > 1 else 0.0
+        z_stderr = z_std_agg / np.sqrt(n) if n > 0 else 0.0
+
+        raw_mean_agg = float(np.mean(raw_means)) if raw_means else None
+        raw_std = float(np.std(raw_means, ddof=1)) if len(raw_means) > 1 else 0.0
+        raw_stderr = raw_std / np.sqrt(len(raw_means)) if raw_means else None
+
+        aggregated.append({
+            "budget": budget,
+            "z_mean": z_mean_agg,
+            "z_stderr": float(z_stderr),
+            "z_std": z_std_agg,
+            "raw_mean": raw_mean_agg,
+            "raw_stderr": float(raw_stderr) if raw_stderr is not None else None,
+            "n_seeds": n,
+            "per_seed": per_seed,
+        })
+
+    return aggregated
 
 
 def collect_results_payload(all_data):

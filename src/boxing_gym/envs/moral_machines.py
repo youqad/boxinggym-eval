@@ -557,7 +557,7 @@ When asked to answer a question about the environment, respond in the format spe
             user_text=query,
             api_base=self.api_base,
             api_key=self.api_key,
-            max_tokens=512,
+            max_tokens=8192,  # safe value matching config floor
             temperature=0.7,
         )
         response = f"The participant responded with: {response}\n"
