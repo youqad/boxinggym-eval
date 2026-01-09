@@ -7,7 +7,7 @@ name = "boxing-gym"
 version = "0.1.0"
 description = "Benchmarking framework for experimental-design agents"
 readme = "README.md"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11"
 license = { file = "LICENSE" }
 dependencies = [
     "annotated-types==0.7.0",
@@ -38,7 +38,7 @@ dependencies = [
     "idna==3.7",
     "jiter>=0.10.0",
     "kiwisolver==1.4.5",
-    "litellm @ git+https://github.com/BerriAI/litellm.git@main",
+    "litellm==1.80.5",  # pinned for paper reproducibility (was @main)
     "logical-unification==0.4.6",
     "markdown-it-py==3.0.0",
     "matplotlib==3.9.1.post1",
@@ -78,6 +78,13 @@ dependencies = [
     "weave==0.52.22",
     "xarray==2024.7.0",
     "xarray-einstats==0.7.0",
+    "streamlit>=1.28.0",
+    "plotly>=5.18.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.0.2",
 ]
 
 [tool.setuptools]
