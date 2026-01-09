@@ -15,15 +15,15 @@ parameters:
       - gpt-4o
       - gpt-5.1-codex-mini
       - deepseek-v3.2
-      - glm-4.6
-      - minimax-m2
+      - glm-4.7
+      - minimax-m2.1
       - kimi-k2-thinking
       - bedrock-qwen3-32b
   envs:
     values:
-      - dugongs_direct_discovery
-      - peregrines_direct_discovery
-      - lotka_volterra_direct_discovery
+      - dugongs_direct_naive
+      - peregrines_direct_naive
+      - lotka_volterra_direct_naive
   exp:
     value: discovery
   seed:
@@ -32,8 +32,6 @@ parameters:
     value: true
   use_ppl:
     value: false
-  llms.max_tokens:
-    value: 512
   exp.num_experiments:
     value: "[10]"
   hydra.job.chdir:

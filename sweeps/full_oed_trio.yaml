@@ -12,9 +12,9 @@ metric:
 # 7 models × 3 environments × 5 seeds = 105 runs
 parameters:
   llms:
-    values: [gpt-4o, gpt-5.1-codex-mini, deepseek-v3.2, glm-4.6, minimax-m2, kimi-k2-thinking, bedrock-qwen3-32b]
+    values: [gpt-4o, gpt-5.1-codex-mini, deepseek-v3.2, glm-4.7, minimax-m2.1, kimi-k2-thinking, bedrock-qwen3-32b]
   envs:
-    values: [dugongs_direct, peregrines_direct, lotka_volterra_direct]
+    values: [dugongs_direct, peregrines_direct]  # lotka_volterra excluded (no EIG)
   exp:
     value: oed
   seed:
@@ -23,13 +23,13 @@ parameters:
     value: true
   use_ppl:
     value: false
-  llms.max_tokens:
-    value: 512
   hydra.job.chdir:
     value: false
 
 command:
   - ${env}
+  - uv
+  - run
   - python
   - ${program}
   - ${args_no_hyphens}

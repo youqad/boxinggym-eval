@@ -1,0 +1,22 @@
+# Qwen3-4B-Instruct-2507 - July 2025 update with major improvements
+# 262K context, 149% better on AIME25, 357% better on Arena-Hard
+# Non-thinking mode only
+#
+# Requires TOGETHER_API_KEY environment variable
+# Get key at: https://www.together.ai/
+
+model_name: "together_ai/Qwen/Qwen3-4B-Instruct-2507"
+temperature: 0.0
+max_tokens: 8192  # increased from 4096 to prevent truncation
+
+api_key: ${oc.env:TOGETHER_API_KEY,null}
+
+supports_system_message: true
+supports_thinking: false
+supports_streaming: true
+supports_vision: false
+supports_tool_calls: true
+supports_json_output: true
+
+context_window: 262144
+reasoning_capable: false
