@@ -17,24 +17,24 @@ parameters:
       - gpt-4o
       - gpt-5.1-codex-mini
       - deepseek-v3.2
-      - glm-4.6
-      - minimax-m2
+      - glm-4.7
+      - minimax-m2.1
       - kimi-k2-thinking
       - bedrock-qwen3-32b
 
   envs:
     values:
-      # Discovery variants of environments
-      - dugongs_direct_discovery
-      - peregrines_direct_discovery
-      - lotka_volterra_direct_discovery
-      - hyperbolic_direct_discovery
-      - location_finding_direct_discovery
-      - death_process_direct_discovery
-      - irt_direct_discovery
-      - survival_direct_discovery
-      - emotion_direct_discovery
-      - morals_direct_discovery
+      # Naive variants of environments (for discovery experiment type)
+      - dugongs_direct_naive
+      - peregrines_direct_naive
+      - lotka_volterra_direct_naive
+      - hyperbolic_direct_naive
+      - location_finding_direct_naive
+      - death_process_direct_naive
+      - irt_direct_naive
+      - survival_direct_naive
+      - emotion_direct_naive
+      - morals_direct_naive
 
   exp:
     value: discovery
@@ -47,9 +47,6 @@ parameters:
 
   use_ppl:
     value: false  # Discovery mode doesn't use PPL
-
-  llms.max_tokens:
-    value: 512
 
   exp.num_experiments:
     value: "[10]"  # Discovery evaluated at budget=10

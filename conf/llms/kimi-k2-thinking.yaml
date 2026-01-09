@@ -1,34 +1,34 @@
 # Kimi For Coding (Thinking Mode) - Moonshot AI's reasoning model
-# Accessed via Anthropic-compatible API
+# Accessed via OpenAI-compatible API with reasoning enabled
 #
 # Architecture: Kimi K2 Thinking (1T params, 32B activated MoE)
 # Context: 262K tokens
 # Max output: 32K tokens
-#
-# Toggle thinking mode by pressing Tab key in Claude Code
-# Returns reasoning_content alongside content when in thinking mode
 #
 # Key performance:
 # - 44.9% on Humanity's Last Exam (HLE) with tools
 # - 99.1% AIME 2025 with Python
 # - 71.3% SWE-Bench Verified
 #
-# API: Uses Anthropic SDK format (not OpenAI)
-# Base URL: https://api.kimi.com/coding/
+# API: Uses OpenAI SDK format (legacy)
+# Base URL: https://api.kimi.com/coding/v1
 #
-# Requires MOONSHOT_API_KEY environment variable (sk-kimi-... format)
+# Requires MOONSHOT_API_KEY environment variable
 # Get key at: https://kimi.com/coding
 
-model_name: "anthropic/kimi-for-coding"
+model_name: "kimi-for-coding"
 temperature: 0.0
-# Kimi K2 Thinking models have ~32K max output on the Moonshot/Anthropic API.
 max_tokens: 32768
 
-api_base: "https://api.kimi.com/coding/"
+api_base: "https://api.kimi.com/coding/v1"
 api_key: ${oc.env:MOONSHOT_API_KEY,null}
 
-# Required for custom endpoints
-custom_llm_provider: "anthropic"
+# OpenAI-compatible endpoint
+custom_llm_provider: "openai"
+
+# Required: Kimi For Coding validates calling agent via User-Agent header
+extra_headers:
+  User-Agent: "claude-code/1.0"
 
 supports_system_message: true
 supports_thinking: true
@@ -40,5 +40,5 @@ supports_json_output: true
 context_window: 262144
 reasoning_capable: true
 
-# Note: Thinking mode is toggled via Tab key in Claude Code
-# When enabled, returns reasoning_content with chain-of-thought
+# Note: Same model as kimi-k2, but used for reasoning tasks
+# Reasoning effort can be configured via API parameters
