@@ -1,9 +1,5 @@
-SEEDS=(1 2 3 4 5)
-for seed in "${SEEDS[@]}"
-    # OED
-    python run_experiment.py seed=$seed llms=openai include_prior=true exp=oed envs=rat_tumor_direct
-    python run_experiment.py seed=$seed llms=openai include_prior=false exp=oed envs=rat_tumor_direct
-    # Discovery
-    python run_experiment.py seed=$seed llms=openai include_prior=true exp=discovery envs=location_finding_direct_discovery
-    python run_experiment.py seed=$seed llms=openai include_prior=false exp=discovery envs=location_finding_direct_discovery
-
+#!/bin/bash
+# Deprecated: rat_tumor env configs were removed. Use sweeps or other env scripts.
+echo "rat_tumor env configs are no longer available; this script is deprecated."
+echo "Use sweeps or another env script (e.g., scripts/hyperbolic.sh)."
+exit 1

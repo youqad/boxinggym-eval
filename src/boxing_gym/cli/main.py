@@ -39,7 +39,7 @@ def sync(local, sweep_id, refresh, status):
     Examples:
 
         box sync --local results/
-        box sync --sweep-id 5h3g5cno,qqkzi3ln
+        box sync --sweep-id YOUR_SWEEP_ID
         box sync --status
     """
     from boxing_gym.cli.commands.sync import run_sync

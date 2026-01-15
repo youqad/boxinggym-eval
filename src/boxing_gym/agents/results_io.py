@@ -9,7 +9,7 @@ Example::
         load_results_from_wandb, aggregate_results, CANONICAL_ENVS
     )
 
-    results = load_results_from_wandb("gkl3dj89")
+    results = load_results_from_wandb("YOUR_SWEEP_ID")
     agg = aggregate_results(results, group_by=("env", "model", "budget"))
 """
 

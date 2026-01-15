@@ -18,29 +18,26 @@ parameters:
       - gpt-4o
       - gpt-5.1-codex-mini
       - deepseek-v3.2
-      - glm-4.6
-      - minimax-m2
-      - kimi-k2-thinking
+      - glm-4.7
+      - minimax-m2.1
       - bedrock-qwen3-32b
+      - kimi-k2
 
   envs:
     values:
-      - location_finding_direct_discovery  # Discovery variant of most representative env
+      - location_finding_direct_naive  # Naive variant of most representative env
 
   exp:
     value: discovery
 
-  seed:
-    values: [1, 2]  # 2 seeds (vs 5 in full) - 60% seed reduction
+  seeds:
+    value: [1, 2]  # 2 seeds (vs 5 in full) - 60% seed reduction
 
   include_prior:
     value: true  # Discovery mode always uses prior
 
   use_ppl:
     value: false  # Discovery mode doesn't use PPL
-
-  llms.max_tokens:
-    value: 512
 
   exp.num_experiments:
     value: "[0,3]"  # Budget 0 (baseline) and 3 (early learning)

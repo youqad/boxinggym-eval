@@ -17,14 +17,14 @@ parameters:
       - gpt-4o
       - gpt-5.1-codex-mini
       - deepseek-v3.2
-      - glm-4.6
-      - minimax-m2
+      - glm-4.7
+      - minimax-m2.1
       - kimi-k2-thinking
       - bedrock-qwen3-32b
 
   envs:
     values:
-      - location_finding_direct_discovery  # Representative env
+      - location_finding_direct_naive  # Representative env
 
   exp:
     value: discovery
@@ -37,9 +37,6 @@ parameters:
 
   use_ppl:
     value: false  # Discovery mode doesn't use PPL
-
-  llms.max_tokens:
-    value: 512
 
   exp.num_experiments:
     value: "[0,3]"  # Minimal budgets for fast validation

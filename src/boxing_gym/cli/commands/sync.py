@@ -38,7 +38,7 @@ def run_sync(local: str | None, sweep_id: str | None, refresh: bool, status: boo
     if not local and not sweep_id:
         console.print("[yellow]Specify --local or --sweep-id[/yellow]")
         console.print("  box sync --local results/")
-        console.print("  box sync --sweep-id 5h3g5cno")
+        console.print("  box sync --sweep-id YOUR_SWEEP_ID")
         return
 
     if local:

@@ -17,17 +17,16 @@ parameters:
       - gpt-4o
       - gpt-5.1-codex-mini
       - deepseek-v3.2
-      - glm-4.6
-      - minimax-m2
+      - glm-4.7
+      - minimax-m2.1
       - kimi-k2-thinking
       - bedrock-qwen3-32b
 
   envs:
     values:
-      # Core trio (paper main results)
+      # Core duo (paper main results) - lotka_volterra excluded (no EIG implementation)
       - dugongs_direct
       - peregrines_direct
-      - lotka_volterra_direct
       # Extended environments
       - hyperbolic_direct        # choice goal
       - hyperbolic_discount      # discount goal
@@ -51,9 +50,6 @@ parameters:
 
   use_ppl:
     values: [false, true]  # Grid over PPL (Box's Loop)
-
-  llms.max_tokens:
-    value: 512
 
   hydra.job.chdir:
     value: false
