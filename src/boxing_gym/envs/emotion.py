@@ -319,7 +319,7 @@ Limit your explanation to {com_limit} words"""
     
 
 class EmotionFromOutcome:
-    def __init__(self, model_name="gpt-5.2"):
+    def __init__(self, model_name="gpt-4o"):
         self.model_name = model_name
         self.env_name = "emotion"
         # Configure LiteLLM provider routing for any supported model (incl. GPT‑5).
@@ -361,6 +361,7 @@ Only talk about the most salient emotions.
 Start with "The player might be feeling...because..." and provide a description of the player's emotions and a reason."""
         self.model = self._build_model()
         self.reset()
+        self.include_prior = True  # Initialize attribute (synced in generate_system_message)
 
     def _build_model(self):
         with pm.Model() as model:
@@ -390,6 +391,7 @@ Start with "The player might be feeling...because..." and provide a description 
         self.observed_data = []
     
     def generate_system_message(self, include_prior=True, goal=None):
+        self.include_prior = include_prior  # Sync state for downstream methods
         assert goal is not None, "Goal must be provided"
         if include_prior:
             message = f"""A participant is observing a user play a game where they spin a wheel. The game has three possible outcomes with known probabilities. The participant is asked to predict how the player feels after each spin of the wheel.
@@ -499,7 +501,7 @@ When asked to answer a question about the environment, respond in the format spe
             user_text=query,
             api_base=self.api_base,
             api_key=self.api_key,
-            max_tokens=512,
+            max_tokens=8192,  # safe value matching config floor
             temperature=0.7,
         )
         response = f"The participant responded with: {response}\n"

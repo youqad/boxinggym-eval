@@ -1,0 +1,24 @@
+# EssentialAI rnj-1-instruct - 8.3B code/STEM specialist
+# Gemma 3-based architecture with YaRN (32K context, extends to 128K)
+# Strong agentic: 20.8% SWE-bench (beats Gemini 2.0 Flash, Qwen2.5-Coder 32B)
+# Tool calling: Hermes format with <tool_call> tags
+# FIM: <|pre_fim|>, <|mid_fim|>, <|suf_fim|> tokens
+#
+# Requires TOGETHER_API_KEY environment variable
+# Get key at: https://www.together.ai/
+
+model_name: "together_ai/EssentialAI/rnj-1-instruct"
+temperature: 0.0
+max_tokens: 8192  # increased from 4096 to prevent truncation
+
+api_key: ${oc.env:TOGETHER_API_KEY,null}
+
+supports_system_message: true
+supports_thinking: false
+supports_streaming: true
+supports_vision: false
+supports_tool_calls: true
+supports_json_output: true
+
+context_window: 32000
+reasoning_capable: false

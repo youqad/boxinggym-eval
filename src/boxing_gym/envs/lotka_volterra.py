@@ -1,3 +1,4 @@
+import ast
 import numpy as np
 from scipy.integrate import odeint
 
@@ -51,7 +52,28 @@ Here is an example.
 
     def evaluate_predictions(self, predictions, measurements):
         assert len(predictions) == len(measurements), f"Predictions and measurements must have the same length. {len(predictions)}, {len(measurements)}"
-        predictions = [eval(x) for x in predictions]
+        def _parse_prediction(prediction):
+            if isinstance(prediction, (list, tuple)):
+                parsed = list(prediction)
+            elif isinstance(prediction, str):
+                candidate = prediction.strip()
+                if not candidate.startswith("[") and "[" in candidate and "]" in candidate:
+                    candidate = candidate[candidate.find("["):candidate.rfind("]") + 1]
+                try:
+                    parsed = ast.literal_eval(candidate)
+                except (ValueError, SyntaxError) as exc:
+                    raise ValueError(f"Invalid prediction format: {prediction}") from exc
+            else:
+                raise ValueError(f"Invalid prediction type: {type(prediction)}")
+
+            if not isinstance(parsed, (list, tuple)):
+                raise ValueError(f"Prediction must be a list: {parsed}")
+            parsed = list(parsed)
+            if len(parsed) != 2:
+                raise ValueError(f"Prediction must contain two values: {parsed}")
+            return [float(parsed[0]), float(parsed[1])]
+
+        predictions = [_parse_prediction(x) for x in predictions]
         abs_error = np.abs(np.array(predictions) - np.array(measurements))
         mean_abs = np.mean(abs_error)
         std_abs = np.std(abs_error)

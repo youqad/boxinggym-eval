@@ -1,64 +1,8 @@
-import importlib
-import sys
-import os
 import logging
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
-def _import_real_module(name: str, required_attr: str):
-    """Import a module, retrying without repo-root shadowing if needed."""
-    try:
-        mod = importlib.import_module(name)
-        if hasattr(mod, required_attr):
-            return mod
-    except Exception:
-        mod = None
-
-    # shadowing fallback: remove repo root / cwd from sys.path and retry.
-    try:
-        # filter out CWD to avoid local shadowing.
-        old_sys_path = list(sys.path)
-
-        filtered = []
-        cwd = os.getcwd()
-        for p in old_sys_path:
-            # sys.path can contain "" which maps to cwd
-            # we want to exclude the repo root if it's in the path and causing shadowing
-            filtered.append(p)
-
-        # keep the original behavior to avoid local shadowing.
-        
-        # if we are running from root, sys.path[0] is root.
-        if "" in filtered:
-            filtered.remove("")
-        if "." in filtered:
-            filtered.remove(".")
-        if cwd in filtered:
-            filtered.remove(cwd)
-        
-        sys.path = filtered
-        sys.modules.pop(name, None)
-        mod2 = importlib.import_module(name)
-        if hasattr(mod2, required_attr):
-            logger.warning(
-                f"Recovered real '{name}' package after detecting shadowing by local folder."
-            )
-            return mod2
-    except Exception:
-        mod2 = None
-    finally:
-        try:
-            sys.path = old_sys_path
-        except Exception:
-            pass
-
-    if mod is not None and not hasattr(mod, required_attr):
-        logger.warning(
-            f"Imported a '{name}' module without {name}.{required_attr}; likely shadowed by local artifacts. "
-            f"Disabling {name} integration for this run."
-        )
-    return None
 
 def create_fallback_result(error_msg=""):
     """

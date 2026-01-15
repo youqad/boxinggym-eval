@@ -1,5 +1,7 @@
+import ast
 import numpy as np
 import random
+import logging
 from itertools import permutations
 
 from scipy.stats import norm
@@ -8,14 +10,25 @@ import pymc as pm
 from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
 
+logger = logging.getLogger(__name__)
+
 class DirectGoal(Goal):
+    # Default env params used to compute hardcoded norm values
+    _NORM_DEFAULTS = {"num_sources": 3, "dim": 2, "m": 1e-4, "alpha": 1}
+
     def __init__(self, env):
         super().__init__(env)
         self.eval_points = []
         self.eval_pointer = 0
         self.update_param_cache = {}
-        self.norm_mu = 12.59
-        self.norm_sigma = 38.03
+        # Recomputed with Normal(0,1) sampling to match eval distribution
+        # Values from 50-trial median to reduce variance
+        # IMPORTANT: Only valid for default params (num_sources=3, dim=2, m=1e-4, alpha=1)
+        self.norm_mu = 176.9
+        self.norm_sigma = 1247.7
+
+        # Warn if env params differ from those used to compute hardcoded norms
+        self._check_norm_validity(env)
     
     def get_system_message(self, include_prior):
         if include_prior:
@@ -151,16 +164,31 @@ Here is an example.
         eig_value = np.mean(log_likelihoods)
         return eig_value
 
+    def _check_norm_validity(self, env):
+        """Warn if env params differ from those used to compute hardcoded norms."""
+        mismatches = []
+        for param, default in self._NORM_DEFAULTS.items():
+            actual = getattr(env, param, default)
+            if actual != default:
+                mismatches.append(f"{param}={actual} (expected {default})")
+        if mismatches:
+            logger.warning(
+                f"location_finding env params differ from norm defaults: {', '.join(mismatches)}. "
+                f"Hardcoded norm values (mu={self.norm_mu}, sigma={self.norm_sigma}) may be invalid. "
+                "Consider calling get_norm_factors() to recompute."
+            )
+
     def get_norm_factors(self):
         N = 100
         predictions = []
         measurements = []
         for _ in range(N):
             self.env.reset()
-            loc = self.env.sample_random_input()
-            signal = self.env.step(loc)
-            if signal > 100: 
-                continue
+            # Match eval distribution: Normal(0,1) instead of Uniform(-2,2)
+            loc = np.random.normal(0, 1, (self.env.dim,))
+            # Use noiseless signal_intensity to match eval (not noisy step())
+            signal = self.env.signal_intensity(loc)
+            # No >100 filter - eval doesn't filter either
             measurements.append(signal)
         mu_pred = np.mean(measurements)
         predictions = [str(mu_pred.tolist()) for _ in range(len(measurements))]
@@ -273,11 +301,30 @@ Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range
 
         assert len(predictions) == len(measurements), "Predictions and measurements must have the same length."
 
-        # TODO: make sure we're checking the format of predictions
-        predictions = [eval(x) for x in predictions]
+        def _parse_prediction(prediction):
+            if isinstance(prediction, (list, tuple)):
+                parsed = list(prediction)
+            elif isinstance(prediction, str):
+                candidate = prediction.strip()
+                if not candidate.startswith("[") and "[" in candidate and "]" in candidate:
+                    candidate = candidate[candidate.find("["):candidate.rfind("]") + 1]
+                try:
+                    parsed = ast.literal_eval(candidate)
+                except (ValueError, SyntaxError) as exc:
+                    raise ValueError(f"Invalid prediction format: {prediction}") from exc
+            else:
+                raise ValueError(f"Invalid prediction type: {type(prediction)}")
+
+            if not isinstance(parsed, (list, tuple)):
+                raise ValueError(f"Prediction must be a list: {parsed}")
+            parsed = list(parsed)
+            parsed = [list(item) if isinstance(item, tuple) else item for item in parsed]
+            return parsed
+
+        predictions = [_parse_prediction(x) for x in predictions]
 
         def permuted_mse(prediction, true_theta):
-            assert type(prediction) == list
+            assert isinstance(prediction, list)
             estimated_locations = np.array(prediction)
             if estimated_locations.shape != true_theta.shape:
                 raise ValueError("The shape of the estimated locations must match the shape of the true locations.")
@@ -440,10 +487,9 @@ Example:
         return message
     
     def sample_random_input(self):
-        point = []
-        for _ in range(self.dim):
-            point.append(np.random.uniform(-2, 2))
-        return np.array(point)
+        # Use Normal(0,1) to match: (1) source locations, (2) eval distribution
+        # Previously Uniform(-2,2) caused distribution mismatch
+        return np.random.normal(0, 1, (self.dim,))
 
     def signal_intensity(self, xi):
         total_intensity = self.b

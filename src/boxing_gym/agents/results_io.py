@@ -16,6 +16,7 @@ Example::
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -23,14 +24,15 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-DEFAULT_ENTITY = "ox"
-DEFAULT_PROJECT = "boxing-gym"
+DEFAULT_ENTITY = os.environ.get("WANDB_ENTITY", "")
+DEFAULT_PROJECT = os.environ.get("WANDB_PROJECT") or "boxing-gym"
 
 class DataSource(Enum):
     """Indicates where benchmark data was loaded from."""
 
     LOCAL_JSON = "local_json"
     LOCAL_LOGS = "local_logs"
+    LOCAL_WANDB = "local_wandb"
     WANDB_API = "wandb_api"
     PAPER_REFERENCE = "paper_reference"
 
@@ -83,16 +85,16 @@ MODEL_NAMES: Dict[str, str] = {
     "deepseek-v3.2-thinking": "DeepSeek-V3.2-Thinking",
     "deepseek-chat": "DeepSeek-Chat",
     "deepseek-reasoner": "DeepSeek-Reasoner",
-    "glm-4.6": "GLM-4.6",
-    "minimax-m2": "MiniMax-M2",
+    "glm-4.7": "GLM-4.7",
+    "minimax-m2.1": "MiniMax-M2.1",
     "kimi-k2": "Kimi-K2",
     "kimi-k2-thinking": "Kimi-K2-Thinking",
     "qwen3-coder-30b": "Qwen3-Coder-30B",
     # IDs as they appear in W&B runs (from litellm routing)
-    "anthropic/glm-4.6": "GLM-4.6",
+    "anthropic/glm-4.7": "GLM-4.7",
     "anthropic/kimi-for-coding": "Kimi-K2",
-    "openai/MiniMax-M2": "MiniMax-M2",
-    "openai/minimax-m2": "MiniMax-M2",
+    "openai/MiniMax-M2.1": "MiniMax-M2.1",
+    "openai/minimax-m2.1": "MiniMax-M2.1",
     "openai/gpt-4o": "GPT-4o",
     "openai/gpt-5.1": "GPT-5.1",
     "openai/gpt-5.1-mini": "GPT-5.1-Mini",
@@ -137,7 +139,7 @@ NORM_STATIC: Dict[str, Tuple[float, float]] = {
     "hyperbolic_temporal_discount": (0.25, 4.3),
     "irt": (0.5, 0.5),
     "survival": (0.2604, 0.43885286828275377),
-    "location_finding": (1.57, 1.15385),
+    "location_finding": (176.9, 1247.7),  # DirectGoal ("signal"); matches location_finding.py
     "death_process": (0.2902838787350395, 1.756991075450312),
     "emotion": (1.58508525, 0.7237143937677741),
     "morals": (0.424, 0.494190246767376),
@@ -285,7 +287,7 @@ def get_env_display_name(env_key: str) -> str:
 def get_goal_display_name(env_name: str, goal_key: Optional[str]) -> Optional[str]:
     if not goal_key:
         return DEFAULT_GOALS.get(env_name, goal_key)
-    if goal_key in ("direct", "direct_discovery"):
+    if goal_key in ("direct", "direct_naive", "direct_discovery"):
         return DEFAULT_GOALS.get(env_name, goal_key)
     if env_name == "location_finding" and goal_key == "source":
         return "source_location"
@@ -295,7 +297,8 @@ def get_goal_display_name(env_name: str, goal_key: Optional[str]) -> Optional[st
 
 
 _KNOWN_GOALS: Tuple[str, ...] = (
-    "direct_discovery",
+    "direct_naive",
+    "direct_discovery",  # legacy alias for parsing old WandB runs
     "direct",
     "discount",
     "source",
@@ -399,6 +402,15 @@ def _load_json_file(path: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _parse_bool(val: Any) -> bool:
+    """Parse boolean from various formats (handles string 'false' correctly)."""
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        return val.lower() == "true"
+    return bool(val)
+
+
 def load_results_from_json_dir(root: str) -> List[RunResult]:
     """Parse all JSON result files from a directory."""
     results: List[RunResult] = []
@@ -414,10 +426,10 @@ def load_results_from_json_dir(root: str) -> List[RunResult]:
 
         env_name = env_cfg.get("env_name")
         goal_name = env_cfg.get("goal_name")
-        include_prior = bool(cfg.get("include_prior", False))
+        include_prior = _parse_bool(cfg.get("include_prior", False))
         model_name = (cfg.get("llms") or {}).get("model_name")
         seed = cfg.get("seed")
-        use_ppl = bool(cfg.get("use_ppl", False))
+        use_ppl = _parse_bool(cfg.get("use_ppl", False))
         experiment_type = exp_cfg.get("experiment_type")
         budgets = exp_cfg.get("num_experiments")
 
@@ -500,7 +512,7 @@ def load_results_from_json_dir(root: str) -> List[RunResult]:
                 RunResult(
                     env=env_name,
                     model=model_name or "unknown",
-                    seed=seed if isinstance(seed, int) else 0,
+                    seed=int(seed) if seed is not None else 0,
                     budget=int(budget),
                     z_mean=float(z_mean),
                     z_std=float(z_std) if z_std is not None else 0.0,
@@ -587,12 +599,178 @@ def load_results_from_logs(logs_dir: str) -> List[RunResult]:
 
     return results
 
+
+def load_results_from_local_wandb(
+    wandb_dir: str = "wandb-dir",
+    sweep_id: Optional[str] = None,
+) -> List[RunResult]:
+    """Load results from local W&B run directories.
+
+    Scans wandb-dir/run-*/files/wandb-summary.json or wandb-dir/wandb/run-*/files/wandb-summary.json
+    for completed runs.
+    Much faster than API calls when data is already synced locally.
+
+    Args:
+        wandb_dir: Path to wandb directory (default: "wandb-dir")
+        sweep_id: Optional sweep ID to filter runs (not yet implemented)
+
+    Returns:
+        List of RunResult objects from local wandb runs
+    """
+    results: List[RunResult] = []
+    wandb_path = Path(wandb_dir)
+    if not wandb_path.exists():
+        return results
+
+    candidate_paths = []
+    # Common layout: wandb-dir/wandb/run-*/files
+    nested = wandb_path / "wandb"
+    if nested.exists():
+        candidate_paths.append(nested)
+    candidate_paths.append(wandb_path)
+
+    seen_paths = set()
+    for base_path in candidate_paths:
+        if base_path in seen_paths:
+            continue
+        seen_paths.add(base_path)
+
+        for run_dir in base_path.glob("run-*/files"):
+            summary_path = run_dir / "wandb-summary.json"
+            if not summary_path.exists():
+                continue
+
+            try:
+                with summary_path.open("r") as f:
+                    summary = json.load(f)
+            except Exception:
+                continue
+
+            if not isinstance(summary, dict):
+                continue
+
+            z_mean = summary.get("eval/z_mean")
+            if z_mean is None or not isinstance(z_mean, (int, float)):
+                continue
+
+            env_name = summary.get("exp/env_name")
+            if not env_name:
+                continue
+
+            env_name = get_env_display_name(str(env_name))
+            goal_type = summary.get("exp/goal_type")
+            goal = get_goal_display_name(env_name, str(goal_type) if goal_type else None)
+            if not goal:
+                goal = DEFAULT_GOALS.get(env_name)
+
+            seed = summary.get("exp/seed")
+            try:
+                seed = int(seed) if seed is not None else 0
+            except Exception:
+                seed = 0
+
+            budget = summary.get("budget")
+            if budget is None:
+                budget = summary.get("eval/budget")
+            try:
+                budget = int(budget) if budget is not None else 0
+            except Exception:
+                budget = 0
+
+            z_std = summary.get("eval/z_std")
+            if not isinstance(z_std, (int, float)):
+                z_std = 0.0
+
+            raw_mean = summary.get("eval/mean")
+            if raw_mean is None:
+                raw_mean = summary.get("eval/mse")
+            if not isinstance(raw_mean, (int, float)):
+                raw_mean = 0.0
+
+            raw_std = summary.get("eval/std")
+            if raw_std is None:
+                raw_std = summary.get("eval/std_mse")
+            if not isinstance(raw_std, (int, float)):
+                raw_std = 0.0
+
+            include_prior = summary.get("exp/include_prior", True)
+            use_ppl = summary.get("exp/use_ppl", False)
+            experiment_type = summary.get("exp/experiment_type")
+
+            # extract model name from config.yaml or wandb-metadata.json
+            model_name = None
+
+            # try config.yaml first (has args)
+            config_path = run_dir / "config.yaml"
+            if config_path.exists():
+                try:
+                    import yaml
+                    with config_path.open("r") as f:
+                        config = yaml.safe_load(f)
+                    if isinstance(config, dict):
+                        wandb_meta = config.get("_wandb", {}).get("value", {})
+                        e_data = wandb_meta.get("e", {})
+                        for writer_data in e_data.values():
+                            if isinstance(writer_data, dict):
+                                args = writer_data.get("args", [])
+                                for arg in args:
+                                    if isinstance(arg, str) and arg.startswith("llms="):
+                                        model_name = arg.split("=", 1)[1]
+                                        break
+                            if model_name:
+                                break
+                except Exception:
+                    pass
+
+            # try wandb-metadata.json if config didn't have it
+            if not model_name:
+                meta_path = run_dir / "wandb-metadata.json"
+                if meta_path.exists():
+                    try:
+                        with meta_path.open("r") as f:
+                            meta = json.load(f)
+                        args = meta.get("args", [])
+                        for arg in args:
+                            if isinstance(arg, str) and arg.startswith("llms="):
+                                model_name = arg.split("=", 1)[1]
+                                break
+                    except Exception:
+                        pass
+
+            # default to gpt-4o (matches Hydra default config)
+            if not model_name:
+                model_name = "gpt-4o"
+
+            model_name = get_model_display_name(model_name)
+
+            results.append(
+                RunResult(
+                    env=env_name,
+                    model=model_name,
+                    seed=seed,
+                    budget=budget,
+                    z_mean=float(z_mean),
+                    z_std=float(z_std),
+                    raw_mean=float(raw_mean),
+                    raw_std=float(raw_std),
+                    goal=goal,
+                    include_prior=include_prior,
+                    use_ppl=use_ppl,
+                    experiment_type=experiment_type,
+                    path=str(run_dir.parent),
+                    source=DataSource.LOCAL_WANDB,
+                )
+            )
+
+    return results
+
+
 def _get_wandb_api():
     """Get wandb API instance, with helpful error on import failure."""
     try:
         import wandb
 
-        return wandb.Api()
+        return wandb.Api(timeout=120)  # Use 120s timeout for large sweeps
     except ImportError:
         raise ImportError("wandb package required. Install with: uv add wandb")
 
@@ -832,7 +1010,7 @@ def load_results_from_wandb(
     seen: set = set()
     unique_results: List[RunResult] = []
     for r in results:
-        key = (r.env, r.model, r.seed, r.budget, r.goal, r.include_prior)
+        key = (r.env, r.model, r.seed, r.budget, r.goal, r.include_prior, r.use_ppl, r.experiment_type)
         if key not in seen:
             seen.add(key)
             unique_results.append(r)

@@ -1,9 +1,13 @@
+import copy
 import re
 import os
 import time
 import logging
+import hashlib
+import threading
+import uuid
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import litellm
 from boxing_gym.agents.tag_parser import TagParser
 from boxing_gym.agents.litellm_utils import (
@@ -11,68 +15,24 @@ from boxing_gym.agents.litellm_utils import (
     extract_text,
     messages_to_input_text,
 )
+from boxing_gym.agents.call_recorder import CallRecorder, get_call_recorder
+from boxing_gym.agents.pricing import MODEL_REGISTRY, get_litellm_pricing_dict
+from boxing_gym.agents.usage_tracker import UsageTrackerMixin
 
 logger = logging.getLogger(__name__)
 
-_CUSTOM_MODEL_PRICING = {
-    # MiniMax M2 (204K context)
-    "openai/MiniMax-M2": {
-        "input_cost_per_token": 0.0000003,   # $0.30 / 1M tokens
-        "output_cost_per_token": 0.0000012,  # $1.20 / 1M tokens
-        "max_tokens": 204800,
-        "litellm_provider": "openai",
-        "mode": "chat",
-    },
-    "MiniMax-M2": {
-        "input_cost_per_token": 0.0000003,
-        "output_cost_per_token": 0.0000012,
-        "max_tokens": 204800,
-        "litellm_provider": "openai",
-        "mode": "chat",
-    },
-    "minimax/MiniMax-M2": {
-        "input_cost_per_token": 0.0000003,
-        "output_cost_per_token": 0.0000012,
-        "max_tokens": 204800,
-        "litellm_provider": "minimax",
-        "mode": "chat",
-    },
-    # DeepSeek V3.2 (cache miss pricing)
-    "deepseek/deepseek-chat": {
-        "input_cost_per_token": 0.00000028,  # $0.28 / 1M tokens (cache miss)
-        "output_cost_per_token": 0.00000042, # $0.42 / 1M tokens
-        "max_tokens": 128000,
-        "litellm_provider": "deepseek",
-        "mode": "chat",
-    },
-    "deepseek/deepseek-reasoner": {
-        "input_cost_per_token": 0.00000028,  # $0.28 / 1M tokens (cache miss)
-        "output_cost_per_token": 0.00000042, # $0.42 / 1M tokens
-        "max_tokens": 128000,
-        "litellm_provider": "deepseek",
-        "mode": "chat",
-    },
-    # GLM-4.6 (Z.AI / Zhipu AI)
-    "anthropic/glm-4.6": {
-        "input_cost_per_token": 0.0000004,   # $0.40 / 1M tokens
-        "output_cost_per_token": 0.00000175, # $1.75 / 1M tokens
-        "max_tokens": 200000,
-        "litellm_provider": "anthropic",
-        "mode": "chat",
-    },
-    "glm-4.6": {
-        "input_cost_per_token": 0.0000004,   # $0.40 / 1M tokens
-        "output_cost_per_token": 0.00000175, # $1.75 / 1M tokens
-        "max_tokens": 200000,
-        "litellm_provider": "anthropic",
-        "mode": "chat",
-    },
-}
-
+# register unified pricing with LiteLLM
 try:
-    litellm.register_model(model_cost=_CUSTOM_MODEL_PRICING)
-except Exception:
-    pass
+    litellm.register_model(model_cost=get_litellm_pricing_dict())
+except Exception as e:
+    logger.debug(f"Failed to register custom model pricing: {e}")
+
+# pre-compiled regex patterns for performance (avoid re-compiling on each call)
+_OBSERVE_RE = re.compile(r'<observe>(.*?)</observe>', re.DOTALL)
+_ANSWER_RE = re.compile(r'<answer>(.*?)</answer>', re.DOTALL)
+_HAS_DIGIT_RE = re.compile(r'[0-9]')
+_WORD_NUMBERS_RE = re.compile(r'\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|half|quarter|third)\b', re.IGNORECASE)
+_REASONING_MODEL_RE = re.compile(r"(^|/|\s)o\d")
 
 # model profiles for token limits
 @dataclass(frozen=True)
@@ -95,7 +55,7 @@ def _model_profile(model_name: str) -> ModelProfile:
         return ModelProfile(api_max_tokens=131072, is_reasoning=True)
 
     if "deepseek-reasoner" in name or "deepseek-r1" in name:
-        return ModelProfile(api_max_tokens=8192, is_reasoning=True)
+        return ModelProfile(api_max_tokens=32768, is_reasoning=True)
 
     if "deepseek-chat" in name or "deepseek-v3" in name:
         return ModelProfile(api_max_tokens=4096, is_reasoning=False)
@@ -103,7 +63,7 @@ def _model_profile(model_name: str) -> ModelProfile:
     if "gpt-5" in name:
         return ModelProfile(api_max_tokens=131072, is_reasoning=True)
 
-    if re.search(r"(^|/|\s)o\d", name):
+    if _REASONING_MODEL_RE.search(name):
         return ModelProfile(api_max_tokens=100000, is_reasoning=True)
 
     if ("kimi" in name or "moonshot" in name) and ("thinking" in name or "kimi-for-coding" in name):
@@ -113,7 +73,7 @@ def _model_profile(model_name: str) -> ModelProfile:
         return ModelProfile(api_max_tokens=196608, is_reasoning=True)
 
     if "glm-4" in name or "glm4" in name:
-        return ModelProfile(api_max_tokens=131072, is_reasoning=False)
+        return ModelProfile(api_max_tokens=131072, is_reasoning=True)  # GLM-4.7 has thinking mode
 
     if "kimi" in name or "moonshot" in name:
         return ModelProfile(api_max_tokens=32768, is_reasoning=False)
@@ -209,24 +169,141 @@ def _extract_usage_dict(resp) -> Optional[dict]:
     return None
 
 
+_SECRET_PATTERNS = re.compile(
+    r'(api[_-]?key|bearer|token|secret|password|authorization|credential|private[_-]?key|access[_-]?key|client[_-]?secret|signing[_-]?key)["\']?\s*[:=]\s*["\']?[^\s"\',}{]+',
+    re.IGNORECASE
+)
+
+
+def _sanitize_error(error: str) -> str:
+    """Remove potential secrets from error strings before logging."""
+    if not error:
+        return error
+    sanitized = _SECRET_PATTERNS.sub(r'\1=<REDACTED>', error)
+    sanitized = re.sub(r'\b[A-Za-z0-9+/]{40,}={0,2}\b', '<REDACTED_TOKEN>', sanitized)  # base64
+    sanitized = re.sub(r'\b[0-9a-fA-F]{32,}\b', '<REDACTED_HEX>', sanitized)  # hex tokens
+    return sanitized
+
+
+# suffix dedup: prompts have observations at start, stable template at end
+_TEMPLATE_MAX_LENGTH: dict[str, int] = {}
+_TEMPLATE_LOCK = threading.Lock()  # guards _TEMPLATE_MAX_LENGTH and _WEAVE_ECHO_OP
+_TEMPLATE_MAX_ENTRIES = 1000
+SUFFIX_CHARS = 200
+
+
+def _get_template_key(prompt: str, model: str = "unknown") -> str:
+    """Hash model + suffix of prompt for deduplication."""
+    text = prompt or ""
+    suffix = text[-SUFFIX_CHARS:] if len(text) > SUFFIX_CHARS else text
+    raw_key = f"{model}::{suffix}"
+    return hashlib.sha256(raw_key.encode()).hexdigest()[:16]
+
+
+def _should_trace_to_weave(payload: dict) -> tuple[bool, str, int]:
+    """Returns (should_trace, template_key, prompt_len). Caller holds lock for dedup."""
+    # always trace errors/retries (bypass dedup)
+    if payload.get("is_retry") or payload.get("retrying_after_parse_fail") or payload.get("error"):
+        return True, "", 0
+
+    prompt = payload.get("prompt") or ""
+    model = str(payload.get("model") or "unknown")
+    template_key = _get_template_key(prompt, model)
+    prompt_len = len(prompt)
+
+    return True, template_key, prompt_len  # caller decides with lock held
+
+
 def _weave_log_payload(payload: dict) -> None:
+    """Log LLM call to Weave if it passes dedup filter."""
     global _WEAVE_ECHO_OP
     if weave is None:
         return
+
+    should_trace, template_key, prompt_len = _should_trace_to_weave(payload)
+    if not should_trace:
+        return
+
+    if template_key:
+        with _TEMPLATE_LOCK:
+            max_seen = _TEMPLATE_MAX_LENGTH.get(template_key, 0)
+            if prompt_len <= max_seen:
+                return  # shorter than what we already traced
+            # FIFO eviction
+            while len(_TEMPLATE_MAX_LENGTH) >= _TEMPLATE_MAX_ENTRIES:
+                oldest = next(iter(_TEMPLATE_MAX_LENGTH))
+                del _TEMPLATE_MAX_LENGTH[oldest]
+            _TEMPLATE_MAX_LENGTH[template_key] = prompt_len
+
     try:
-        if _WEAVE_ECHO_OP is None:
-            def _echo(x):
-                return x
-            _WEAVE_ECHO_OP = weave.op(_echo)
-        _WEAVE_ECHO_OP(payload)
-    except Exception:
-        pass
+        with _TEMPLATE_LOCK:
+            if _WEAVE_ECHO_OP is None:
+                def _llm_call(x):
+                    return x
+                _WEAVE_ECHO_OP = weave.op(name="llm_call")(_llm_call)
+            local_op = _WEAVE_ECHO_OP
+
+        payload = payload.copy()
+        if template_key:
+            payload["template_key"] = template_key
+
+        local_op(payload)
+    except Exception as e:
+        logger.debug(f"Weave tracing failed: {e}")
+
+
+def _build_weave_payload(
+    weave_context: Optional[dict],
+    args: tuple,
+    kwargs: dict,
+    latency_ms: float,
+    result=None,
+    error: Optional[str] = None,
+) -> dict:
+    """Build payload for Weave logging. Shared by success and error paths."""
+    payload = dict(weave_context or {})
+
+    # model (from context or kwargs); ensure non-empty for downstream summary code
+    if "model" not in payload or payload.get("model") in (None, ""):
+        payload["model"] = kwargs.get("model") or "unknown"
+
+    # prompt (from context, kwargs, or positional args)
+    prompt = payload.get("prompt")
+    if prompt is None:
+        if "messages" in kwargs:
+            prompt = messages_to_input_text(kwargs.get("messages") or [])
+        elif "input" in kwargs:
+            prompt = kwargs.get("input")
+        elif args:
+            prompt = args[0]
+    payload["prompt"] = prompt
+
+    # output and usage (success only)
+    if error:
+        payload["error"] = _sanitize_error(error)
+        payload["output"] = None
+    else:
+        payload["output"] = extract_text(result)
+        usage = _extract_usage_dict(result)
+        # Weave expects a mapping for usage; avoid None to prevent summary errors.
+        payload["usage"] = usage if usage is not None else {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "reasoning_tokens": 0,
+        }
+
+    # metadata
+    payload.setdefault("latency_ms", round(latency_ms, 1))
+    if kwargs.get("custom_llm_provider") and "provider" not in payload:
+        payload["provider"] = kwargs["custom_llm_provider"]
+    if kwargs.get("api_base") and "is_custom_endpoint" not in payload:
+        payload["is_custom_endpoint"] = True
+
+    return payload
 
 
 def _maybe_weave_op(fn, weave_context: Optional[dict] = None):
-    # conditionally wrap a function with weave.op for tracing.
-    # we log a sanitized payload (prompt + text + usage), not raw responses.
-
+    """Wrap function with Weave tracing. Logs sanitized payload on success or error."""
     if weave is None:
         return fn
     project = os.environ.get("WEAVE_PROJECT") or os.environ.get("WANDB_PROJECT")
@@ -235,30 +312,34 @@ def _maybe_weave_op(fn, weave_context: Optional[dict] = None):
         return fn
 
     def wrapped(*args, **kwargs):
-        result = fn(*args, **kwargs)
+        start_time = time.perf_counter()
         try:
-            payload = dict(weave_context or {})
-            if "model" not in payload:
-                payload["model"] = kwargs.get("model")
-            prompt = payload.get("prompt")
-            if prompt is None:
-                if "messages" in kwargs:
-                    prompt = messages_to_input_text(kwargs.get("messages") or [])
-                elif "input" in kwargs:
-                    prompt = kwargs.get("input")
-                elif args:
-                    prompt = args[0]
-            payload["prompt"] = prompt
-            payload["output"] = extract_text(result)
-            payload["usage"] = _extract_usage_dict(result)
+            result = fn(*args, **kwargs)
+        except Exception as e:
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            try:
+                payload = _build_weave_payload(weave_context, args, kwargs, latency_ms, error=str(e))
+                _weave_log_payload(payload)
+            except Exception:
+                pass  # don't mask the original error
+            raise
+        # success
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        try:
+            payload = _build_weave_payload(weave_context, args, kwargs, latency_ms, result=result)
             _weave_log_payload(payload)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Weave payload logging failed: {e}")
         return result
 
     return wrapped
 
-class LMExperimenter:
+class LMExperimenter(UsageTrackerMixin):
+    """LLM-powered experimenter agent for BoxingGym environments.
+
+    Inherits from UsageTrackerMixin for token/cost/latency tracking.
+    """
+
     def __init__(
         self,
         model_name,
@@ -269,6 +350,7 @@ class LMExperimenter:
         enable_thinking: bool = False,
         allow_truncation: bool = False,
         custom_llm_provider: Optional[str] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
     ):
         self.model_name = model_name
         self.temperature = float(temperature)
@@ -280,11 +362,10 @@ class LMExperimenter:
         self.enable_thinking = enable_thinking  # ex: DeepSeek V3.2 thinking via extra_body
         self.allow_truncation = allow_truncation
         self.custom_llm_provider = custom_llm_provider  # custom endpoints (GLM, MiniMax, Kimi)
+        self.extra_headers = extra_headers  # Kimi requires User-Agent header
         self.system = None
         self.messages = []
         self.all_messages = []
-        # track reasoning_content for thinking models.
-        self._last_reasoning_content = None
         # offline mode for smoke tests
         self.fake_mode = self._fake_mode_enabled()
         # LiteLLM global flags.
@@ -292,18 +373,14 @@ class LMExperimenter:
         litellm.modify_params = True  # param conversion for custom endpoints
         litellm.set_verbose = False
 
-        # tracking for W&B metrics.
-        self._usage_stats = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "reasoning_tokens": 0,
-            "total_tokens": 0,
-            "total_cost_usd": 0.0,
-            "call_count": 0,
-            "latencies_ms": [],
-            "retry_count": 0,
-            "error_count": 0,
-        }
+        # usage tracking via mixin
+        self._init_usage_tracking()
+
+        # per-call history for WandB logging (independent of Weave)
+        self._call_history: List[Dict] = []
+        # optional disk-backed recorder for crash resilience
+        self._call_recorder: Optional[CallRecorder] = None
+        self._agent_name: str = "unknown"  # set via set_call_recorder()
 
     def set_system_message(self, message):
         self.all_messages.append(f"role:system, message:{message}")
@@ -322,16 +399,58 @@ class LMExperimenter:
             }
         )
 
-    def prompt_llm(self, request_prompt):
+    def prompt_llm(self, request_prompt, _weave_context: Optional[dict] = None):
         # Add user message and call LiteLLM.
         self.add_message(request_prompt)
         if self.fake_mode:
+            call_start = time.time()
             fake_response = self._fake_response(request_prompt)
-            self._last_reasoning_content = None
+            call_end = time.time()
             self._add_assistant_message(fake_response, None)
+
+            # record fake calls for consistency in smoke tests
+            call_uuid = uuid.uuid4().hex
+            call_record = {
+                "call_idx": len(self._call_history),
+                "call_uuid": call_uuid,
+                "timestamp": call_end,
+                "model": self.model_name,
+                "prompt": request_prompt[:10000] if request_prompt else "",
+                "response": fake_response[:10000] if fake_response else "",
+                "latency_ms": round((call_end - call_start) * 1000, 1),
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "reasoning_tokens": 0,
+                "cost_usd": 0.0,
+                "has_reasoning": False,
+            }
+            self._call_history.append(call_record)
+
+            if self._call_recorder is not None:
+                disk_record = dict(call_record)
+                disk_record["agent"] = self._agent_name
+                disk_record["call_type"] = "fake"
+                disk_record["prompt"] = request_prompt or ""
+                disk_record["response"] = fake_response or ""
+                self._call_recorder.record_dict(disk_record)
+
+            # record usage for consistency with real LLM path
+            self._record_usage(
+                prompt_tokens=0,
+                completion_tokens=0,
+                reasoning_tokens=0,
+                cost_usd=0.0,
+                latency_ms=round((call_end - call_start) * 1000, 1),
+            )
+
             return fake_response
         base = self.api_base or os.environ.get("LITELLM_API_BASE") or os.environ.get("OPENAI_API_BASE")
         key = self.api_key or os.environ.get("LITELLM_API_KEY") or os.environ.get("OPENAI_API_KEY")
+
+        # ensure model is in weave context for both responses and completion paths
+        if _weave_context is None:
+            _weave_context = {}
+        _weave_context.setdefault("model", self.model_name)
 
         call_start = time.time()
 
@@ -364,7 +483,7 @@ class LMExperimenter:
                     # some Responses-only models reject temperature; drop it to avoid 400s
                 )
 
-            resp = _maybe_weave_op(_responses_call)(input_text)
+            resp = _maybe_weave_op(_responses_call, _weave_context)(input_text)
         else:
             call_params = {
                 "model": self.model_name,
@@ -377,17 +496,20 @@ class LMExperimenter:
             # provider overrides if supplied (or via env for local MLX/vLLM)
             if base:
                 call_params["api_base"] = base
-            # don't pass api_key for bedrock models using bearer token auth (LiteLLM must fall back to AWS_BEARER_TOKEN_BEDROCK)
+            # determine bedrock bearer token auth mode (api_key injected only at call time to prevent leaks)
             is_bedrock_bearer = (
                 self.model_name.startswith("bedrock/") and
                 bool(os.getenv("AWS_BEARER_TOKEN_BEDROCK")) and
                 not bool(os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"))
             )
-            if key and not is_bedrock_bearer:
-                call_params["api_key"] = key
+            # NOTE: api_key is NOT added to call_params here to prevent leakage via exception traces
+            # It's injected at call time inside _completion_call()
             # custom LLM provider for non-native endpoints (GLM, MiniMax, Kimi)
             if self.custom_llm_provider:
                 call_params["custom_llm_provider"] = self.custom_llm_provider
+            # extra headers (Kimi requires User-Agent identifying coding agent)
+            if self.extra_headers:
+                call_params["extra_headers"] = self.extra_headers
             # thinking mode support via extra_body (DeepSeek V3.2, Kimi K2)
             should_enable_thinking = (
                 self.enable_thinking or
@@ -411,21 +533,18 @@ class LMExperimenter:
                 if region:
                     call_params["aws_region_name"] = region
 
-            # safe params dict for tracing (avoid logging secrets)
-            call_params_safe = dict(call_params)
-            if "api_key" in call_params_safe:
-                call_params_safe["api_key"] = "<redacted>"
+            # call_params is already safe (no api_key) - use directly for tracing
 
-            def _completion_call(**params_safe):
-                params = dict(params_safe)
-                # re-inject real secrets before calling LiteLLM.
+            def _completion_call(**params):
+                # inject secrets only at call time to prevent leakage via exception traces
+                call_kwargs = dict(params)
                 if key and not is_bedrock_bearer:
-                    params["api_key"] = key
+                    call_kwargs["api_key"] = key
                 if base:
-                    params["api_base"] = base
-                return litellm.completion(**params)
+                    call_kwargs["api_base"] = base
+                return litellm.completion(**call_kwargs)
 
-            resp = _maybe_weave_op(_completion_call)(**call_params_safe)
+            resp = _maybe_weave_op(_completion_call, _weave_context)(**call_params)
 
         content = None
         reasoning_content = None
@@ -447,8 +566,8 @@ class LMExperimenter:
                                     break
                     if content:
                         break
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Responses API parsing fallback: {e}")
 
         if content is None:
             try:
@@ -457,21 +576,18 @@ class LMExperimenter:
                 reasoning_content = getattr(msg, "reasoning_content", None)
                 if reasoning_content is None and hasattr(msg, "__dict__"):
                     reasoning_content = msg.__dict__.get("reasoning_content")
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Standard message parsing failed, trying dict access: {e}")
                 try:
                     content = resp["choices"][0]["message"]["content"]
                     reasoning_content = resp["choices"][0]["message"].get("reasoning_content")
-                except Exception:
+                except Exception as e2:
+                    logger.debug(f"Dict access also failed, using empty content: {e2}")
                     content = ""
-
-        # store reasoning_content for multi-turn conversations.
-        self._last_reasoning_content = reasoning_content
 
         # usage metrics
         call_end = time.time()
         latency_ms = (call_end - call_start) * 1000
-        self._usage_stats["latencies_ms"].append(latency_ms)
-        self._usage_stats["call_count"] += 1
 
         # token usage from response
         usage = getattr(resp, "usage", None)
@@ -480,27 +596,86 @@ class LMExperimenter:
         if usage is None and isinstance(resp, dict):
             usage = resp.get("usage")
 
+        prompt_tokens = 0
+        completion_tokens = 0
+        reasoning_tokens = 0
+        cost = 0.0
+
         if usage:
-            prompt_tokens = getattr(usage, "prompt_tokens", 0) or (usage.get("prompt_tokens", 0) if isinstance(usage, dict) else 0)
-            completion_tokens = getattr(usage, "completion_tokens", 0) or (usage.get("completion_tokens", 0) if isinstance(usage, dict) else 0)
-            reasoning_tokens = getattr(usage, "reasoning_tokens", 0) or (usage.get("reasoning_tokens", 0) if isinstance(usage, dict) else 0)
+            # normalize token fields (OpenAI uses prompt/completion, Responses API uses input/output)
+            if hasattr(usage, "prompt_tokens"):
+                prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+                completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+                reasoning_tokens = getattr(usage, "reasoning_tokens", 0) or 0
+            elif hasattr(usage, "input_tokens"):
+                prompt_tokens = getattr(usage, "input_tokens", 0) or 0
+                completion_tokens = getattr(usage, "output_tokens", 0) or 0
+                reasoning_tokens = getattr(usage, "reasoning_tokens", 0) or 0
+            elif isinstance(usage, dict):
+                if "prompt_tokens" in usage or "completion_tokens" in usage:
+                    prompt_tokens = usage.get("prompt_tokens", 0) or 0
+                    completion_tokens = usage.get("completion_tokens", 0) or 0
+                    reasoning_tokens = usage.get("reasoning_tokens", 0) or 0
+                elif "input_tokens" in usage or "output_tokens" in usage:
+                    prompt_tokens = usage.get("input_tokens", 0) or 0
+                    completion_tokens = usage.get("output_tokens", 0) or 0
+                    reasoning_tokens = usage.get("reasoning_tokens", 0) or 0
 
-            self._usage_stats["prompt_tokens"] += prompt_tokens
-            self._usage_stats["completion_tokens"] += completion_tokens
-            self._usage_stats["reasoning_tokens"] += reasoning_tokens
-            # include reasoning_tokens in total (separate from completion_tokens)
-            self._usage_stats["total_tokens"] += prompt_tokens + completion_tokens + reasoning_tokens
-
-            # cost using LiteLLM's built-in cost tracking.
+            # cost using LiteLLM's built-in cost tracking
             try:
-                cost = litellm.completion_cost(completion_response=resp)
-                if cost:
-                    self._usage_stats["total_cost_usd"] += cost
-            except Exception:
-                pass
+                cost = litellm.completion_cost(completion_response=resp) or 0.0
+            except Exception as e:
+                logger.debug(f"LiteLLM cost calculation failed, using fallback: {e}")
+
+            # fallback to unified pricing registry if LiteLLM didn't return cost
+            if not cost:
+                pricing = MODEL_REGISTRY.get(self.model_name)
+                if pricing and (prompt_tokens or completion_tokens or reasoning_tokens):
+                    cost = (
+                        prompt_tokens * pricing.get("input_cost_per_token", 0) +
+                        (completion_tokens + reasoning_tokens) * pricing.get("output_cost_per_token", 0)
+                    )
+
+        # record usage via mixin helper
+        self._record_usage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            reasoning_tokens=reasoning_tokens,
+            cost_usd=cost,
+            latency_ms=latency_ms,
+        )
 
         # some reasoning models return the answer in reasoning_content.
         full_response = content or reasoning_content or ""
+
+        # record call in history for WandB logging (independent of Weave)
+        call_uuid = uuid.uuid4().hex
+        call_record = {
+            "call_idx": len(self._call_history),
+            "call_uuid": call_uuid,
+            "timestamp": call_end,
+            "model": self.model_name,
+            "prompt": request_prompt[:10000] if request_prompt else "",  # truncate for storage
+            "response": full_response[:10000] if full_response else "",  # truncate for storage
+            "latency_ms": round(latency_ms, 1),
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "reasoning_tokens": reasoning_tokens,
+            "cost_usd": cost or 0.0,
+            "has_reasoning": bool(reasoning_content),
+        }
+        self._call_history.append(call_record)
+
+        # immediately write to disk for crash resilience
+        if self._call_recorder is not None:
+            disk_record = dict(call_record)
+            disk_record["agent"] = self._agent_name
+            disk_record["call_type"] = "chat"
+            # use full text for disk (not truncated like in-memory)
+            disk_record["prompt"] = request_prompt or ""
+            disk_record["response"] = full_response or ""
+            self._call_recorder.record_dict(disk_record)
+
         self._add_assistant_message(full_response, reasoning_content)
         return full_response
 
@@ -579,11 +754,8 @@ class LMExperimenter:
         return "0.5"
 
     def parse_response(self, response, is_observation):
-        if is_observation:
-            pattern = r'<observe>(.*?)</observe>'   
-        else:
-            pattern = r'<answer>(.*?)</answer>'
-        match = re.search(pattern, response, re.DOTALL)
+        regex = _OBSERVE_RE if is_observation else _ANSWER_RE
+        match = regex.search(response)
         if match:
             return match.group(1).strip()
         else:
@@ -608,19 +780,22 @@ class LMExperimenter:
         
     def prompt_llm_and_parse(self, request_prompt, is_observation, max_tries=4):
         used_retries = 0
+        retrying_after_parse_fail = False
         for i in range(max_tries):
-            full_response = self.prompt_llm(request_prompt)
-            # print(full_response)
+            weave_ctx = {"is_retry": i > 0, "retrying_after_parse_fail": retrying_after_parse_fail, "attempt": i + 1}
+            full_response = self.prompt_llm(request_prompt, _weave_context=weave_ctx)
             # use robust tag parsing (v2) with fallback to legacy regex.
             response = self.parse_response_v2(full_response, is_observation)
-            # print(f"parsed response: {response}")
             if response is not None:
-                # check if response has numbers
-                numbers = re.findall(r'[0-9]+', response)
-                if len(numbers) == 0:
+                # check if response has numbers (digits or common word-form numbers)
+                # relaxed pattern: digits, decimals, or word numbers like "zero", "one", "half"
+                has_digits = bool(_HAS_DIGIT_RE.search(response))
+                has_word_numbers = bool(_WORD_NUMBERS_RE.search(response))
+                if not has_digits and not has_word_numbers:
                     response = None
             if response is None or ("done" in str(response).lower()):
                 # structured feedback about what went wrong, then retry
+                retrying_after_parse_fail = True
                 diag = self._diagnose_parse_failure_v2(full_response, is_observation)
                 if is_observation:
                     request_prompt = (
@@ -640,16 +815,10 @@ class LMExperimenter:
             else:
                 break
         # track retries (extra attempts beyond the first) for W&B usage stats
-        try:
-            if used_retries > 0:
-                self._usage_stats["retry_count"] += used_retries
-        except Exception:
-            pass
+        if used_retries > 0:
+            self._record_retry(used_retries)
         if used_retries == max_tries:
-            try:
-                self._usage_stats["error_count"] += 1
-            except Exception:
-                pass
+            self._record_error()
             raise ValueError("Failed to get valid response after retries")
         return response, used_retries
     
@@ -657,8 +826,6 @@ class LMExperimenter:
         request_prompt += "\nAnswer in the following format:\n<answer>your answer</answer>."
         prediction, used_retries = self.prompt_llm_and_parse(request_prompt, False)
         self.messages = self.messages[:-2 * (used_retries+1)]  # Remove the last 2 messages
-        # reset stale reasoning_content after truncation.
-        self._last_reasoning_content = None
         return prediction
     
     def generate_actions(self, experiment_results=None):
@@ -678,38 +845,38 @@ class LMExperimenter:
                 print("Content:", getattr(entry, "content", entry))
             print("------")
 
-    def get_usage_stats(self) -> dict:
-        """Return accumulated usage stats for W&B logging."""
-        stats = dict(self._usage_stats)
-        latencies = stats.pop("latencies_ms", [])
+    # get_usage_stats(), get_latencies_ms(), reset_usage_stats() inherited from UsageTrackerMixin
 
-        if latencies:
-            latencies_sorted = sorted(latencies)
-            n = len(latencies_sorted)
-            stats["latency_mean_ms"] = sum(latencies) / n
-            stats["latency_p50_ms"] = latencies_sorted[n // 2]
-            stats["latency_p95_ms"] = latencies_sorted[int(n * 0.95)] if n >= 20 else latencies_sorted[-1]
-            stats["latency_min_ms"] = latencies_sorted[0]
-            stats["latency_max_ms"] = latencies_sorted[-1]
-        else:
-            stats["latency_mean_ms"] = 0.0
-            stats["latency_p50_ms"] = 0.0
-            stats["latency_p95_ms"] = 0.0
-            stats["latency_min_ms"] = 0.0
-            stats["latency_max_ms"] = 0.0
+    def get_call_history(self) -> List[Dict]:
+        """Return per-call history for WandB logging (independent of Weave)."""
+        return list(self._call_history)
 
-        return stats
+    def clone_for_eval(self, share_call_recorder: bool = True) -> "LMExperimenter":
+        """Create a thread-safe clone for evaluation.
 
-    def reset_usage_stats(self):
-        """Reset usage statistics (useful between budget evaluations)."""
-        self._usage_stats = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "reasoning_tokens": 0,
-            "total_tokens": 0,
-            "total_cost_usd": 0.0,
-            "call_count": 0,
-            "latencies_ms": [],
-            "retry_count": 0,
-            "error_count": 0,
-        }
+        Copies prompt context while isolating mutable message state.
+        """
+        clone = LMExperimenter(
+            model_name=self.model_name,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            api_base=self.api_base,
+            api_key=self.api_key,
+            enable_thinking=self.enable_thinking,
+            allow_truncation=self.allow_truncation,
+            custom_llm_provider=self.custom_llm_provider,
+            extra_headers=self.extra_headers,
+        )
+        clone.system = self.system
+        # deep copy required: messages have nested content lists that must be isolated
+        clone.messages = copy.deepcopy(self.messages)
+        clone.all_messages = list(self.all_messages)
+        clone.fake_mode = self.fake_mode
+        if share_call_recorder and self._call_recorder is not None:
+            clone.set_call_recorder(self._call_recorder, agent_name=self._agent_name)
+        return clone
+
+    def set_call_recorder(self, recorder: CallRecorder, agent_name: str = "scientist") -> None:
+        """Attach a disk-backed call recorder for crash-resilient logging."""
+        self._call_recorder = recorder
+        self._agent_name = agent_name

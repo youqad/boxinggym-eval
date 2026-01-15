@@ -2,8 +2,12 @@ defaults:
   - _self_
   - llms: gpt-4o
   - exp: discovery
-  - envs: hyperbolic_direct_discovery
+  - envs: hyperbolic_direct_naive
 
-seed: 1  # Seed value for reproducibility
+seed: 1  # Single-seed fallback (used if seeds is null)
+# Multi-seed mode: run all seeds in one WandB run, aggregate results
+# In sweep YAML, use: seeds: { value: [1, 2, 3, 4, 5] } (NOT values:)
+seeds: [1, 2, 3, 4, 5]
 include_prior: true
 use_ppl: true
+check_eig: false  # Enable EIG computation (set true for OED experiments)
