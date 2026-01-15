@@ -1,528 +1,221 @@
-<h1 align="center">🥊 BoxingGym 🥊</h1>
-<h3 align="center"> Kanishk Gandhi*, Michael Y. Li*, Lyle Goodyear, Agam Bhatia,<br> Louise Li, Aditi Bhaskar, Mohammed Zaman, Noah D. Goodman </h3>
-<h3 align="center"> Stanford University </h3>
-  
-<p align="center">
-  <img src="https://img.shields.io/badge/Version-0.1.0-blue" alt="Version">
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
-  <a href="https://arxiv.org/abs/2501.01540" target="_blank" rel="noopener noreferrer">
-    <img src="https://img.shields.io/badge/arXiv-2501.01540-b31b1b.svg" alt="arXiv">
-  </a>
-</p>
+# 🥊 BoxingGym: Multi-Model Evaluation & Analysis
 
 <p align="center">
-  <em>“To understand a system, you must perturb it.”</em><br>
-  – George Box
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-3670A0?style=flat-square&logo=python&logoColor=ffdd54" alt="Python 3.11+"></a>&nbsp;
+  <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/badge/uv-enabled-blue?style=flat-square" alt="uv"></a>&nbsp;
+  <a href="https://wandb.ai/site"><img src="https://img.shields.io/badge/W%26B-000000?style=flat-square&logo=weightsandbiases&logoColor=white" alt="Weights & Biases"></a>&nbsp;
+  <a href="https://streamlit.io"><img src="https://img.shields.io/badge/Streamlit-FF4B4B?style=flat-square&logo=streamlit&logoColor=white" alt="Streamlit"></a>&nbsp;
+  <a href="https://www.pymc.io/"><img src="https://img.shields.io/badge/PyMC-3498DB?style=flat-square" alt="PyMC"></a>&nbsp;
+  <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/LiteLLM-enabled-blueviolet?style=flat-square" alt="LiteLLM"></a>&nbsp;
+  <a href="https://arxiv.org/abs/2501.01540"><img src="https://img.shields.io/badge/arXiv-2501.01540-b31b1b.svg?style=flat-square" alt="arXiv"></a>
 </p>
 
-
-<p align="justify">
-BoxingGym is a benchmarking framework designed to evaluate the capabilities of language-based agents in experimental design and model discovery. The framework consists of several simulated environments where agents can perform experiments, propose models, and refine them based on collected data.
+<p align="center">
+  <em>Fork of <a href="https://github.com/kanishkg/boxing-gym">Stanford's BoxingGym</a> with multi-model evaluation and comprehensive dashboards</em>
 </p>
-
-
-
-## 📚 Table of Contents
-- [Key Features](#key-features)
-- [Installation](#installation)
-- [Available Environments](#available-environments)
-- [Environment Implementation Example](#environment-implementation-example)
-- [Agent Evaluation Process](#agent-evaluation-process)
-- [Metrics and Evaluation](#metrics-and-evaluation)
-- [Running Experiments](#running-experiments)
-- [Configuration System](#configuration-system)
-- [Analysis Tools](#analysis-tools)
-- [Benchmark Dashboard](#benchmark-dashboard)
-- [Contributing](#contributing)
-- [Quick Reference](#quick-reference)
-
-## Key Features
-
-- **10+ Diverse Environments**: From physical systems (Lotka-Volterra predator-prey) to psychological models (temporal discounting)
-- **Multiple Goal Types**: Direct prediction, parameter estimation, and system identification
-- **Box's Loop Integration**: Automated statistical model building using PyMC
-- **EIG-based Evaluation**: Quantitative assessment of experimental design quality
-- **Flexible Agent Interface**: Support for any LLM-based agent
-- **Comprehensive Metrics**: Accuracy, MSE, EIG regret, and more
-
-## Installation
-
-### UV quick start
-
-```bash
-git clone https://github.com/kanishkg/boxing-gym.git
-cd boxing-gym
-
-# Create a venv and install exact pins from requirements.txt
-uv venv .venv
-uv pip sync --python .venv/bin/python -r requirements.txt
-uv pip install --python .venv/bin/python -e .
-
-# Quick sanity check
-uv run python -c "import boxing_gym; print('boxing_gym import OK')"
-```
-
-Use `uv run` for most scripts:
-
-```bash
-# Aggregate and plot results
-make aggregate plot
-
-# Or run scripts directly
-uv run python run_experiment.py --help
-uv run python run_experiment.py --env hyperbolic_direct --exp oed --llm gpt-4o
-uv run python run_experiment.py seed=1 exp=oed envs=hyperbolic_direct  # Hydra override style
-```
-
-Python 3.11 is required. PyMC is pinned in `requirements.txt`. Set API keys for the LLM backends you use.
 
 ---
 
-If you want the old pip flow, it's below.
+## What's New in This Fork
+
+This fork extends Stanford's BoxingGym benchmark with production-ready tooling for large-scale LLM evaluation:
+
+- **7 LLM Providers**: DeepSeek, MiniMax-M2.1, GLM-4.7, Kimi-K2, GPT-4o, GPT-5.1-Codex-mini, Qwen3-32B
+- **Comprehensive Dashboards**: TUI + Streamlit with 5 analysis views (model rankings, parameter importance, heatmaps, budget progression, PPL diagnostics)
+- **WandB Sweep Orchestration**: Distributed sweep management with parallel agents
+- **Usage Tracking**: Real-time cost estimation and token counting per model
+- **Test Suite**: 393 tests covering experiment loop, agents, and evaluation
+- **Analysis Utilities**: 12 scripts for sweep analysis, outlier detection, and result aggregation
+- **Migrated to `uv`**: Modern Python dependency management (from pip/requirements.txt)
+- **1,554 Sweep Runs**: Completed experiments across 10 environments with 7 models
+
+---
+
+## 🎯 Evaluation Results
+
+> **1,554 valid runs** (budget ≥ 10, |z| < 100) across **7 models** and **10 environments**
+
+### Overall Model Rankings
+
+Mean z-score across all environments (lower is better):
+
+| Rank | Model | Mean z | Std | Runs |
+|------|-------|--------|-----|------|
+| 1 | **MiniMax-M2.1** | **+0.062** | **0.54** | 236 |
+| 2 | DeepSeek | +0.080 | 0.73 | 302 |
+| 3 | Kimi-for-coding | +0.176 | 0.84 | 205 |
+| 4 | GLM-4.7 | +0.212 | 1.02 | 236 |
+| 5 | GPT-4o | +0.257 | 1.28 | 230 |
+| 6 | GPT-5.1-Codex-mini | +0.260 | 1.00 | 249 |
+| 7 | Qwen3-32B | +0.311 | 0.82 | 96 |
+
+### Per-Environment Champions
+
+Best mean performance per environment (lower z-score = better):
+
+| Environment | Description | Best Model | Mean z |
+|-------------|-------------|------------|--------|
+| **death_process** | Disease spread modeling in populations | GPT-5.1-Codex-mini | **-0.629** ✓ |
+| **hyperbolic_temporal_discount** | Human decision-making between immediate/delayed rewards | DeepSeek | **-0.438** ✓ |
+| **lotka_volterra** | Predator-prey population dynamics | DeepSeek | -0.297 ✓ |
+| **peregrines** | Falcon population dynamics over time | DeepSeek | -0.140 ✓ |
+| **morals** | Ethical decision-making in autonomous vehicles | GPT-5.1-Codex-mini | -0.140 ✓ |
+| **irt** | Student-question performance modeling (Item Response Theory) | GPT-5.1-Codex-mini | -0.050 ✓ |
+| **dugongs** | Sea cow growth modeling (age vs length) | Qwen3-32B | -0.035 ✓ |
+| **location_finding** | Signal source localization in n-dimensional space | MiniMax-M2.1 | +0.211 |
+| **survival** | Breast cancer patient survival prediction | GLM-4.7 | +0.415 |
+| **emotion** | Emotion prediction from gambling outcomes | Qwen3-32B | +1.286 |
+
+✓ = Beats baseline (negative z-score)
+
+### Key Insights
+
+1. **Overall Champion: MiniMax-M2.1**
+   - Lowest mean z-score (+0.062) across all environments
+   - Tightest variance (Std=0.54) → most consistent performance
+   - Strong on location_finding, morals, dugongs
+
+2. **Environment Specialist: DeepSeek**
+   - Dominates 3 environments by mean: hyperbolic (-0.438), lotka_volterra (-0.297), peregrines (-0.140)
+   - Second-best overall (+0.080 mean z)
+   - 302 runs (most data)
+
+3. **Complex Tasks: GPT-5.1-Codex-mini**
+   - Best on death_process (-0.629), morals (-0.140), irt (-0.050)
+   - Strong on structured causal reasoning
+
+4. **Challenging Environments**
+   - **emotion** (+1.286 best score): Hardest for all models
+   - **survival** (+0.415 best score): Above-baseline performance still difficult
+
+5. **PPL Impact**
+   - OED without PPL wins **6/7** comparisons vs OED with PPL
+   - **Hypothesis**: LLMs may implicitly perform Bayesian updating, making explicit probabilistic programs redundant
+
+6. **Environment Sensitivity**
+   - LLM choice matters **10x more** on hyperbolic (importance: 1.82) vs survival (0.18)
+   - Some tasks are model-agnostic, others highly sensitive to model capabilities
+
+See [CLAUDE.md](CLAUDE.md) for full sweep results and analysis.
+
+---
+
+## Quick Start
 
 ```bash
-git clone https://github.com/kanishkg/boxing-gym.git
+git clone https://github.com/youqad/boxing-gym.git
 cd boxing-gym
-pip install -e .
+
+# Install with uv
+uv sync
+uv run python -c "import boxing_gym; print('✓ Import OK')"
+
+# Set API keys
+cp .env.example .env
+# Edit .env with your keys: OPENAI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, etc.
+
+# Run single experiment
+uv run python run_experiment.py seeds=null seed=1 exp=oed envs=hyperbolic_direct llms=gpt-4o
+
+# Run full test suite
+uv run pytest tests/ -v
 ```
 
-Requirements:
-- Python >= 3.11
-- PyMC for probabilistic modeling
-- OpenAI/Anthropic API keys for LLM agents
+**Requirements**: Python 3.11+, API keys for desired LLM providers
 
-## Available Environments
+---
 
-BoxingGym includes the following environments, each with multiple goal configurations:
+## Analysis Dashboards
 
-| Environment | Description | Input Space | Output Space |
-|------------|-------------|-------------|--------------|
-| **Hyperbolic Temporal Discount** | Models human decision-making between immediate and delayed rewards | (immediate_reward, delayed_reward, delay_days) | Binary choice (0/1) |
-| **Location Finding** | Signal source localization in n-dimensional space | n-dimensional coordinates | Signal intensity |
-| **Death Process** | Disease spread modeling in a population | Time | Number of infected |
-| **IRT (Item Response Theory)** | Student-question performance modeling | (student_id, question_id) | Correctness (0/1) |
-| **Survival Analysis** | Breast cancer patient survival prediction | (metastasized, time_since_surgery) | Survival status (0/1) |
-| **Dugongs** | Sea cow growth modeling | Age | Length |
-| **Peregrines** | Falcon population dynamics | Time | Population count |
-| **Lotka-Volterra** | Predator-prey population dynamics | Time | (prey_count, predator_count) |
-| **Moral Machines** | Ethical decision-making in autonomous vehicles | (group1, group2, intervention) | Choice (1/2) |
-| **Emotion** | Emotion prediction from gambling outcomes | (prizes, probabilities, outcome) | Emotion ratings |
-
-## Environment Implementation Example
-
-Let's examine the **Hyperbolic Temporal Discount** environment in detail to understand how environments work:
-
-### 1. Environment Structure
-
-```python
-class TemporalDiscount:
-    def __init__(self, epsilon=0.01, k_mean=-4.25, k_std=0.5, alpha_scale=2):
-        # Parameters define the prior distributions
-        self.epsilon = epsilon  # Noise parameter
-        self.k_mean = k_mean    # Mean of log-normal discount factor
-        self.k_std = k_std      # Std of log-normal discount factor
-        self.alpha_scale = alpha_scale  # Scale for decision noise
-        self.reset()
-        
-    def reset(self):
-        # Sample true parameters from prior
-        log_k = np.random.normal(self.k_mean, self.k_std)
-        k = np.exp(log_k)  # Discount factor
-        alpha = halfnorm.rvs(scale=self.alpha_scale)  # Decision noise
-        self.truth = (k, alpha)
-        self.observed_data = []
-```
-
-### 2. System Dynamics
-
-The environment models how people choose between immediate and delayed rewards:
-
-```python
-def step(self, iR, dR, Days):
-    k, alpha = self.truth
-    
-    # Calculate subjective values
-    V0 = iR  # Value of immediate reward
-    V1 = dR / (1 + k * Days)  # Discounted value of delayed reward
-    
-    # Probabilistic choice using probit model
-    z = (V1 - V0) / alpha
-    probability = self.epsilon + (1 - 2 * self.epsilon) * norm.cdf(z)
-    choice = np.random.binomial(n=1, p=probability)
-    return choice  # 1 = choose delayed, 0 = choose immediate
-```
-
-### 3. Agent Interaction
-
-Agents interact through natural language with optional prior knowledge:
-
-```python
-def generate_system_message(self, include_prior=True, goal=None):
-    if include_prior:
-        # Provide context about human decision-making
-        message = """A person has to choose between a delayed reward dR dollars 
-        in x days and an immediate reward iR dollars today.
-        Your goal is to predict their choices.
-        Make observations by specifying [iR, dR, D]."""
-    else:
-        # Abstract version without context
-        message = """You are observing a binary response for a tuple of three 
-        positive integer values. Make observations by specifying [int1, int2, int3]."""
-    return message
-```
-
-### 4. Goal Types
-
-Each environment supports multiple goals:
-
-- **DirectGoal**: Predict outcomes for new inputs
-- **DiscountGoal**: Estimate the discount factor k
-- **DirectGoalNaive**: Explain findings to another agent
-
-## Agent Evaluation Process
-
-The evaluation process follows these steps:
-
-### 1. Initialization
-```python
-# Create environment and goal
-env = TemporalDiscount()
-goal = DirectGoal(env)
-
-# Initialize agent with system message
-agent = LMExperimenter(model_name="gpt-4o")
-system_message = goal.get_system_message(include_prior=True)
-agent.set_system_message(system_message)
-```
-
-### 2. Experimentation Loop
-```python
-for i in range(num_experiments):
-    # Agent designs experiment
-    observation_request = agent.generate_actions(previous_result)
-    # Example: "[50, 100, 7]" (choose between $50 now or $100 in 7 days)
-    
-    # Environment provides result
-    result, success = env.run_experiment(observation_request)
-    # Result: 1 (person chose to wait)
-    
-    # Store for analysis
-    observations.append((observation_request, result))
-```
-
-### 3. Evaluation Phase
-```python
-# Generate evaluation questions
-for _ in range(num_evals):
-    question, ground_truth = goal.get_goal_eval_question(include_prior)
-    # Example: "What choice for iR=75, dR=100, D=5?"
-    
-    prediction = agent.generate_predictions(question)
-    predictions.append(prediction)
-    ground_truths.append(ground_truth)
-
-# Calculate metrics
-accuracy, std = goal.evaluate_predictions(predictions, ground_truths)
-```
-
-## Metrics and Evaluation
-
-BoxingGym uses several metrics to evaluate agent performance:
-
-### 1. Predictive Error
-
-Predictive error captures how well an agent can forecast the outcome of new, unseen trials after it has finished experimenting.  For every evaluation question we compare the agent’s prediction \(\hat{y}\) with the environment-generated ground-truth \(y\).
-
-• We report **mean-squared-error (MSE)** together with its standard deviation for all environments—binary, count, or continuous.  Lower is better.
-
-A concise reference implementation looks like this:
-
-```python
-import numpy as np
-
-def predictive_error(predictions, ground_truths):
-    preds = np.asarray(predictions, dtype=float)
-    gts = np.asarray(ground_truths, dtype=float)
-
-    mse = np.mean((preds - gts) ** 2)
-    std = np.std((preds - gts) ** 2) / np.sqrt(len(gts))
-    return mse, std
-```
-
-This metric provides a direct measure of how well the agent has learned the underlying input-output relationship, independent of the optimality of its experimental designs.
-
-### 2. Expected Information Gain (EIG)
-
-For OED tasks, we calculate the information gain of each experiment:
-
-```python
-def expected_information_gain(self, query_point, num_outer_samples=1000):
-    # EIG = E_y[KL(p(\theta|y,x) || p([theta]))]
-    # Estimated using nested Monte Carlo
-    
-    # 1. Sample parameters from posterior given existing data
-    posterior_samples = self.get_posterior_samples(existing_data)
-    
-    # 2. For each parameter sample, calculate:
-    eig_samples = []
-    for theta in posterior_samples:
-        # Likelihood of observing y given theta and query x
-        y_sample = self.simulate_outcome(query_point, theta)
-        log_likelihood = self.log_prob(y_sample | theta, query_point)
-        
-        # Marginal likelihood p(y|x)
-        log_marginal = self.estimate_marginal_likelihood(y_sample, query_point)
-        
-        eig_samples.append(log_likelihood - log_marginal)
-    
-    return np.mean(eig_samples)
-```
-
-### 3. EIG Regret
-
-Compares agent's experimental choices to optimal designs:
-
-```python
-# For each agent query
-agent_eig = goal.expected_information_gain(agent_query)
-
-# Find optimal query
-optimal_query = max(random_queries, key=lambda q: goal.expected_information_gain(q))
-optimal_eig = goal.expected_information_gain(optimal_query)
-
-# Regret = missed information
-regret = optimal_eig - agent_eig
-```
-
-### 4. Communication Evaluation (Discovery Setting)
-
-This metric is computed only when `experiment_type="discovery"` – i.e. the *direct_discovery* goal variants.  
-It measures how effectively a *scientist* agent can convey its understanding of the environment to a *naive* agent that is **not allowed to run any experiments**:
-
-1. After finishing its experiments, the scientist receives a prompt from `Goal.get_comm_prompt` (respecting the `com_limit` word budget) and produces a natural-language explanation.
-2. The naive agent is initialized with a system prompt containing `Goal.get_naive_system_message` followed **only** by the scientist's explanation – it does not see the raw data or experiment log.
-3. The naive agent is then evaluated on the standard prediction questions using `evaluate(...)`. Its accuracy (and standard deviation) constitute the communication score.
-
-```python
-# 1. Scientist writes explanation
-prompt = goal.get_comm_prompt(com_limit=200, include_prior=True)
-explanation = scientist.prompt_llm(prompt)
-
-# 2. Build naive agent
-system_msg = goal.get_naive_system_message(include_prior=True) + explanation
-naive_agent.set_system_message(system_msg)
-
-# 3. Evaluate naive agent
-(comm_acc, comm_std), _, _, _ = evaluate(
-    final_results, goal, naive_agent, num_evals, include_prior=True
-)
-```
-
-Higher accuracy indicates clearer, more informative explanations produced by the scientist agent.
-
-## Running Experiments
-
-### CLI
+### TUI (Terminal Interface)
 
 ```bash
-uv run python run_experiment.py \
-    --env hyperbolic_direct \
-    --exp oed \
-    --llm gpt-4o \
-    --seed 1 \
-    --num-experiments 0 5 10 \
-    --num-evals 10 \
-    --include-prior
+# Model rankings with parameter importance
+uv run python scripts/analyze_sweep_results.py --sweep-id <SWEEP_ID> --view model-rankings
+
+# Environment × model heatmap
+uv run python scripts/analyze_sweep_results.py --sweep-id <SWEEP_ID> --view heatmap
+
+# Per-environment analysis
+uv run python scripts/analyze_sweep_results.py --sweep-id <SWEEP_ID> --filter-env hyperbolic_direct
 ```
 
-Help:
+### Streamlit Dashboard
 
 ```bash
-uv run python run_experiment.py --help
-uv run python run_experiment.py --list-envs
-uv run python run_experiment.py --list-exps
-uv run python run_experiment.py --list-llms
+# Launch web dashboard
+uv run python scripts/analyze_sweep_results.py --sweep-id <SWEEP_ID> --web
+
+# Or run directly
+uv run streamlit run scripts/streamlit_app/app.py
 ```
 
-### Basic Experiment
+**5 Analysis Pages**:
+1. **Benchmark Dashboard**: Compare results against paper baselines (GPT-4o, BOX)
+2. **Sweep Analysis**: Parameter importance, model rankings, best configs
+3. **Paper Comparison**: Replicate paper figures with your data overlay
+4. **PPL Examples**: View generated PyMC models with diagnostics (Rhat, ESS, divergences)
+5. **LLM Call Logs**: Cost tracking, latency analysis, token counts
 
-Hydra overrides still work:
-
-```bash
-uv run python run_experiment.py \
-    seed=1 \
-    llms=gpt-4o \
-    include_prior=true \
-    exp=oed \
-    envs=hyperbolic_direct
-```
-
-### Batch Experiments
-
-Use the provided shell scripts:
-
-```bash
-# Run all hyperbolic discount experiments
-bash scripts/hyperbolic.sh
-
-# Run with Box's Loop for model building
-uv run python run_experiment.py \
-    seed=1 \
-    llms=gpt-4o \
-    include_prior=true \
-    exp=oed \
-    envs=hyperbolic_direct \
-    use_ppl=true
-```
-
-### EIG Regret Analysis
-
-```bash
-# First run experiments
-uv run python run_experiment.py ...
-
-# Then calculate EIG regret
-uv run python scripts/run_eig_regret.py \
-    seed=1 \
-    num_random=100 \ # number of samples for the MC estimate
-    box=false
-```
+---
 
 ## Configuration System
 
-BoxingGym uses Hydra for configuration management:
+Hydra-based config with 10 environments, 15+ LLMs, and 3 experiment types:
 
-### Configuration Structure
-```
-conf/
-├── config.yaml          # Main configuration
-├── llms/               # LLM configurations
-│   └── gpt-4o.yaml
-├── exp/                # Experiment types
-│   ├── oed.yaml
-│   └── discovery.yaml
-└── envs/               # Environment configs
-    ├── hyperbolic_direct.yaml
-    └── ...
+```bash
+# Override any config parameter
+uv run python run_experiment.py \
+  envs=hyperbolic_direct \
+  exp=oed \
+  llms=deepseek-v3.2 \
+  seeds=[1,2,3,4,5] \
+  +wandb=true
 ```
 
-### Example Configuration
+**Configs**:
+- Environments: `conf/envs/*.yaml` (10 environments × 2 goal types)
+- LLMs: `conf/llms/*.yaml` (15+ models across 7 providers)
+- Experiments: `conf/exp/{oed,discovery,naive}.yaml`
+- Sweeps: `sweeps/*.yaml` (WandB sweep configs)
 
-`conf/envs/hyperbolic_direct.yaml`:
-```yaml
-num_evals: 10                    # Number of evaluation questions
-env_name: "hyperbolic_temporal_discount"
-goal_name: "direct"             # Goal type
-com_limit: 200                  # Word limit for explanations
-env_params:                     # Environment-specific parameters
-  epsilon: 0.01
-  k_mean: -4.25
-  k_std: 0.5
-  alpha_scale: 2
-```
+---
 
-### Creating Custom Configurations
+## Upstream Documentation
 
-```yaml
-# conf/exp/my_experiment.yaml
-num_experiments: [0, 5, 10, 20]  # Experiment budgets to test
-experiment_type: "oed"
-```
+For the original BoxingGym documentation (environment details, API reference, metrics), see:
 
-## Analysis Tools
+📄 **[README_upstream.md](README_upstream.md)** (Stanford's original README)
 
-### Results Structure
+---
 
-Results are saved as JSON files:
-```
-results/
-└── hyperbolic_temporal_discount/
-    ├── env=hyperbolic_temporal_discount_goal=direct_model=gpt-4o_exp=oed_prior=true_seed=1_YYYYMMDD_HHMMSS-no_wandb.json      # Main results
-    └── regret_env=hyperbolic_temporal_discount_goal=direct_model=gpt-4o_exp=oed_prior=true_seed=1_YYYYMMDD_HHMMSS-no_wandb.json  # EIG analysis
-```
+## Attribution
 
-Filename format:
-`env={env}_goal={goal}_model={model}_exp={experiment_type}_prior={true|false}_seed={seed}_{YYYYMMDD_HHMMSS}-{wandb_run_id|no_wandb}.json`
+This is a fork of **BoxingGym** by Gandhi et al. (Stanford University).
 
-### Result File Contents
+**Original Paper**: [BoxingGym: Benchmarking Progress in Automated Experimental Design and Model Discovery](https://arxiv.org/abs/2501.01540)
+*Kanishk Gandhi, Michael Y. Li, Dorsa Sadigh, Noah D. Goodman (Stanford University)*
 
-```json
-{
-  "config": {...},
-  "data": {
-    "results": [[accuracy, std], ...],
-    "queries": ["[10, 20, 5]", ...],
-    "observations": [1, 0, ...],
-    "successes": [true, true, ...],
-    "eigs": [0.23, 0.18, ...],
-    "programs": ["PyMC model code..."]  // If using Box's Loop
-  },
-  "scientist_messages": [...],
-  "naive_messages": [...]  // For discovery tasks
+**Original Repository**: [github.com/kanishkg/boxing-gym](https://github.com/kanishkg/boxing-gym)
+
+---
+
+## License
+
+MIT (same as upstream)
+
+---
+
+## Citation
+
+If you use this fork in your research, please cite both the original BoxingGym paper and acknowledge this fork:
+
+```bibtex
+@article{gandhi2025boxinggym,
+  title={BoxingGym: Benchmarking Progress in Automated Experimental Design and Model Discovery},
+  author={Gandhi, Kanishk and Li, Michael Y and Sadigh, Dorsa and Goodman, Noah D},
+  journal={arXiv preprint arXiv:2501.01540},
+  year={2025}
 }
 ```
 
-### Analysis Scripts
-
-The `analysis/` directory contains Jupyter notebooks for:
-- Plotting learning curves across number of experiments
-- Comparing agent performance
-- Visualizing EIG Regret
-- Statistical significance testing
-
-Quick checks or plots:
-
-```bash
-uv run python scripts/standardize_discovery.py results/<env>/<file>.json
-make all  # or: make aggregate && make plot
-```
-
-Dashboard: `scripts/bench_dashboard.py` (auto-installs `python-fasthtml` if needed).
-
-## Box's Loop Integration
-
-When `use_ppl=true`, the system uses Box's Loop for automated model building:
-
-1. **Data Collection**: Agent experiments generate dataset
-2. **Model Proposal**: LLM proposes PyMC statistical models
-3. **Model Evaluation**: Models scored using LOO-CV
-4. **Model Criticism**: LLM analyzes discrepancies
-5. **Iteration**: Process repeats with refinements
-
-This provides agents with explicit probabilistic models to guide experimentation.
-
-## Contributing
-
-We welcome contributions! Areas of interest:
-
-- **New Environments**: Implement novel experimental domains
-- **Goal Types**: Design new evaluation objectives  
-- **Agent Strategies**: Develop improved experimental design algorithms
-- **Analysis Tools**: Create visualization and statistical tools
-
-Please follow the environment and goal interfaces described above, and include comprehensive tests and documentation.
-
-If you want to contribute, please follow these steps:
-
-1. Fork the repository.
-2. Create a new branch (`git checkout -b feature-branch`).
-3. Make your changes.
-4. Commit your changes (`git commit -am 'Add new feature'`).
-5. Push to the branch (`git push origin feature-branch`).
-6. Create a new Pull Request.
-7. For major changes, please open an issue first to discuss what you would like to change.
-
-## Quick reference
-
-```bash
-uv run python run_experiment.py --help
-uv run python run_experiment.py --list-envs
-uv run python run_experiment.py --env hyperbolic_direct --exp oed --llm gpt-4o
-BOX_LOOP_LLM="deepseek/deepseek-chat" uv run python run_experiment.py
-```
-
-New env: implement `reset()`/`step()`/`generate_system_message()` in `src/boxing_gym/envs/my_env.py`, add goals, add a `conf/envs/*` file, then register it.
-
-New LLM: drop a `conf/llms/*.yaml` and run with `llms=your_provider`.
-
-Debugging: `agents/model_search.py`, `agents/box_loop_experiment.py`, `agents/tag_parser.py`, `conf/box_loop.yaml`.
