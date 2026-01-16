@@ -17,7 +17,7 @@ from boxing_gym.agents.litellm_utils import (
 )
 from boxing_gym.agents.call_recorder import CallRecorder, get_call_recorder
 from boxing_gym.agents.pricing import MODEL_REGISTRY, get_litellm_pricing_dict
-from boxing_gym.agents.usage_tracker import UsageTrackerMixin
+from boxing_gym.agents.usage_tracker import UsageTrackerMixin, extract_token_usage
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +144,7 @@ _WEAVE_ECHO_OP = None
 
 
 def _extract_usage_dict(resp) -> Optional[dict]:
+    """Extract usage dict from response. Returns None if no usage found."""
     usage = getattr(resp, "usage", None)
     if usage is None and hasattr(resp, "__dict__"):
         usage = resp.__dict__.get("usage")
@@ -151,22 +152,11 @@ def _extract_usage_dict(resp) -> Optional[dict]:
         usage = resp.get("usage")
     if not usage:
         return None
-    try:
-        if hasattr(usage, "prompt_tokens"):
-            return {
-                "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
-                "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
-                "reasoning_tokens": getattr(usage, "reasoning_tokens", 0) or 0,
-            }
-        if isinstance(usage, dict):
-            return {
-                "prompt_tokens": usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0,
-                "completion_tokens": usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0,
-                "reasoning_tokens": usage.get("reasoning_tokens", 0) or 0,
-            }
-    except Exception:
+    tokens = extract_token_usage(usage)
+    # return None if all zeros (preserves original behavior)
+    if not any(tokens.values()):
         return None
-    return None
+    return tokens
 
 
 _SECRET_PATTERNS = re.compile(
@@ -596,31 +586,13 @@ class LMExperimenter(UsageTrackerMixin):
         if usage is None and isinstance(resp, dict):
             usage = resp.get("usage")
 
-        prompt_tokens = 0
-        completion_tokens = 0
-        reasoning_tokens = 0
+        tokens = extract_token_usage(usage)
+        prompt_tokens = tokens["prompt_tokens"]
+        completion_tokens = tokens["completion_tokens"]
+        reasoning_tokens = tokens["reasoning_tokens"]
         cost = 0.0
 
         if usage:
-            # normalize token fields (OpenAI uses prompt/completion, Responses API uses input/output)
-            if hasattr(usage, "prompt_tokens"):
-                prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-                completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-                reasoning_tokens = getattr(usage, "reasoning_tokens", 0) or 0
-            elif hasattr(usage, "input_tokens"):
-                prompt_tokens = getattr(usage, "input_tokens", 0) or 0
-                completion_tokens = getattr(usage, "output_tokens", 0) or 0
-                reasoning_tokens = getattr(usage, "reasoning_tokens", 0) or 0
-            elif isinstance(usage, dict):
-                if "prompt_tokens" in usage or "completion_tokens" in usage:
-                    prompt_tokens = usage.get("prompt_tokens", 0) or 0
-                    completion_tokens = usage.get("completion_tokens", 0) or 0
-                    reasoning_tokens = usage.get("reasoning_tokens", 0) or 0
-                elif "input_tokens" in usage or "output_tokens" in usage:
-                    prompt_tokens = usage.get("input_tokens", 0) or 0
-                    completion_tokens = usage.get("output_tokens", 0) or 0
-                    reasoning_tokens = usage.get("reasoning_tokens", 0) or 0
-
             # cost using LiteLLM's built-in cost tracking
             try:
                 cost = litellm.completion_cost(completion_response=resp) or 0.0

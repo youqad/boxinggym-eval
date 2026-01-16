@@ -4,7 +4,50 @@ Tracks token usage, costs, latencies, and error counts for W&B logging.
 Extracted from LMExperimenter to reduce class complexity.
 """
 
-from typing import Dict, List
+from typing import Any, Dict, List
+
+
+def extract_token_usage(usage: Any) -> Dict[str, int]:
+    """Extract token counts from various API response formats.
+
+    Handles both OpenAI-style (prompt_tokens/completion_tokens) and
+    Anthropic-style (input_tokens/output_tokens) responses. Works with
+    both object attributes and dict formats.
+
+    Args:
+        usage: Usage object from LLM response (can be None, object, or dict)
+
+    Returns:
+        Dict with keys: prompt_tokens, completion_tokens, reasoning_tokens
+        All keys always present (0 for missing) to avoid consumer checks.
+    """
+    result = {"prompt_tokens": 0, "completion_tokens": 0, "reasoning_tokens": 0}
+
+    if usage is None:
+        return result
+
+    # OpenAI-style attributes (prompt_tokens, completion_tokens)
+    if hasattr(usage, "prompt_tokens"):
+        result["prompt_tokens"] = getattr(usage, "prompt_tokens", 0) or 0
+        result["completion_tokens"] = getattr(usage, "completion_tokens", 0) or 0
+        result["reasoning_tokens"] = getattr(usage, "reasoning_tokens", 0) or 0
+    # Anthropic-style attributes (input_tokens, output_tokens)
+    elif hasattr(usage, "input_tokens"):
+        result["prompt_tokens"] = getattr(usage, "input_tokens", 0) or 0
+        result["completion_tokens"] = getattr(usage, "output_tokens", 0) or 0
+        result["reasoning_tokens"] = getattr(usage, "reasoning_tokens", 0) or 0
+    # Dict format
+    elif isinstance(usage, dict):
+        if "prompt_tokens" in usage or "completion_tokens" in usage:
+            result["prompt_tokens"] = usage.get("prompt_tokens", 0) or 0
+            result["completion_tokens"] = usage.get("completion_tokens", 0) or 0
+            result["reasoning_tokens"] = usage.get("reasoning_tokens", 0) or 0
+        elif "input_tokens" in usage or "output_tokens" in usage:
+            result["prompt_tokens"] = usage.get("input_tokens", 0) or 0
+            result["completion_tokens"] = usage.get("output_tokens", 0) or 0
+            result["reasoning_tokens"] = usage.get("reasoning_tokens", 0) or 0
+
+    return result
 
 
 class UsageTrackerMixin:

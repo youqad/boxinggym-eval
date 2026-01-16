@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 
 # import unified pricing from pricing.py (single source of truth)
 from boxing_gym.agents.pricing import MODEL_COST_PER_INPUT, MODEL_COST_PER_OUTPUT
+from boxing_gym.agents.usage_tracker import extract_token_usage
 
 class BaseAgent(ABC):
     """
@@ -42,27 +43,12 @@ class BaseAgent(ABC):
         """
         model_name = getattr(response, "model", None)
         usage = getattr(response, "usage", None)
-
-        input_tokens = 0
-        output_tokens = 0
-
-        # ChatCompletion-style usage
-        if usage is not None:
-            if hasattr(usage, "prompt_tokens"):
-                input_tokens = getattr(usage, "prompt_tokens", 0) or 0
-                output_tokens = getattr(usage, "completion_tokens", 0) or 0
-            # Responses API usage schema
-            elif hasattr(usage, "input_tokens") or hasattr(usage, "output_tokens"):
-                input_tokens = getattr(usage, "input_tokens", 0) or 0
-                output_tokens = getattr(usage, "output_tokens", 0) or 0
-            elif isinstance(usage, dict):
-                input_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0
-                output_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0
+        tokens = extract_token_usage(usage)
 
         # instead of crashing on KeyError, fall back to zero-cost accounting for unknown models
         input_rate = MODEL_COST_PER_INPUT.get(model_name, 0.0)
         output_rate = MODEL_COST_PER_OUTPUT.get(model_name, 0.0)
-        cost = input_rate * input_tokens + output_rate * output_tokens
+        cost = input_rate * tokens["prompt_tokens"] + output_rate * tokens["completion_tokens"]
         return cost
         
     @abstractmethod

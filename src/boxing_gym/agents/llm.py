@@ -1,13 +1,14 @@
 from typing import (
     Any,
     Dict,
-    List, 
+    List,
 )
 
 import asyncio
 import time
 
 from boxing_gym.agents.base_agent import BaseAgent
+from boxing_gym.agents.usage_tracker import extract_token_usage
 
 # TODO: inherit from this class so we can support both stan and gp stuff
 # since the prompts for those are a bit different
@@ -142,30 +143,12 @@ class LLMAgent(BaseAgent):
             usage = response.get("usage")
 
         if usage:
-            prompt_tokens = 0
-            completion_tokens = 0
-            reasoning_tokens = 0
             try:
-                if hasattr(usage, "prompt_tokens"):
-                    prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-                    completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-                    reasoning_tokens = getattr(usage, "reasoning_tokens", 0) or 0
-                elif hasattr(usage, "input_tokens") or hasattr(usage, "output_tokens"):
-                    prompt_tokens = getattr(usage, "input_tokens", 0) or 0
-                    completion_tokens = getattr(usage, "output_tokens", 0) or 0
-                    reasoning_tokens = getattr(usage, "reasoning_tokens", 0) or 0
-                elif isinstance(usage, dict):
-                    prompt_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0
-                    completion_tokens = usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0
-                    reasoning_tokens = usage.get("reasoning_tokens", 0) or 0
-            except Exception:
-                pass
-
-            try:
-                self._usage_stats["prompt_tokens"] += prompt_tokens
-                self._usage_stats["completion_tokens"] += completion_tokens
-                self._usage_stats["reasoning_tokens"] += reasoning_tokens
-                self._usage_stats["total_tokens"] += prompt_tokens + completion_tokens + reasoning_tokens
+                tokens = extract_token_usage(usage)
+                self._usage_stats["prompt_tokens"] += tokens["prompt_tokens"]
+                self._usage_stats["completion_tokens"] += tokens["completion_tokens"]
+                self._usage_stats["reasoning_tokens"] += tokens["reasoning_tokens"]
+                self._usage_stats["total_tokens"] += sum(tokens.values())
             except Exception:
                 pass
 

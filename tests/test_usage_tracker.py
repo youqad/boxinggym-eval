@@ -209,3 +209,66 @@ class TestResetUsageStats:
         tracker._record_usage(prompt_tokens=50)
 
         assert tracker._usage_stats["prompt_tokens"] == 50
+
+
+class TestExtractTokenUsage:
+    """extract_token_usage tests."""
+
+    def test_none_returns_zeros(self):
+        from boxing_gym.agents.usage_tracker import extract_token_usage
+        result = extract_token_usage(None)
+        assert result == {"prompt_tokens": 0, "completion_tokens": 0, "reasoning_tokens": 0}
+
+    def test_openai_style_attrs(self):
+        from boxing_gym.agents.usage_tracker import extract_token_usage
+
+        class Usage:
+            prompt_tokens = 100
+            completion_tokens = 50
+            reasoning_tokens = 25
+
+        result = extract_token_usage(Usage())
+        assert result["prompt_tokens"] == 100
+        assert result["completion_tokens"] == 50
+        assert result["reasoning_tokens"] == 25
+
+    def test_anthropic_style_attrs(self):
+        from boxing_gym.agents.usage_tracker import extract_token_usage
+
+        class Usage:
+            input_tokens = 100
+            output_tokens = 50
+
+        result = extract_token_usage(Usage())
+        assert result["prompt_tokens"] == 100
+        assert result["completion_tokens"] == 50
+        assert result["reasoning_tokens"] == 0
+
+    def test_dict_prompt_completion_keys(self):
+        from boxing_gym.agents.usage_tracker import extract_token_usage
+        result = extract_token_usage({"prompt_tokens": 10, "completion_tokens": 5, "reasoning_tokens": 2})
+        assert result["prompt_tokens"] == 10
+        assert result["completion_tokens"] == 5
+        assert result["reasoning_tokens"] == 2
+
+    def test_dict_input_output_keys(self):
+        from boxing_gym.agents.usage_tracker import extract_token_usage
+        result = extract_token_usage({"input_tokens": 10, "output_tokens": 5})
+        assert result["prompt_tokens"] == 10
+        assert result["completion_tokens"] == 5
+
+    def test_missing_reasoning_tokens_defaults_zero(self):
+        from boxing_gym.agents.usage_tracker import extract_token_usage
+
+        class Usage:
+            prompt_tokens = 100
+            completion_tokens = 50
+
+        result = extract_token_usage(Usage())
+        assert result["reasoning_tokens"] == 0
+
+    def test_none_values_become_zero(self):
+        from boxing_gym.agents.usage_tracker import extract_token_usage
+        result = extract_token_usage({"prompt_tokens": None, "completion_tokens": None})
+        assert result["prompt_tokens"] == 0
+        assert result["completion_tokens"] == 0
