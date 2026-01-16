@@ -17,6 +17,7 @@ from boxing_gym.agents.litellm_utils import (
 
 logger = logging.getLogger(__name__)
 from boxing_gym.agents.call_recorder import CallRecorder
+from boxing_gym.agents.usage_tracker import extract_token_usage
 
 try:
     from boxing_gym.agents.agent import _model_profile, _extract_usage_dict
@@ -87,8 +88,13 @@ class AsyncLiteLLM:
         elif _model_profile is not None:
             # no config flag, use hardcoded profiles
             profile = _model_profile(model_name)
-            self.max_tokens = max(int(max_tokens), profile.api_max_tokens) if profile.is_reasoning else int(max_tokens)
             self.is_reasoning = profile.is_reasoning
+            if profile.is_reasoning:
+                # reasoning models need headroom; use floor but respect user if higher
+                floor = min(REASONING_MIN_TOKENS, profile.api_max_tokens)
+                self.max_tokens = max(int(max_tokens), floor)
+            else:
+                self.max_tokens = int(max_tokens)
         else:
             # last resort: pattern match on model name
             model_lower = (model_name or "").lower()
@@ -215,6 +221,152 @@ class AsyncLiteLLM:
     def _is_responses_api_model(self) -> bool:
         return is_responses_api_model(self.model_name)
 
+    def _should_use_fake_response(self) -> bool:
+        """Check if fake LLM mode is enabled via environment."""
+        flag = os.getenv("BOXINGGYM_FAKE_LLM", "")
+        return bool(flag) and flag.lower() not in ("0", "false", "no")
+
+    def _make_fake_response(self, messages: List[Dict[str, Any]]) -> Any:
+        """Create fake response for smoke tests and record it."""
+        class _FakeMsg:
+            def __init__(self, content: str):
+                self.content = content
+                self.reasoning_content = None
+
+        class _FakeChoice:
+            def __init__(self, content: str):
+                self.message = _FakeMsg(content)
+
+        class _FakeResp:
+            def __init__(self, model: str, content: str):
+                self.model = model
+                self.choices = [_FakeChoice(content)]
+                self.usage = {"prompt_tokens": 0, "completion_tokens": 0}
+
+        fake_content = "mock response"
+        if self._call_recorder is not None:
+            prompt_text = messages_to_input_text(messages)
+            self._call_recorder.record_dict({
+                "agent": self._agent_name,
+                "model": self.model_name,
+                "prompt": prompt_text[:50000] if prompt_text else "",
+                "response": fake_content,
+                "latency_ms": 0.0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "reasoning_tokens": 0,
+                "cost_usd": 0.0,
+                "has_reasoning": False,
+                "step_idx": self._step_idx,
+                "call_type": "fake",
+                "call_uuid": uuid.uuid4().hex,
+                "error": None,
+            })
+        return _FakeResp(self.model_name, fake_content)
+
+    async def _execute_responses_api_call(
+        self,
+        messages: List[Dict[str, Any]],
+        **kwargs
+    ) -> Any:
+        """Execute call via Responses API (GPT-5 series)."""
+        # convert chat messages into single text prompt
+        prompt_lines = []
+        for m in messages:
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            if content:
+                prompt_lines.append(f"{role}: {content}")
+        input_text = "\n".join(prompt_lines)
+
+        # filter params not supported by Responses API
+        responses_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in ["max_tokens", "max_output_tokens", "messages", "temperature"]
+        }
+        max_output_tokens = kwargs.get("max_output_tokens")
+        if max_output_tokens is None:
+            max_output_tokens = kwargs.get("max_tokens") or self.max_tokens
+
+        async def _call():
+            return await litellm.aresponses(
+                model=self.model_name,
+                input=input_text,
+                max_output_tokens=max_output_tokens,
+                num_retries=self.num_retries,
+                timeout=self.timeout,
+                **self.litellm_kwargs,
+                **responses_kwargs,
+            )
+
+        return await self._maybe_weave_op(_call)()
+
+    async def _execute_completion_call(
+        self,
+        messages: List[Dict[str, Any]],
+        **kwargs
+    ) -> Any:
+        """Execute call via standard Chat Completions API."""
+        call_params = {
+            "model": self.model_name,
+            "messages": messages,
+            "max_tokens": self.max_tokens,
+            "num_retries": self.num_retries,
+            "timeout": self.timeout,
+            **self.litellm_kwargs,
+            **kwargs
+        }
+
+        async def _call():
+            return await litellm.acompletion(**call_params)
+
+        return await self._maybe_weave_op(_call)()
+
+    def _record_call(
+        self,
+        response: Any,
+        prompt_text: str,
+        call_start: float,
+        error_msg: Optional[str] = None
+    ) -> None:
+        """Record API call to disk. Safe even if response is None."""
+        if self._call_recorder is None:
+            return
+
+        call_end = time.time()
+        latency_ms = (call_end - call_start) * 1000
+
+        response_text = ""
+        tokens = {"prompt_tokens": 0, "completion_tokens": 0, "reasoning_tokens": 0}
+
+        if response is not None:
+            response_text = extract_text(response) or ""
+            usage = getattr(response, "usage", None)
+            if usage is None and hasattr(response, "__dict__"):
+                usage = response.__dict__.get("usage")
+            if usage is None and isinstance(response, dict):
+                usage = response.get("usage")
+            tokens = extract_token_usage(usage)
+
+        self._call_recorder.record_dict({
+            "agent": self._agent_name,
+            "model": self.model_name,
+            "prompt": prompt_text,
+            "response": response_text,
+            "latency_ms": round(latency_ms, 1),
+            "prompt_tokens": tokens["prompt_tokens"],
+            "completion_tokens": tokens["completion_tokens"],
+            "reasoning_tokens": tokens["reasoning_tokens"],
+            "cost_usd": 0.0,
+            "has_reasoning": tokens["reasoning_tokens"] > 0,
+            "step_idx": self._step_idx,
+            "call_type": "ppl",
+            "call_uuid": uuid.uuid4().hex,
+            "timestamp": call_end,
+            "error": error_msg,
+        })
+
     async def __call__(
         self,
         messages: List[Dict[str, Any]],
@@ -229,47 +381,9 @@ class AsyncLiteLLM:
         LiteLLM handles provider routing and API key lookup automatically.
         Pass api_base/api_key via constructor kwargs for custom endpoints.
         """
-        # optional offline mode for smoke tests (skips real API calls).
-        flag = os.getenv("BOXINGGYM_FAKE_LLM", "")
-        if bool(flag) and flag.lower() not in ("0", "false", "no"):
-            class _FakeMsg:
-                def __init__(self, content: str):
-                    self.content = content
-                    self.reasoning_content = None
+        if self._should_use_fake_response():
+            return self._make_fake_response(messages)
 
-            class _FakeChoice:
-                def __init__(self, content: str):
-                    self.message = _FakeMsg(content)
-
-            class _FakeResp:
-                def __init__(self, model: str, content: str):
-                    self.model = model
-                    self.choices = [_FakeChoice(content)]
-                    self.usage = {"prompt_tokens": 0, "completion_tokens": 0}
-
-            fake_content = "mock response"
-            # record fake calls for consistency in smoke tests
-            if self._call_recorder is not None:
-                prompt_text = messages_to_input_text(messages)
-                self._call_recorder.record_dict({
-                    "agent": self._agent_name,
-                    "model": self.model_name,
-                    "prompt": prompt_text[:50000] if prompt_text else "",
-                    "response": fake_content,
-                    "latency_ms": 0.0,
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "reasoning_tokens": 0,
-                    "cost_usd": 0.0,
-                    "has_reasoning": False,
-                    "step_idx": self._step_idx,
-                    "call_type": "fake",
-                    "call_uuid": uuid.uuid4().hex,
-                    "error": None,
-                })
-            return _FakeResp(self.model_name, fake_content)
-
-        # build prompt text for recording
         prompt_text = messages_to_input_text(messages)
         call_start = time.time()
         response = None
@@ -277,107 +391,13 @@ class AsyncLiteLLM:
 
         try:
             if self._is_responses_api_model():
-                # convert chat messages into single text prompt for Responses API
-                prompt_lines = []
-                for m in messages:
-                    role = m.get("role", "user")
-                    content = m.get("content", "")
-                    if content:  # skip empty messages
-                        prompt_lines.append(f"{role}: {content}")
-                input_text = "\n".join(prompt_lines)
-
-                responses_kwargs = {
-                    k: v
-                    for k, v in kwargs.items()
-                    if k not in ["max_tokens", "max_output_tokens", "messages", "temperature"]
-                }
-                max_output_tokens = kwargs.get("max_output_tokens")
-                if max_output_tokens is None:
-                    max_output_tokens = kwargs.get("max_tokens") or self.max_tokens
-
-                async def _responses_call():
-                    return await litellm.aresponses(
-                        model=self.model_name,
-                        input=input_text,  # Responses API uses 'input' not 'messages'
-                        max_output_tokens=max_output_tokens,
-                        num_retries=self.num_retries,
-                        timeout=self.timeout,
-                        **self.litellm_kwargs,  # includes api_base/api_key if passed to constructor
-                        **responses_kwargs,
-                    )
-
-                response = await self._maybe_weave_op(_responses_call)()
+                response = await self._execute_responses_api_call(messages, **kwargs)
             else:
-                # standard models use chat/completions, LiteLLM handles provider routing
-                call_params = {
-                    "model": self.model_name,
-                    "messages": messages,
-                    "max_tokens": self.max_tokens,
-                    "num_retries": self.num_retries,
-                    "timeout": self.timeout,
-                    **self.litellm_kwargs,  # includes api_base/api_key if passed to constructor
-                    **kwargs
-                }
-
-                async def _completion_call():
-                    return await litellm.acompletion(**call_params)
-
-                response = await self._maybe_weave_op(_completion_call)()
+                response = await self._execute_completion_call(messages, **kwargs)
         except Exception as e:
             error_msg = str(e)
             raise
         finally:
-            # record call to disk (crash-resilient)
-            call_end = time.time()
-            latency_ms = (call_end - call_start) * 1000
-            if self._call_recorder is not None:
-                # extract response text and usage
-                response_text = ""
-                prompt_tokens = 0
-                completion_tokens = 0
-                reasoning_tokens = 0
-                if response is not None:
-                    response_text = extract_text(response) or ""
-                    usage = getattr(response, "usage", None)
-                    if usage is None and hasattr(response, "__dict__"):
-                        usage = response.__dict__.get("usage")
-                    if usage is None and isinstance(response, dict):
-                        usage = response.get("usage")
-                    if usage:
-                        if hasattr(usage, "prompt_tokens"):
-                            prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-                            completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-                            reasoning_tokens = getattr(usage, "reasoning_tokens", 0) or 0
-                        elif hasattr(usage, "input_tokens"):
-                            prompt_tokens = getattr(usage, "input_tokens", 0) or 0
-                            completion_tokens = getattr(usage, "output_tokens", 0) or 0
-                            reasoning_tokens = getattr(usage, "reasoning_tokens", 0) or 0
-                        elif isinstance(usage, dict):
-                            if "prompt_tokens" in usage or "completion_tokens" in usage:
-                                prompt_tokens = usage.get("prompt_tokens", 0) or 0
-                                completion_tokens = usage.get("completion_tokens", 0) or 0
-                                reasoning_tokens = usage.get("reasoning_tokens", 0) or 0
-                            elif "input_tokens" in usage or "output_tokens" in usage:
-                                prompt_tokens = usage.get("input_tokens", 0) or 0
-                                completion_tokens = usage.get("output_tokens", 0) or 0
-                                reasoning_tokens = usage.get("reasoning_tokens", 0) or 0
-
-                self._call_recorder.record_dict({
-                    "agent": self._agent_name,
-                    "model": self.model_name,
-                    "prompt": prompt_text,
-                    "response": response_text,
-                    "latency_ms": round(latency_ms, 1),
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "reasoning_tokens": reasoning_tokens,
-                    "cost_usd": 0.0,  # async doesn't track cost yet
-                    "has_reasoning": reasoning_tokens > 0,
-                    "step_idx": self._step_idx,
-                    "call_type": "ppl",
-                    "call_uuid": uuid.uuid4().hex,
-                    "timestamp": call_end,
-                    "error": error_msg,
-                })
+            self._record_call(response, prompt_text, call_start, error_msg)
 
         return response

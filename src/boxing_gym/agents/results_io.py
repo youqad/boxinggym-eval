@@ -411,6 +411,19 @@ def _parse_bool(val: Any) -> bool:
     return bool(val)
 
 
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """Convert value to float, returning default if not numeric.
+
+    Handles numpy scalars, numeric strings, and native Python types.
+    """
+    if val is None or isinstance(val, bool):
+        return default
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
 def load_results_from_json_dir(root: str) -> List[RunResult]:
     """Parse all JSON result files from a directory."""
     results: List[RunResult] = []
@@ -775,92 +788,126 @@ def _get_wandb_api():
         raise ImportError("wandb package required. Install with: uv add wandb")
 
 
-def load_results_from_wandb(
+def _parse_sweep_path(
     sweep_path: str,
-    entity: str = DEFAULT_ENTITY,
-    project: str = DEFAULT_PROJECT,
-) -> List[RunResult]:
-    api = _get_wandb_api()
+    entity: str,
+    project: str,
+) -> Tuple[str, str, str]:
+    """Parse sweep path into (entity, project, sweep_id).
 
+    Accepts either just sweep_id or entity/project/sweep_id format.
+    """
     parts = sweep_path.split("/")
     if len(parts) == 1:
-        sweep_id = parts[0]
+        return entity, project, parts[0]
     elif len(parts) == 3:
-        entity, project, sweep_id = parts
+        return parts[0], parts[1], parts[2]
     else:
         raise ValueError(
             f"Invalid sweep path: {sweep_path}. "
             "Expected: sweep_id or entity/project/sweep_id"
         )
 
-    full_path = f"{entity}/{project}/{sweep_id}"
 
-    import wandb
+def _extract_run_metadata(run, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract env, model, seed, goal from run config or name.
 
-    try:
-        sweep = api.sweep(full_path)
-    except wandb.errors.CommError as e:
-        raise ValueError(f"Error fetching sweep {full_path}: {e}")
+    Returns dict with keys: env, model, seed, goal, experiment_type,
+    include_prior, use_ppl. Missing values are None.
+    """
+    if isinstance(config.get("envs"), dict):
+        env_cfg = config.get("envs", {})
+        exp_cfg = config.get("exp", {})
+        llm_cfg = config.get("llms", {})
+        env = env_cfg.get("env_name")
+        goal = env_cfg.get("goal_name")
+        experiment_type = exp_cfg.get("experiment_type")
+        model = llm_cfg.get("model_name")
+        seed = config.get("seed")
+    else:
+        env = config.get("envs.env_name") or config.get("env_name")
+        goal = config.get("envs.goal_name") or config.get("goal_name")
+        experiment_type = config.get("exp.experiment_type") or config.get("experiment_type")
+        model = config.get("llms.model_name") or config.get("llms") or config.get("model_name")
+        seed = config.get("seed")
 
-    results: List[RunResult] = []
-    runs = list(sweep.runs)
-
-    for run in runs:
-        summary = dict(run.summary)
-        config = run.config or {}
-
-        if isinstance(config.get("envs"), dict):
-            env_cfg = config.get("envs", {})
-            exp_cfg = config.get("exp", {})
-            llm_cfg = config.get("llms", {})
-            env = env_cfg.get("env_name")
-            goal = env_cfg.get("goal_name")
-            experiment_type = exp_cfg.get("experiment_type")
-            model = llm_cfg.get("model_name")
-            seed = config.get("seed")
-        else:
-            env = config.get("envs.env_name") or config.get("env_name")
-            goal = config.get("envs.goal_name") or config.get("goal_name")
-            experiment_type = config.get("exp.experiment_type") or config.get("experiment_type")
-            model = config.get("llms.model_name") or config.get("llms") or config.get("model_name")
-            seed = config.get("seed")
-
-        if not env or not model or seed is None:
-            parsed = _parse_wandb_run_name(str(run.name))
-            if not parsed:
-                continue
-            env = parsed["env"]
-            goal = parsed.get("goal")
+    # fallback to parsing run name
+    if not env or not model or seed is None:
+        parsed = _parse_wandb_run_name(str(run.name))
+        if parsed:
+            env = env or parsed["env"]
+            goal = goal or parsed.get("goal")
             experiment_type = experiment_type or parsed.get("exp_type")
             model = model or parsed["model"]
             seed = seed if seed is not None else parsed["seed"]
 
+    # normalize names
+    if env:
         env = get_env_display_name(str(env))
+    if env:
         goal = get_goal_display_name(env, str(goal) if goal is not None else None)
         if not goal:
             goal = DEFAULT_GOALS.get(env)
 
-        try:
-            seed = int(seed)
-        except Exception:
-            seed = 0
+    # convert seed to int
+    try:
+        seed = int(seed) if seed is not None else 0
+    except Exception:
+        seed = 0
 
-        include_prior = config.get("include_prior", True)
-        use_ppl = config.get("use_ppl", False)
+    return {
+        "env": env,
+        "model": model,
+        "seed": seed,
+        "goal": goal,
+        "experiment_type": experiment_type,
+        "include_prior": config.get("include_prior", True),
+        "use_ppl": config.get("use_ppl", False),
+    }
 
-        budget_rows: Dict[int, Dict[str, Any]] = {}
-        history_keys = [
-            "eval/budget",
-            "eval/z_mean",
-            "eval/z_std",
-            "eval/mean",
-            "eval/std",
-            "eval/mse",
-            "eval/std_mse",
-        ]
+
+HISTORY_KEYS = [
+    "eval/budget",
+    "eval/z_mean",
+    "eval/z_std",
+    "eval/mean",
+    "eval/std",
+    "eval/mse",
+    "eval/std_mse",
+]
+
+
+def _extract_budget_rows_from_history(run) -> Dict[int, Dict[str, Any]]:
+    """Extract budget-keyed rows from run history.
+
+    Tries scan_history first, falls back to history() method.
+    Returns dict mapping budget -> row dict.
+    """
+    budget_rows: Dict[int, Dict[str, Any]] = {}
+
+    try:
+        scan = run.scan_history(keys=HISTORY_KEYS)
+        for row in scan:
+            if not isinstance(row, dict):
+                continue
+            b = row.get("eval/budget")
+            z = row.get("eval/z_mean")
+            if b is None or z is None:
+                continue
+            try:
+                budget_rows[int(b)] = row
+            except Exception:
+                continue
+    except Exception:
         try:
-            scan = run.scan_history(keys=history_keys)
-            for row in scan:
+            hist = run.history(keys=HISTORY_KEYS, samples=10000)
+            if hasattr(hist, "to_dict"):
+                rows = hist.to_dict("records")
+            elif isinstance(hist, list):
+                rows = hist
+            else:
+                rows = []
+            for row in rows:
                 if not isinstance(row, dict):
                     continue
                 b = row.get("eval/budget")
@@ -868,145 +915,152 @@ def load_results_from_wandb(
                 if b is None or z is None:
                     continue
                 try:
-                    b_int = int(b)
+                    budget_rows[int(b)] = row
                 except Exception:
                     continue
-                budget_rows[b_int] = row
         except Exception:
-            try:
-                hist = run.history(keys=history_keys, samples=10000)
-                if hasattr(hist, "to_dict"):
-                    rows = hist.to_dict("records")
-                elif isinstance(hist, list):
-                    rows = hist
-                else:
-                    rows = []
-                for row in rows:
-                    if not isinstance(row, dict):
-                        continue
-                    b = row.get("eval/budget")
-                    z = row.get("eval/z_mean")
-                    if b is None or z is None:
-                        continue
-                    try:
-                        b_int = int(b)
-                    except Exception:
-                        continue
-                    budget_rows[b_int] = row
-            except Exception:
-                budget_rows = {}
+            pass
 
-        if budget_rows:
-            for budget, row in sorted(budget_rows.items()):
-                z_mean = row.get("eval/z_mean")
-                if not isinstance(z_mean, (int, float)):
-                    continue
-                raw_mean = row.get("eval/mean")
-                if not isinstance(raw_mean, (int, float)):
-                    raw_mean = row.get("eval/mse")
-                raw_std = row.get("eval/std")
-                if not isinstance(raw_std, (int, float)):
-                    raw_std = row.get("eval/std_mse")
-                z_std = row.get("eval/z_std")
-                if not isinstance(z_std, (int, float)):
-                    z_std = 0.0
+    return budget_rows
 
-                results.append(
-                    RunResult(
-                        env=env,
-                        model=model,
-                        seed=seed,
-                        budget=budget,
-                        z_mean=float(z_mean),
-                        z_std=float(z_std),
-                        raw_mean=float(raw_mean) if isinstance(raw_mean, (int, float)) else 0.0,
-                        raw_std=float(raw_std) if isinstance(raw_std, (int, float)) else 0.0,
-                        goal=goal,
-                        include_prior=include_prior,
-                        use_ppl=use_ppl,
-                        experiment_type=experiment_type,
-                        source=DataSource.WANDB_API,
-                    )
-                )
+
+def _budget_rows_to_results(
+    budget_rows: Dict[int, Dict[str, Any]],
+    metadata: Dict[str, Any],
+) -> List[RunResult]:
+    """Convert budget rows to RunResult objects."""
+    results = []
+    for budget, row in sorted(budget_rows.items()):
+        z_mean = row.get("eval/z_mean")
+        if not isinstance(z_mean, (int, float)):
             continue
 
-        if "eval/z_mean" in summary:
-            z_mean = summary["eval/z_mean"]
-            z_std = summary.get("eval/z_std", 0.0)
+        raw_mean = row.get("eval/mean")
+        if not isinstance(raw_mean, (int, float)):
+            raw_mean = row.get("eval/mse")
+        raw_std = row.get("eval/std")
+        if not isinstance(raw_std, (int, float)):
+            raw_std = row.get("eval/std_mse")
+        z_std = row.get("eval/z_std")
+        if not isinstance(z_std, (int, float)):
+            z_std = 0.0
+
+        results.append(
+            RunResult(
+                env=metadata["env"],
+                model=metadata["model"],
+                seed=metadata["seed"],
+                budget=budget,
+                z_mean=float(z_mean),
+                z_std=float(z_std),
+                raw_mean=float(raw_mean) if isinstance(raw_mean, (int, float)) else 0.0,
+                raw_std=float(raw_std) if isinstance(raw_std, (int, float)) else 0.0,
+                goal=metadata["goal"],
+                include_prior=metadata["include_prior"],
+                use_ppl=metadata["use_ppl"],
+                experiment_type=metadata["experiment_type"],
+                source=DataSource.WANDB_API,
+            )
+        )
+    return results
+
+
+def _results_from_summary(
+    summary: Dict[str, Any],
+    config: Dict[str, Any],
+    metadata: Dict[str, Any],
+) -> List[RunResult]:
+    """Extract results from run summary (fallback when history unavailable).
+
+    Handles three formats:
+    1. eval/z_mean in summary
+    2. budget_N_z_mean pattern in summary keys
+    """
+    results = []
+
+    # try eval/z_mean format
+    if "eval/z_mean" in summary:
+        z_mean = summary["eval/z_mean"]
+        z_std = summary.get("eval/z_std", 0.0)
+
+        # determine budget
+        budget = None
+        try:
+            budget = int(summary.get("eval/budget")) if summary.get("eval/budget") is not None else None
+        except Exception:
             budget = None
+
+        if budget is None:
+            budgets_cfg = None
+            if isinstance(config.get("exp"), dict):
+                budgets_cfg = (config.get("exp") or {}).get("num_experiments")
+            else:
+                budgets_cfg = config.get("exp.num_experiments")
             try:
-                budget = int(summary.get("eval/budget")) if summary.get("eval/budget") is not None else None
+                if isinstance(budgets_cfg, list) and budgets_cfg:
+                    budget = int(max(int(b) for b in budgets_cfg))
+                elif budgets_cfg is not None:
+                    budget = int(budgets_cfg)
             except Exception:
                 budget = None
-            if budget is None:
-                budgets_cfg = None
-                if isinstance(config.get("exp"), dict):
-                    budgets_cfg = (config.get("exp") or {}).get("num_experiments")
-                else:
-                    budgets_cfg = config.get("exp.num_experiments")
-                try:
-                    if isinstance(budgets_cfg, list) and budgets_cfg:
-                        budget = int(max(int(b) for b in budgets_cfg))
-                    elif budgets_cfg is not None:
-                        budget = int(budgets_cfg)
-                except Exception:
-                    budget = None
-            if budget is None:
-                budget = 0
+        if budget is None:
+            budget = 0
 
-            if isinstance(z_mean, (int, float)):
-                results.append(
-                    RunResult(
-                        env=env,
-                        model=model,
-                        seed=seed,
-                        budget=budget,
-                        z_mean=float(z_mean),
-                        z_std=float(z_std) if isinstance(z_std, (int, float)) else 0.0,
-                        raw_mean=float(summary.get("eval/mean", summary.get("eval/mean_final", 0.0)))
-                        if isinstance(summary.get("eval/mean"), (int, float))
-                        else 0.0,
-                        raw_std=float(summary.get("eval/std", summary.get("eval/std_final", 0.0)))
-                        if isinstance(summary.get("eval/std"), (int, float))
-                        else 0.0,
-                        goal=goal,
-                        include_prior=include_prior,
-                        use_ppl=use_ppl,
-                        experiment_type=experiment_type,
-                        source=DataSource.WANDB_API,
-                    )
+        if isinstance(z_mean, (int, float)):
+            results.append(
+                RunResult(
+                    env=metadata["env"],
+                    model=metadata["model"],
+                    seed=metadata["seed"],
+                    budget=budget,
+                    z_mean=float(z_mean),
+                    z_std=float(z_std) if isinstance(z_std, (int, float)) else 0.0,
+                    raw_mean=_safe_float(summary.get("eval/mean", summary.get("eval/mean_final"))),
+                    raw_std=_safe_float(summary.get("eval/std", summary.get("eval/std_final"))),
+                    goal=metadata["goal"],
+                    include_prior=metadata["include_prior"],
+                    use_ppl=metadata["use_ppl"],
+                    experiment_type=metadata["experiment_type"],
+                    source=DataSource.WANDB_API,
                 )
-            continue
+            )
+        return results
 
-        for key, value in summary.items():
-            budget_match = re.search(r"budget[_/](\d+)[_/]?z_mean", key, re.IGNORECASE)
-            if budget_match and isinstance(value, (int, float)):
-                budget = int(budget_match.group(1))
-                z_mean = float(value)
+    # try budget_N_z_mean pattern
+    for key, value in summary.items():
+        budget_match = re.search(r"budget[_/](\d+)[_/]?z_mean", key, re.IGNORECASE)
+        if budget_match and isinstance(value, (int, float)):
+            budget = int(budget_match.group(1))
+            z_mean = float(value)
 
-                std_key = key.replace("z_mean", "z_std").replace("mean", "std")
-                z_std = summary.get(std_key, 0.0)
-                if not isinstance(z_std, (int, float)):
-                    z_std = 0.0
+            std_key = key.replace("z_mean", "z_std").replace("mean", "std")
+            z_std = summary.get(std_key, 0.0)
+            if not isinstance(z_std, (int, float)):
+                z_std = 0.0
 
-                results.append(
-                    RunResult(
-                        env=env,
-                        model=model,
-                        seed=seed,
-                        budget=budget,
-                        z_mean=z_mean,
-                        z_std=float(z_std),
-                        raw_mean=0.0,
-                        raw_std=0.0,
-                        goal=goal,
-                        include_prior=include_prior,
-                        use_ppl=use_ppl,
-                        experiment_type=experiment_type,
-                        source=DataSource.WANDB_API,
-                    )
+            results.append(
+                RunResult(
+                    env=metadata["env"],
+                    model=metadata["model"],
+                    seed=metadata["seed"],
+                    budget=budget,
+                    z_mean=z_mean,
+                    z_std=float(z_std),
+                    raw_mean=0.0,
+                    raw_std=0.0,
+                    goal=metadata["goal"],
+                    include_prior=metadata["include_prior"],
+                    use_ppl=metadata["use_ppl"],
+                    experiment_type=metadata["experiment_type"],
+                    source=DataSource.WANDB_API,
                 )
+            )
 
+    return results
+
+
+def _deduplicate_results(results: List[RunResult]) -> List[RunResult]:
+    """Remove duplicate results based on key fields."""
     seen: set = set()
     unique_results: List[RunResult] = []
     for r in results:
@@ -1014,8 +1068,55 @@ def load_results_from_wandb(
         if key not in seen:
             seen.add(key)
             unique_results.append(r)
-
     return unique_results
+
+
+def load_results_from_wandb(
+    sweep_path: str,
+    entity: str = DEFAULT_ENTITY,
+    project: str = DEFAULT_PROJECT,
+) -> List[RunResult]:
+    """Load benchmark results from a WandB sweep.
+
+    Args:
+        sweep_path: Either sweep_id or entity/project/sweep_id format
+        entity: WandB entity (default from env)
+        project: WandB project (default from env)
+
+    Returns:
+        List of RunResult objects, deduplicated by key fields.
+    """
+    import wandb
+
+    api = _get_wandb_api()
+    entity, project, sweep_id = _parse_sweep_path(sweep_path, entity, project)
+    full_path = f"{entity}/{project}/{sweep_id}"
+
+    try:
+        sweep = api.sweep(full_path)
+    except wandb.errors.CommError as e:
+        raise ValueError(f"Error fetching sweep {full_path}: {e}")
+
+    results: List[RunResult] = []
+
+    for run in sweep.runs:
+        summary = dict(run.summary)
+        config = run.config or {}
+
+        metadata = _extract_run_metadata(run, config)
+        if not metadata["env"] or not metadata["model"]:
+            continue
+
+        # try history first (multiple budgets per run)
+        budget_rows = _extract_budget_rows_from_history(run)
+        if budget_rows:
+            results.extend(_budget_rows_to_results(budget_rows, metadata))
+            continue
+
+        # fall back to summary (single result per run)
+        results.extend(_results_from_summary(summary, config, metadata))
+
+    return _deduplicate_results(results)
 
 
 def list_wandb_sweeps(

@@ -236,3 +236,44 @@ class TestNormStaticConstants:
             assert isinstance(mu, (int, float))
             assert isinstance(sigma, (int, float))
             assert sigma > 0, f"Sigma must be positive for {env}"
+
+
+class TestSafeFloat:
+    """_safe_float tests."""
+
+    def test_none_returns_default(self):
+        from boxing_gym.agents.results_io import _safe_float
+        assert _safe_float(None) == 0.0
+        assert _safe_float(None, 99.0) == 99.0
+
+    def test_bool_returns_default(self):
+        from boxing_gym.agents.results_io import _safe_float
+        assert _safe_float(True) == 0.0
+        assert _safe_float(False) == 0.0
+        assert _safe_float(True, 5.0) == 5.0
+
+    def test_int_converts(self):
+        from boxing_gym.agents.results_io import _safe_float
+        assert _safe_float(42) == 42.0
+        assert _safe_float(-5) == -5.0
+
+    def test_float_passthrough(self):
+        from boxing_gym.agents.results_io import _safe_float
+        assert _safe_float(3.14) == 3.14
+        assert _safe_float(-0.5) == -0.5
+
+    def test_string_number_converts(self):
+        from boxing_gym.agents.results_io import _safe_float
+        assert _safe_float("3.14") == 3.14
+        assert _safe_float("-5") == -5.0
+
+    def test_invalid_string_returns_default(self):
+        from boxing_gym.agents.results_io import _safe_float
+        assert _safe_float("not_a_number") == 0.0
+        assert _safe_float("abc", 99.0) == 99.0
+
+    def test_numpy_scalar_converts(self):
+        import numpy as np
+        from boxing_gym.agents.results_io import _safe_float
+        assert _safe_float(np.float64(3.14)) == pytest.approx(3.14)
+        assert _safe_float(np.int32(42)) == 42.0
