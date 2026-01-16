@@ -1,3 +1,4 @@
+import logging
 import random
 
 import numpy as np
@@ -6,6 +7,8 @@ import pymc as pm
 
 from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
+
+logger = logging.getLogger(__name__)
 
 PRIOR = """A person has to choose between a delayed reward dR dollars in x days and an immediate reward iR dollars today."""
 NO_PRIOR = """You are observing a binary response for a tuple of three positive integer values (integer, integer, integer)."""
@@ -31,9 +34,9 @@ Remember, the decisions are not deterministic."""
         return description
     
     def get_goal_eval_question(self, include_prior):
-        print(f"eval_pointer: {self.eval_pointer}")
+        logger.debug(f"eval_pointer: {self.eval_pointer}")
         if self.eval_pointer+1 > len(self.eval_points):
-            print("Generating new eval point")
+            logger.debug("Generating new eval point")
             # check number of 1s and 0s in eval_points and add more of the minority
             num_ones = sum([1 for _, _, _, choice in self.eval_points if choice == 1])
             num_zeros = sum([1 for _, _, _, choice in self.eval_points if choice == 0])
@@ -52,7 +55,7 @@ Remember, the decisions are not deterministic."""
         else:
             # run_experiment
             ir, dr, days, choice = self.eval_points[self.eval_pointer]
-        print(f"eval_point: {ir}, {dr}, {days}, {choice}")
+        logger.debug(f"eval_point: {ir}, {dr}, {days}, {choice}")
         self.eval_pointer += 1
         if include_prior:
             question = f"Given the immediate reward iR = {ir}, delayed reward dR = {dr}, and delay in days D = {days}, what is the person's choice?"
@@ -69,7 +72,7 @@ Remember, the decisions are not deterministic."""
             elif "0" in p:
                 parsed_predictions.append(0)
             else:
-                print("prediction not parsed")
+                logger.warning("prediction not parsed")
                 parsed_predictions.append(None)
         correctness = [parsed_predictions[i]==measurements[i] for i in range(len(predictions))]
         accuracy = sum(correctness) / len(correctness)
@@ -79,12 +82,12 @@ Remember, the decisions are not deterministic."""
         return (error_rate, std)
 
     def expected_information_gain(self, query_point, num_outer_samples=1000, num_inner_samples=10):
-        print(f"query_point: {query_point}")
+        logger.debug(f"query_point: {query_point}")
         ir, dr, days = query_point
         existing_data = self.env.observed_data
         if tuple(existing_data) not in self.update_param_cache:
             # Update the parameter prior using PyMC
-            print("updating parameters")
+            logger.debug("updating parameters")
             with pm.Model() as model:
                 log_k = pm.Normal('log_k', mu=self.env.k_mean, sigma=self.env.k_std)
                 k = pm.Deterministic('k', pm.math.exp(log_k))
@@ -111,9 +114,9 @@ Remember, the decisions are not deterministic."""
             ks, alphas = zip(*shuffling)
             updated_k_samples = ks[:num_outer_samples]
             updated_alpha_samples = alphas[:num_outer_samples]
-            print(len(trace['k']))
-            print("updated parameters", len(updated_k_samples), len(updated_alpha_samples))
-            print(f"inferred k: {np.mean(updated_k_samples)}, alpha: {np.mean(updated_alpha_samples)}")
+            logger.debug("trace samples: %d", len(trace['k']))
+            logger.debug("updated parameters: k=%d, alpha=%d", len(updated_k_samples), len(updated_alpha_samples))
+            logger.debug("inferred k: %.4f, alpha: %.4f", np.mean(updated_k_samples), np.mean(updated_alpha_samples))
             self.update_param_cache[tuple(existing_data)] = (updated_k_samples, updated_alpha_samples, ks[num_outer_samples:], alphas[num_outer_samples:])
         else:
             updated_k_samples, updated_alpha_samples, ks, alphas = self.update_param_cache[tuple(existing_data)]
@@ -258,7 +261,7 @@ The parameter k affects how the system values the three input parameters."""
         existing_data = self.env.observed_data
         if tuple(existing_data) not in self.update_param_cache:
             # Update the parameter prior using PyMC
-            print("updating parameters")
+            logger.debug("updating parameters")
             with pm.Model() as model:
                 log_k = pm.Normal('log_k', mu=self.env.k_mean, sigma=self.env.k_std)
                 k = pm.Deterministic('k', pm.math.exp(log_k))
@@ -286,9 +289,9 @@ The parameter k affects how the system values the three input parameters."""
             ks, alphas = zip(*shuffling)
             updated_k_samples = ks[:num_outer_samples]
             updated_alpha_samples = alphas[:num_outer_samples]
-            print(len(trace['k']))
-            print("updated parameters", len(updated_k_samples), len(updated_alpha_samples))
-            print(f"inferred k: {np.mean(updated_k_samples)}, alpha: {np.mean(updated_alpha_samples)}")
+            logger.debug("trace samples: %d", len(trace['k']))
+            logger.debug("updated parameters: k=%d, alpha=%d", len(updated_k_samples), len(updated_alpha_samples))
+            logger.debug("inferred k: %.4f, alpha: %.4f", np.mean(updated_k_samples), np.mean(updated_alpha_samples))
             self.update_param_cache[tuple(existing_data)] = (updated_k_samples, updated_alpha_samples, ks[num_outer_samples:], alphas[num_outer_samples:])
         else:
             updated_k_samples, updated_alpha_samples, ks, alphas = self.update_param_cache[tuple(existing_data)]

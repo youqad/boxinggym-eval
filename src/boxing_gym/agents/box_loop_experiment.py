@@ -37,6 +37,9 @@ _PPL_LOGGER_NAMES = (
   "arviz",
 )
 
+# lock for thread-safe logger modifications
+_PPL_LOGGER_LOCK = threading.Lock()
+
 
 class _PPLLogCapture(logging.Handler):
   def __init__(self):
@@ -137,17 +140,18 @@ def _trace_stats(trace):
 
 @contextmanager
 def _ppl_logger_settings(level: int = logging.WARNING, propagate: bool = False):
-  loggers = [logging.getLogger(name) for name in _PPL_LOGGER_NAMES]
-  previous = [(logger, logger.level, logger.propagate) for logger in loggers]
-  for logger in loggers:
-    logger.setLevel(level)
-    logger.propagate = propagate
-  try:
-    yield
-  finally:
-    for logger, prev_level, prev_propagate in previous:
-      logger.setLevel(prev_level)
-      logger.propagate = prev_propagate
+  with _PPL_LOGGER_LOCK:
+    loggers = [logging.getLogger(name) for name in _PPL_LOGGER_NAMES]
+    previous = [(logger, logger.level, logger.propagate) for logger in loggers]
+    for logger in loggers:
+      logger.setLevel(level)
+      logger.propagate = propagate
+    try:
+      yield
+    finally:
+      for logger, prev_level, prev_propagate in previous:
+        logger.setLevel(prev_level)
+        logger.propagate = prev_propagate
 
 
 class BoxLoop_Experiment():
@@ -161,9 +165,6 @@ class BoxLoop_Experiment():
   diagnostics_cfg=None,
   ) -> None:
 
-    """
-    Initializes a task.
-    """
 
     self.corrupt = corrupt
     self.dataset = dataset
@@ -186,10 +187,8 @@ class BoxLoop_Experiment():
     self.include_logger_warnings = bool(self.diagnostics_cfg.get("include_logger_warnings", True))
 
   def get_posterior_predictive(self, str_prob_prog, observed_data):
-    '''
-      Map from the str prob prob to posterior predictive of gen model defined in string
-    '''
-    print("entering get_posterior_predictive")
+    '''str_prob_prog -> posterior predictive samples'''
+    self.logger.debug("entering get_posterior_predictive")
 
     if observed_data is not None:
       code_for_scan = re.sub(r'""".*?"""|\'\'\'.*?\'\'\'', '', str_prob_prog, flags=re.DOTALL)
@@ -257,8 +256,7 @@ class BoxLoop_Experiment():
           self.recent_program_diagnostics.extend(diagnostics)
           self.recent_program_diagnostics = self.recent_program_diagnostics[-self.max_diag_messages:]
       except TimeoutError:
-        print("PYMC program timed out")
-        self.logger.info("PYMC program timed out")
+        self.logger.warning("PYMC program timed out")
       except Exception:
         self.logger.info(f"failed program: {str_prob_prog}")
         with StringIO() as buf:
@@ -270,24 +268,17 @@ class BoxLoop_Experiment():
         except Exception:
           pass
 
-    # Set timeout
     TIMEOUT_TIME = 60 * 8
 
-    # Start the worker thread
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
-    # Join the thread to the main thread and wait for completion
     thread.join(timeout=TIMEOUT_TIME)
 
     if thread.is_alive():
-      print("PYMC program timed out")
-      try:
-        self.logger.info("PYMC program timed out")
-      except Exception:
-        pass
+      self.logger.warning("PYMC program timed out (thread join)")
       return None, None, None
 
-    print("WE MADE IT HERE")
+    self.logger.debug("get_posterior_predictive done")
     return result[0], result[1], result[2]
 
   def get_gen_model(self, gen_code):
@@ -347,7 +338,7 @@ class BoxLoop_Experiment():
       with StringIO() as buf:
           traceback.print_exc(file=buf)
           tb_str = buf.getvalue()
-      print(f"get_prior_samples failed: {e}\n{tb_str}")
+      self.logger.error(f"get_prior_samples failed: {e}\n{tb_str}")
       return None
 
   def score_programs(self, program, logger, llm_response):
@@ -449,7 +440,6 @@ class BoxLoop_Experiment():
       def get_observation_index(i):
         return observed_data.index[i].split("True Observation")[-1]
 
-      # Function to round a number to n significant figures
       def round_to_n_significant(x, n=2):
           if not np.isfinite(x) or x == 0:
               return x
@@ -544,7 +534,6 @@ class BoxLoop_Experiment():
       ppc_stats_str = df_posterior_stats_round.to_string()
       raw_stats_str = df_true_stats_round.to_string()
 
-      # return "", "", "", model, posterior_predictive, trace
       return df_posterior_stats, ppc_stats_str, raw_stats_str, model, posterior_predictive, trace
 
     except Exception as e:
