@@ -125,29 +125,34 @@ uv run pytest tests/ -v
 
 ---
 
-## Analysis Dashboards
+## Analysis Interfaces
 
-### TUI (Terminal Interface)
+Three ways to explore results:
+
+### 1. CLI Queries (non-interactive)
 
 ```bash
-# Model rankings with parameter importance
-uv run python scripts/analyze_sweep_results.py --sweep-id <SWEEP_ID> --view model-rankings
-
-# Environment × model heatmap
-uv run python scripts/analyze_sweep_results.py --sweep-id <SWEEP_ID> --view heatmap
-
-# Per-environment analysis
-uv run python scripts/analyze_sweep_results.py --sweep-id <SWEEP_ID> --filter-env hyperbolic_direct
+uv run box sync --local results/       # Cache local results first
+uv run box query leaderboard           # Model rankings with 95% CIs
+uv run box query all                   # Full statistical report
+uv run box query --list                # See all available queries
 ```
 
-### Streamlit Dashboard
+### 2. TUI (interactive terminal)
 
 ```bash
-# Launch web dashboard
-uv run python scripts/analyze_sweep_results.py --sweep-id <SWEEP_ID> --web
+uv run box results --tui
+```
 
-# Or run directly
-uv run streamlit run scripts/streamlit_app/app.py
+Textual-based terminal UI with keyboard navigation:
+- Model rankings, environment × model heatmaps
+- Parameter importance, budget progression
+- Seed stability, best configs, call logs
+
+### 3. Streamlit (web dashboard)
+
+```bash
+uv run box results --web
 ```
 
 **5 Analysis Pages**:
