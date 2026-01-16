@@ -11,23 +11,22 @@
 </p>
 
 <p align="center">
-  <em>Fork of <a href="https://github.com/kanishkg/boxing-gym">Stanford's BoxingGym</a> with multi-model evaluation and comprehensive dashboards</em>
+  <em>Fork of <a href="https://github.com/kanishkg/boxing-gym">Stanford's BoxingGym</a> with multi-model evaluation and analysis dashboards</em>
 </p>
 
 ---
 
-## What's New in This Fork
+## What's New
 
-This fork extends Stanford's BoxingGym benchmark with production-ready tooling for large-scale LLM evaluation:
+This fork adds multi-model evaluation tooling to Stanford's BoxingGym:
 
-- **7 LLM Providers**: DeepSeek, MiniMax-M2.1, GLM-4.7, Kimi-K2, GPT-4o, GPT-5.1-Codex-mini, Qwen3-32B
-- **Comprehensive Dashboards**: TUI + Streamlit with 5 analysis views (model rankings, parameter importance, heatmaps, budget progression, PPL diagnostics)
-- **WandB Sweep Orchestration**: Distributed sweep management with parallel agents
-- **Usage Tracking**: Real-time cost estimation and token counting per model
-- **Test Suite**: 393 tests covering experiment loop, agents, and evaluation
-- **Analysis Utilities**: 12 scripts for sweep analysis, outlier detection, and result aggregation
-- **Migrated to `uv`**: Modern Python dependency management (from pip/requirements.txt)
-- **1,554 Sweep Runs**: Completed experiments across 10 environments with 7 models
+- 7 LLM providers (DeepSeek, MiniMax-M2.1, GLM-4.7, Kimi-K2, GPT-4o, GPT-5.1-Codex-mini, Qwen3-32B)
+- TUI + Streamlit dashboards (rankings, heatmaps, parameter importance, PPL diagnostics)
+- WandB sweep orchestration with parallel agents
+- Cost tracking per model
+- 393 tests
+- `uv` for dependency management
+- 1,554 completed sweep runs across 10 environments
 
 ---
 
@@ -68,35 +67,21 @@ Best mean performance per environment (lower z-score = better):
 
 ✓ = Beats baseline (negative z-score)
 
-### Key Insights
+### Takeaways
 
-1. **Overall Champion: MiniMax-M2.1**
-   - Lowest mean z-score (+0.062) across all environments
-   - Tightest variance (Std=0.54) → most consistent performance
-   - Strong on location_finding, morals, dugongs
+**MiniMax-M2.1** wins overall (+0.062 mean z, lowest variance). Most consistent across environments.
 
-2. **Environment Specialist: DeepSeek**
-   - Dominates 3 environments by mean: hyperbolic (-0.438), lotka_volterra (-0.297), peregrines (-0.140)
-   - Second-best overall (+0.080 mean z)
-   - 302 runs (most data)
+**DeepSeek** dominates temporal/dynamic tasks: hyperbolic (-0.438), lotka_volterra (-0.297), peregrines (-0.140).
 
-3. **Complex Tasks: GPT-5.1-Codex-mini**
-   - Best on death_process (-0.629), morals (-0.140), irt (-0.050)
-   - Strong on structured causal reasoning
+**GPT-5.1-Codex-mini** excels at causal reasoning: death_process (-0.629), morals (-0.140), irt (-0.050).
 
-4. **Challenging Environments**
-   - **emotion** (+1.286 best score): Hardest for all models
-   - **survival** (+0.415 best score): Above-baseline performance still difficult
+**Hard environments**: emotion (+1.286) and survival (+0.415) remain above baseline for all models.
 
-5. **PPL Impact**
-   - OED without PPL wins **6/7** comparisons vs OED with PPL
-   - **Hypothesis**: LLMs may implicitly perform Bayesian updating, making explicit probabilistic programs redundant
+**PPL finding**: OED without PPL beats OED+PPL in 6/7 comparisons. LLMs may already do implicit Bayesian updating.
 
-6. **Environment Sensitivity**
-   - LLM choice matters **10x more** on hyperbolic (importance: 1.82) vs survival (0.18)
-   - Some tasks are model-agnostic, others highly sensitive to model capabilities
+**Model sensitivity varies 10×**: hyperbolic (importance: 1.82) vs survival (0.18). Some tasks are model-agnostic.
 
-See [CLAUDE.md](CLAUDE.md) for full sweep results and analysis.
+Run `box query all` for full statistics.
 
 ---
 
@@ -127,40 +112,76 @@ uv run pytest tests/ -v
 
 ## Analysis Interfaces
 
-Three ways to explore results:
+The `box` CLI handles result analysis. Sync once, query as needed.
 
-### 1. CLI Queries (non-interactive)
-
-```bash
-uv run box sync --local results/       # Cache local results first
-uv run box query leaderboard           # Model rankings with 95% CIs
-uv run box query all                   # Full statistical report
-uv run box query --list                # See all available queries
+```
+┌─────────────────┐    ┌──────────────────────────┐    ┌─────────────────┐
+│  Local JSON     │───▶│  box sync --local        │───▶│  Parquet Cache  │
+│  results/*.json │    │  (aggregates & caches)   │    │  .boxing-gym-   │
+└─────────────────┘    └──────────────────────────┘    │   cache/        │
+                                                       └────────┬────────┘
+                                                                │
+┌─────────────────┐    ┌──────────────────────────┐             │
+│  Analysis       │◀───│  box query <name>        │◀────────────┘
+│  (tables, stats)│    │  (runs pre-built queries)│
+└─────────────────┘    └──────────────────────────┘
 ```
 
-### 2. TUI (interactive terminal)
+Cache results first (run once, or after adding new results):
+```bash
+uv run box sync --local results/    # parse JSON → .boxing-gym-cache/runs.parquet
+uv run box sync --status            # check cache: 4,864 runs, 16 models, 10 envs
+```
+
+Then run queries (instant):
+```bash
+uv run box query leaderboard        # model rankings with 95% CIs
+uv run box query oed-discovery      # OED vs Discovery 2×2 with p-values
+uv run box query ppl-impact         # PPL effect (Welch's t-test)
+uv run box query env-difficulty     # environment difficulty rankings
+uv run box query best-configs       # best config per environment
+uv run box query all                # full report
+uv run box query --list             # list available queries
+```
+
+Filter and format options:
+```bash
+uv run box query leaderboard --min-budget 10    # filter by budget
+uv run box query leaderboard --env hyperbolic   # filter by environment
+uv run box query leaderboard --format md        # markdown output
+uv run box query leaderboard --format json      # JSON output
+```
+
+### CLI, TUI, and Web
+
+**CLI** — quick answers, scripting, CI/CD:
+```bash
+uv run box query leaderboard
+uv run box query all
+```
+
+**TUI** — interactive terminal:
 
 ```bash
 uv run box results --tui
 ```
 
-Textual-based terminal UI with keyboard navigation:
-- Model rankings, environment × model heatmaps
-- Parameter importance, budget progression
-- Seed stability, best configs, call logs
+Keyboard navigation through model rankings, heatmaps, parameter importance, budget progression, best configs, call logs.
 
-### 3. Streamlit (web dashboard)
-
+**Web** — Streamlit dashboard:
 ```bash
 uv run box results --web
 ```
 
-**5 Analysis Pages**:
-1. **Benchmark Dashboard**: Compare results against paper baselines (GPT-4o, BOX)
-2. **Sweep Analysis**: Parameter importance, model rankings, best configs
-3. **Paper Comparison**: Replicate paper figures with your data overlay
-4. **PPL Examples**: View generated PyMC models with diagnostics (Rhat, ESS, divergences)
-5. **LLM Call Logs**: Cost tracking, latency analysis, token counts
+Five pages: benchmark dashboard (vs paper baselines), sweep analysis, paper comparison, PPL diagnostics, LLM call logs with cost tracking.
+
+### Make shortcuts
+
+```bash
+make aggregate   # box sync --local results/
+make plot        # box query all
+make clean       # rm outputs/ .boxing-gym-cache/
+```
 
 ---
 
@@ -186,11 +207,9 @@ uv run python run_experiment.py \
 
 ---
 
-## Upstream Documentation
+## Upstream Docs
 
-For the original BoxingGym documentation (environment details, API reference, metrics), see:
-
-📄 **[README_upstream.md](README_upstream.md)** (Stanford's original README)
+Original BoxingGym documentation (environment details, API, metrics): **[README_upstream.md](README_upstream.md)**
 
 ---
 
@@ -213,7 +232,7 @@ MIT (same as upstream)
 
 ## Citation
 
-If you use this fork in your research, please cite both the original BoxingGym paper and acknowledge this fork:
+Cite the original paper:
 
 ```bibtex
 @article{gandhi2025boxinggym,

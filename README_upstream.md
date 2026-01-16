@@ -1,3 +1,7 @@
+> **⚠️ Historical Reference:** This document preserves the original BoxingGym instructions from Kansky et al.
+> For current workflows, see `README.md` and the `box` CLI documented in `CLAUDE.md`.
+> Scripts referenced below may have been archived; use `box query --list` for analysis tools.
+
 <h1 align="center">🥊 BoxingGym 🥊</h1>
 <h3 align="center"> Kanishk Gandhi*, Michael Y. Li*, Lyle Goodyear, Agam Bhatia,<br> Louise Li, Aditi Bhaskar, Mohammed Zaman, Noah D. Goodman </h3>
 <h3 align="center"> Stanford University </h3>

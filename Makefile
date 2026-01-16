@@ -4,9 +4,6 @@ VENV := .venv
 PY := $(VENV)/bin/python
 UV := uv
 
-CSV := outputs/standardized_results.csv
-PLOTS := outputs/plots
-
 all: aggregate plot
 
 venv:
@@ -16,14 +13,17 @@ deps: venv
 	@($(UV) pip sync --python $(PY) requirements.txt >/dev/null) || echo "uv pip sync failed; falling back to editable install"
 	@$(UV) pip install --python $(PY) -e . >/dev/null
 
+# was: aggregate_results.py
 aggregate: deps
-	@$(UV) run python scripts/aggregate_results.py --out $(CSV) --skip-reproducibility-check
+	@$(UV) run box sync --local results/
 
+# was: plot_results.py (try: box results --tui)
 plot: deps
-	@$(UV) run python scripts/plot_results.py --csv $(CSV) --outdir $(PLOTS)
+	@$(UV) run box query all
 
+# clear cache and outputs
 clean:
-	@rm -rf $(CSV) $(PLOTS)
+	@rm -rf outputs/ .boxing-gym-cache/
 
 bench-fast: deps
 	@BOXINGGYM_FAST_ENV=1 $(UV) run python scripts/run_comparative_benchmarks.py \

@@ -40,10 +40,10 @@ This Space requires a WandB API key to fetch sweep data. Add it in the Space set
 
 ## Usage
 
-1. Navigate to **Sweep Analysis** in the sidebar
-2. The dashboard will auto-discover all available sweeps
-3. Select which sweeps to analyze from the dropdown
-4. View comprehensive analysis charts and tables
+1. Go to **Sweep Analysis** in the sidebar
+2. Dashboard auto-discovers available sweeps
+3. Select sweeps from the dropdown
+4. View charts and tables
 
 ## About
 
