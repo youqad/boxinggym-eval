@@ -125,11 +125,24 @@ def bootstrap_ci(
     data: np.ndarray,
     confidence: float = 0.95,
     n_bootstrap: int = 10000,
-    statistic: str = "mean"
+    statistic: str = "mean",
+    seed: int | None = 42
 ) -> BootstrapCIResult:
     """Bootstrap confidence interval.
 
     Non-parametric CI estimation via resampling.
+
+    Args:
+        data: Input array (NaN values are dropped)
+        confidence: Confidence level (default 0.95)
+        n_bootstrap: Number of bootstrap samples (default 10000)
+        statistic: "mean" or "median"
+        seed: RNG seed for reproducibility. Default 42 for benchmark consistency.
+              Use None for fresh randomness each call.
+
+    Note: Uses vectorized sampling when memory-safe (~100x faster).
+    RNG draw order differs from loop-based sampling, so results may
+    differ from pre-vectorization versions for the same seed.
     """
     data = np.asarray(data)
 
@@ -145,22 +158,32 @@ def bootstrap_ci(
             confidence=confidence
         )
 
-    rng = np.random.default_rng(42)  # reproducible
+    if statistic not in ("mean", "median"):
+        raise ValueError(f"unknown statistic: {statistic}")
 
-    # bootstrap resampling
-    bootstrap_stats = []
-    for _ in range(n_bootstrap):
-        sample = rng.choice(data, size=len(data), replace=True)
+    rng = np.random.default_rng(seed)
+
+    # memory guard: vectorize only if safe
+    # threshold: ~100M elements (~800MB for float64)
+    MEMORY_THRESHOLD = 100_000_000
+
+    if len(data) * n_bootstrap < MEMORY_THRESHOLD:
+        # vectorized path (fast, higher memory)
+        samples = rng.choice(data, size=(n_bootstrap, len(data)), replace=True)
         if statistic == "mean":
-            bootstrap_stats.append(np.mean(sample))
-        elif statistic == "median":
-            bootstrap_stats.append(np.median(sample))
-        else:
-            raise ValueError(f"unknown statistic: {statistic}")
+            bootstrap_stats = np.mean(samples, axis=1)
+        else:  # median
+            bootstrap_stats = np.median(samples, axis=1)
+    else:
+        # fallback to loop for large datasets (slower, safe memory)
+        bootstrap_stats = np.empty(n_bootstrap)
+        for i in range(n_bootstrap):
+            sample = rng.choice(data, size=len(data), replace=True)
+            if statistic == "mean":
+                bootstrap_stats[i] = np.mean(sample)
+            else:  # median
+                bootstrap_stats[i] = np.median(sample)
 
-    bootstrap_stats = np.array(bootstrap_stats)
-
-    # percentile method
     alpha = 1 - confidence
     ci_low = float(np.percentile(bootstrap_stats, 100 * alpha / 2))
     ci_high = float(np.percentile(bootstrap_stats, 100 * (1 - alpha / 2)))
@@ -215,7 +238,7 @@ def cohens_d(a: np.ndarray, b: np.ndarray) -> EffectSizeResult:
     # interpret
     abs_d = abs(d)
     if np.isinf(abs_d):
-        interp = "infinite"  # perfect separation
+        interp = "large"  # infinite = perfect separation
     elif abs_d < 0.2:
         interp = "negligible"
     elif abs_d < 0.5:
