@@ -90,9 +90,15 @@ class TestLMExperimenterFakeMode:
 
     @pytest.fixture(autouse=True)
     def setup(self):
+        original = os.environ.get("BOXINGGYM_FAKE_LLM")
         os.environ["BOXINGGYM_FAKE_LLM"] = "1"
-        yield
-        os.environ.pop("BOXINGGYM_FAKE_LLM", None)
+        try:
+            yield
+        finally:
+            if original is not None:
+                os.environ["BOXINGGYM_FAKE_LLM"] = original
+            else:
+                os.environ.pop("BOXINGGYM_FAKE_LLM", None)
 
     def test_fake_mode_returns_parseable_observation(self):
         agent = LMExperimenter(model_name="gpt-4o", temperature=0.0)
@@ -161,10 +167,17 @@ class TestLMExperimenterRetryLogic:
 
     @pytest.fixture(autouse=True)
     def setup(self):
-        # disable fake mode for these tests so we can mock
+        # save original value (if any) and disable fake mode for mocking
+        original = os.environ.get("BOXINGGYM_FAKE_LLM")
         os.environ["BOXINGGYM_FAKE_LLM"] = "0"
-        yield
-        os.environ.pop("BOXINGGYM_FAKE_LLM", None)
+        try:
+            yield
+        finally:
+            # always restore original state
+            if original is not None:
+                os.environ["BOXINGGYM_FAKE_LLM"] = original
+            else:
+                os.environ.pop("BOXINGGYM_FAKE_LLM", None)
 
     def test_retries_on_parse_failure(self):
         agent = LMExperimenter(model_name="gpt-4o", temperature=0.0)
@@ -236,22 +249,28 @@ class TestLMExperimenterUsageStats:
         assert stats["error_count"] == 0
 
     def test_retry_count_accumulates(self):
-        os.environ["BOXINGGYM_FAKE_LLM"] = "0"
-        agent = LMExperimenter(model_name="gpt-4o", temperature=0.0)
+        original = os.environ.get("BOXINGGYM_FAKE_LLM")
+        try:
+            os.environ["BOXINGGYM_FAKE_LLM"] = "0"
+            agent = LMExperimenter(model_name="gpt-4o", temperature=0.0)
 
-        call_count = 0
-        def mock_prompt_llm(prompt, _weave_context=None):
-            nonlocal call_count
-            call_count += 1
-            if call_count < 3:
-                return "Invalid"
-            return "<answer>42</answer>"
+            call_count = 0
+            def mock_prompt_llm(prompt, _weave_context=None):
+                nonlocal call_count
+                call_count += 1
+                if call_count < 3:
+                    return "Invalid"
+                return "<answer>42</answer>"
 
-        with patch.object(agent, 'prompt_llm', side_effect=mock_prompt_llm):
-            agent.prompt_llm_and_parse("test", is_observation=False)
+            with patch.object(agent, 'prompt_llm', side_effect=mock_prompt_llm):
+                agent.prompt_llm_and_parse("test", is_observation=False)
 
-        assert agent._usage_stats["retry_count"] == 2
-        os.environ.pop("BOXINGGYM_FAKE_LLM", None)
+            assert agent._usage_stats["retry_count"] == 2
+        finally:
+            if original is not None:
+                os.environ["BOXINGGYM_FAKE_LLM"] = original
+            else:
+                os.environ.pop("BOXINGGYM_FAKE_LLM", None)
 
 
 class TestLMExperimenterInitialization:

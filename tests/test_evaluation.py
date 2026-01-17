@@ -12,9 +12,15 @@ class TestParallelEvaluation:
 
     @pytest.fixture(autouse=True)
     def setup(self):
+        original = os.environ.get("BOXINGGYM_FAKE_LLM")
         os.environ["BOXINGGYM_FAKE_LLM"] = "1"
-        yield
-        os.environ.pop("BOXINGGYM_FAKE_LLM", None)
+        try:
+            yield
+        finally:
+            if original is not None:
+                os.environ["BOXINGGYM_FAKE_LLM"] = original
+            else:
+                os.environ.pop("BOXINGGYM_FAKE_LLM", None)
 
     def test_make_prediction_returns_indexed_result(self):
         """Test that _make_prediction returns (idx, prediction) tuple."""

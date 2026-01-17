@@ -596,8 +596,8 @@ class StepLogger:
 
     def log_communication(
         self,
-        scientist_z_mean: float,
-        naive_z_mean: float,
+        scientist_z_mean: Optional[float],
+        naive_z_mean: Optional[float],
         explanation: Optional[str] = None,
         accuracy: Optional[float] = None,
     ) -> None:
@@ -606,24 +606,27 @@ class StepLogger:
         Tracks how well the scientist agent can communicate findings to a naive agent.
 
         Args:
-            scientist_z_mean: Z-score of scientist's predictions
-            naive_z_mean: Z-score of naive agent's predictions after explanation
+            scientist_z_mean: Z-score of scientist's predictions (None if eval failed)
+            naive_z_mean: Z-score of naive agent's predictions after explanation (None if eval failed)
             explanation: The explanation provided by the scientist
             accuracy: Optional communication accuracy score
         """
-        self._scientist_z_mean = scientist_z_mean
-        self._naive_z_mean = naive_z_mean
+        if scientist_z_mean is not None:
+            self._scientist_z_mean = scientist_z_mean
+        if naive_z_mean is not None:
+            self._naive_z_mean = naive_z_mean
 
         if explanation is not None:
             self._explanation_lengths.append(len(explanation))
 
-        transfer_gap = scientist_z_mean - naive_z_mean
+        metrics = {}
+        if scientist_z_mean is not None:
+            metrics["comm/scientist_z_mean"] = scientist_z_mean
+        if naive_z_mean is not None:
+            metrics["comm/naive_z_mean"] = naive_z_mean
+        if scientist_z_mean is not None and naive_z_mean is not None:
+            metrics["comm/transfer_gap"] = scientist_z_mean - naive_z_mean
 
-        metrics = {
-            "comm/scientist_z_mean": scientist_z_mean,
-            "comm/naive_z_mean": naive_z_mean,
-            "comm/transfer_gap": transfer_gap,
-        }
         if self._last_step_idx is not None:
             metrics["step/idx"] = self._last_step_idx
 
@@ -638,4 +641,5 @@ class StepLogger:
                 self._explanation_lengths
             ) / len(self._explanation_lengths)
 
-        self._log(metrics)  # single event, no step association needed
+        if metrics:
+            self._log(metrics)  # single event, no step association needed

@@ -426,27 +426,47 @@ def evaluate_naive_explanation(
     # evaluate naive agent with scientist's explanation
     naive_result = evaluate(final_results, goal, naive_agent, num_evals, include_prior)
 
+    # evaluate scientist directly for comparison (measures communication bottleneck)
+    # wrapped in try/except since this is optional metrics - shouldn't fail the function
+    scientist_result = None
+    try:
+        scientist_result = evaluate(final_results, goal, scientist, num_evals, include_prior)
+    except Exception as e:
+        logger.warning(f"Scientist evaluation failed (metrics only): {e}")
+
     # log communication metrics if step_logger is available
     if step_logger is not None:
         try:
             naive_eval_score = naive_result[0] if naive_result and len(naive_result) > 0 else None
+            scientist_eval_score = scientist_result[0] if scientist_result and len(scientist_result) > 0 else None
 
             # z-scores if normalization parameters available
             naive_z_mean = None
-            if naive_eval_score is not None and norm_mu is not None and norm_sigma is not None and norm_sigma > 0:
-                naive_mean_val = None
-                if isinstance(naive_eval_score, dict):
-                    naive_mean_val = naive_eval_score.get("mse", naive_eval_score.get("accuracy", naive_eval_score.get("score")))
-                elif isinstance(naive_eval_score, (list, tuple)) and len(naive_eval_score) >= 1:
-                    naive_mean_val = naive_eval_score[0]
-                if naive_mean_val is not None:
-                    naive_z_mean = (float(naive_mean_val) - norm_mu) / norm_sigma
+            scientist_z_mean = None
+            if norm_mu is not None and norm_sigma is not None and norm_sigma > 0:
+                # compute naive z-score
+                if naive_eval_score is not None:
+                    naive_mean_val = None
+                    if isinstance(naive_eval_score, dict):
+                        naive_mean_val = naive_eval_score.get("mse", naive_eval_score.get("accuracy", naive_eval_score.get("score")))
+                    elif isinstance(naive_eval_score, (list, tuple)) and len(naive_eval_score) >= 1:
+                        naive_mean_val = naive_eval_score[0]
+                    if naive_mean_val is not None:
+                        naive_z_mean = (float(naive_mean_val) - norm_mu) / norm_sigma
 
-            # for scientist z_mean, we'd need to evaluate scientist separately
-            # for now, we log what we have
-            if naive_z_mean is not None:
+                # compute scientist z-score
+                if scientist_eval_score is not None:
+                    scientist_mean_val = None
+                    if isinstance(scientist_eval_score, dict):
+                        scientist_mean_val = scientist_eval_score.get("mse", scientist_eval_score.get("accuracy", scientist_eval_score.get("score")))
+                    elif isinstance(scientist_eval_score, (list, tuple)) and len(scientist_eval_score) >= 1:
+                        scientist_mean_val = scientist_eval_score[0]
+                    if scientist_mean_val is not None:
+                        scientist_z_mean = (float(scientist_mean_val) - norm_mu) / norm_sigma
+
+            if naive_z_mean is not None or scientist_z_mean is not None:
                 step_logger.log_communication(
-                    scientist_z_mean=0.0,  # TODO:placeholder, need separate scientist eval
+                    scientist_z_mean=scientist_z_mean,
                     naive_z_mean=naive_z_mean,
                     explanation=explanation,
                 )
