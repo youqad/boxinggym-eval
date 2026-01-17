@@ -37,13 +37,13 @@ def run_query(
     if query_name not in AVAILABLE_QUERIES:
         console.print(f"[red]Unknown query: {query_name}[/red]")
         console.print("Run: box query --list")
-        return
+        raise SystemExit(1)
 
     # load data from cache
     if not CACHE_FILE.exists():
         console.print("[yellow]No cache found. Run sync first:[/yellow]")
         console.print("  box sync --local results/")
-        return
+        raise SystemExit(1)
 
     import pandas as pd
     df = pd.read_parquet(CACHE_FILE)
@@ -210,7 +210,15 @@ def _query_oed_discovery(df, output_format: str):
 
     oed_mean = np.mean(oed_scores) if len(oed_scores) > 0 else float("nan")
     disc_mean = np.mean(disc_scores) if len(disc_scores) > 0 else float("nan")
-    winner = "OED" if oed_mean < disc_mean else "Discovery"
+    # NaN-safe comparison
+    if np.isnan(oed_mean) and np.isnan(disc_mean):
+        winner = "OED"
+    elif np.isnan(oed_mean):
+        winner = "Discovery"
+    elif np.isnan(disc_mean):
+        winner = "OED"
+    else:
+        winner = "OED" if oed_mean < disc_mean else "Discovery"
 
     sig_str = ""
     if main_test and main_test.significant:

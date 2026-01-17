@@ -106,7 +106,7 @@ class TestIterativeExperimentMocked:
     def test_single_budget_calls_scientist(self, mock_goal, mock_scientist):
         """Test scientist is called for each experiment step."""
         with patch("boxing_gym.experiment.loop.evaluate") as mock_eval:
-            mock_eval.return_value = ({"mse": 0.5}, [], [])
+            mock_eval.return_value = ({"mse": 0.5}, [], [], [])
 
             results = iterative_experiment(
                 goal=mock_goal,
@@ -122,7 +122,7 @@ class TestIterativeExperimentMocked:
     def test_prior_only_mode(self, mock_goal, mock_scientist):
         """Test budget=0 triggers prior-only evaluation."""
         with patch("boxing_gym.experiment.loop.evaluate") as mock_eval:
-            mock_eval.return_value = ({"mse": 0.5}, [], [])
+            mock_eval.return_value = ({"mse": 0.5}, [], [], [])
 
             results = iterative_experiment(
                 goal=mock_goal,
@@ -138,7 +138,7 @@ class TestIterativeExperimentMocked:
     def test_multiple_budgets_incremental(self, mock_goal, mock_scientist):
         """Test multiple budgets run incrementally."""
         with patch("boxing_gym.experiment.loop.evaluate") as mock_eval:
-            mock_eval.return_value = ({"mse": 0.5}, [], [])
+            mock_eval.return_value = ({"mse": 0.5}, [], [], [])
 
             results = iterative_experiment(
                 goal=mock_goal,
@@ -154,7 +154,7 @@ class TestIterativeExperimentMocked:
     def test_result_structure(self, mock_goal, mock_scientist):
         """Test returned result has expected structure."""
         with patch("boxing_gym.experiment.loop.evaluate") as mock_eval:
-            mock_eval.return_value = ({"mse": 0.5, "std_mse": 0.1}, [], [])
+            mock_eval.return_value = ({"mse": 0.5, "std_mse": 0.1}, [], [], [])
 
             result_tuple = iterative_experiment(
                 goal=mock_goal,
@@ -181,7 +181,7 @@ class TestIterativeExperimentMocked:
         mock_logger.log_evaluation = Mock()
 
         with patch("boxing_gym.experiment.loop.evaluate") as mock_eval:
-            mock_eval.return_value = ({"mse": 0.5}, [], [])
+            mock_eval.return_value = ({"mse": 0.5}, [], [], [])
 
             iterative_experiment(
                 goal=mock_goal,
@@ -225,7 +225,7 @@ class TestIterativeExperimentEdgeCases:
         minimal_scientist.generate_actions.side_effect = Exception("LLM failed")
 
         with patch("boxing_gym.experiment.loop.evaluate") as mock_eval:
-            mock_eval.return_value = ({"mse": 1.0}, [], [])
+            mock_eval.return_value = ({"mse": 1.0}, [], [], [])
 
             # scientist exceptions in generate_actions should propagate
             with pytest.raises(Exception, match="LLM failed"):
