@@ -26,27 +26,27 @@ This fork adds multi-model evaluation tooling to Stanford's BoxingGym:
 - Cost tracking per model
 - 393 tests
 - `uv` for dependency management
-- 1,554 completed sweep runs across 10 environments
+- 2,001 completed sweep runs across 10 environments
 
 ---
 
 ## 🎯 Evaluation Results
 
-> **1,554 valid runs** (budget ≥ 10, |z| < 100) across **7 models** and **10 environments**
+> **2,001 valid runs** (budget ≥ 10, |z| < 100) across **7 models** and **10 environments**
 
 ### Overall Model Rankings
 
 Mean z-score across all environments (lower is better):
 
-| Rank | Model | Mean z | Std | Runs |
-|------|-------|--------|-----|------|
-| 1 | **MiniMax-M2.1** | **+0.062** | **0.54** | 236 |
-| 2 | DeepSeek | +0.080 | 0.73 | 302 |
-| 3 | Kimi-for-coding | +0.176 | 0.84 | 205 |
-| 4 | GLM-4.7 | +0.212 | 1.02 | 236 |
-| 5 | GPT-4o | +0.257 | 1.28 | 230 |
-| 6 | GPT-5.1-Codex-mini | +0.260 | 1.00 | 249 |
-| 7 | Qwen3-32B | +0.311 | 0.82 | 96 |
+| Rank | Model | Mean z | 95% CI | Runs |
+|------|-------|--------|--------|------|
+| 1 | **MiniMax-M2.1** | **+0.059** | [+0.000, +0.119] | 327 |
+| 2 | DeepSeek | +0.068 | [+0.002, +0.144] | 376 |
+| 3 | Kimi-for-coding | +0.126 | [+0.047, +0.212] | 306 |
+| 4 | GLM-4.7 | +0.137 | [+0.041, +0.245] | 326 |
+| 5 | Qwen3-32B | +0.179 | [+0.083, +0.290] | 190 |
+| 6 | GPT-4o | +0.257 | [+0.123, +0.446] | 230 |
+| 7 | GPT-5.1-Codex-mini | +0.265 | [+0.147, +0.398] | 246 |
 
 ### Per-Environment Champions
 
@@ -54,32 +54,32 @@ Best mean performance per environment (lower z-score = better):
 
 | Environment | Description | Best Model | Mean z |
 |-------------|-------------|------------|--------|
-| **death_process** | Disease spread modeling in populations | GPT-5.1-Codex-mini | **-0.629** ✓ |
-| **hyperbolic_temporal_discount** | Human decision-making between immediate/delayed rewards | DeepSeek | **-0.438** ✓ |
-| **lotka_volterra** | Predator-prey population dynamics | DeepSeek | -0.297 ✓ |
-| **peregrines** | Falcon population dynamics over time | DeepSeek | -0.140 ✓ |
-| **morals** | Ethical decision-making in autonomous vehicles | GPT-5.1-Codex-mini | -0.140 ✓ |
-| **irt** | Student-question performance modeling (Item Response Theory) | GPT-5.1-Codex-mini | -0.050 ✓ |
-| **dugongs** | Sea cow growth modeling (age vs length) | Qwen3-32B | -0.035 ✓ |
-| **location_finding** | Signal source localization in n-dimensional space | MiniMax-M2.1 | +0.211 |
-| **survival** | Breast cancer patient survival prediction | GLM-4.7 | +0.415 |
-| **emotion** | Emotion prediction from gambling outcomes | Qwen3-32B | +1.286 |
+| **death_process** | Disease spread modeling | GPT-5.1-Codex-mini | **-0.639** ✓ |
+| **hyperbolic_temporal_discount** | Intertemporal choice | DeepSeek | **-0.430** ✓ |
+| **lotka_volterra** | Predator-prey dynamics | DeepSeek | -0.306 ✓ |
+| **moral_machines** | Autonomous vehicle ethics | GPT-5.1-Codex-mini | -0.140 ✓ |
+| **irt** | Item response theory | GPT-4o | -0.120 ✓ |
+| **location_finding** | Signal source localization | GPT-4o | -0.106 ✓ |
+| **peregrines** | Falcon population dynamics | DeepSeek | -0.084 ✓ |
+| **dugongs** | Sea cow growth modeling | GPT-4o | -0.041 ✓ |
+| **survival** | Breast cancer survival | GLM-4.7 | +0.429 |
+| **emotion** | Emotion from gambling | Qwen3-32B | +1.286 |
 
 ✓ = Beats baseline (negative z-score)
 
 ### Takeaways
 
-**MiniMax-M2.1** wins overall (+0.062 mean z, lowest variance). Most consistent across environments.
+**MiniMax-M2.1** wins overall (+0.059 mean z), statistically tied with DeepSeek. Most consistent across environments.
 
-**DeepSeek** dominates temporal/dynamic tasks: hyperbolic (-0.438), lotka_volterra (-0.297), peregrines (-0.140).
+**DeepSeek** dominates temporal/dynamic tasks: hyperbolic (-0.430), lotka_volterra (-0.306), peregrines (-0.084).
 
-**GPT-5.1-Codex-mini** excels at causal reasoning: death_process (-0.629), morals (-0.140), irt (-0.050).
+**GPT-4o with PPL** wins dugongs, irt, location_finding. PPL helps on some tasks despite overall negative effect.
 
-**Hard environments**: emotion (+1.286) and survival (+0.415) remain above baseline for all models.
+**Hard environments**: emotion (+1.286) and survival (+0.429) remain above baseline for all models.
 
-**PPL finding**: OED without PPL beats OED+PPL in 6/7 comparisons. LLMs may already do implicit Bayesian updating.
+**PPL finding**: OED without PPL (z=+0.009) significantly beats OED+PPL (z=+0.702). Effect size: d=0.70 (medium).
 
-**Model sensitivity varies 10×**: hyperbolic (importance: 1.82) vs survival (0.18). Some tasks are model-agnostic.
+**Only GPT-5.1-Codex-mini** is significantly worse than #1 (p=0.02 after FDR correction).
 
 Run `box query all` for full statistics.
 
@@ -130,7 +130,7 @@ The `box` CLI handles result analysis. Sync once, query as needed.
 Cache results first (run once, or after adding new results):
 ```bash
 uv run box sync --local results/    # parse JSON → .boxing-gym-cache/runs.parquet
-uv run box sync --status            # check cache: 4,864 runs, 16 models, 10 envs
+uv run box sync --status            # check cache: 6,068 runs, 16 models, 10 envs
 ```
 
 Then run queries (instant):
