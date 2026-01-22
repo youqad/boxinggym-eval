@@ -24,7 +24,7 @@ This fork adds multi-model evaluation tooling to Stanford's BoxingGym:
 - TUI + Streamlit dashboards (rankings, heatmaps, parameter importance, PPL diagnostics)
 - WandB sweep orchestration with parallel agents
 - Cost tracking per model
-- 393 tests
+- 522 tests
 - `uv` for dependency management
 - 2,001 completed sweep runs across 10 environments
 
@@ -42,7 +42,7 @@ Mean z-score across all environments (lower is better):
 |------|-------|--------|--------|------|
 | 1 | **MiniMax-M2.1** | **+0.059** | [+0.000, +0.119] | 327 |
 | 2 | DeepSeek | +0.068 | [+0.002, +0.144] | 376 |
-| 3 | Kimi-for-coding | +0.126 | [+0.047, +0.212] | 306 |
+| 3 | Kimi-K2 | +0.126 | [+0.047, +0.212] | 306 |
 | 4 | GLM-4.7 | +0.137 | [+0.041, +0.245] | 326 |
 | 5 | Qwen3-32B | +0.179 | [+0.083, +0.290] | 190 |
 | 6 | GPT-4o | +0.257 | [+0.123, +0.446] | 230 |
@@ -69,7 +69,7 @@ Best mean performance per environment (lower z-score = better):
 
 ### Takeaways
 
-**MiniMax-M2.1** wins overall (+0.059 mean z), statistically tied with DeepSeek. Most consistent across environments.
+**MiniMax-M2.1** wins overall (+0.059 mean z), statistically tied with DeepSeek.
 
 **DeepSeek** dominates temporal/dynamic tasks: hyperbolic (-0.430), lotka_volterra (-0.306), peregrines (-0.084).
 
@@ -81,6 +81,19 @@ Best mean performance per environment (lower z-score = better):
 
 **Only GPT-5.1-Codex-mini** is significantly worse than #1 (p=0.02 after FDR correction).
 
+**Environment difficulty**: death_process easiest (z=-0.34), emotion hardest (z=+1.29). Diminishing returns after budget ~20.
+
+**Filtering**: 2,001 runs after budget ≥ 10, |z| < 100 (outlier removal). Rankings above include only models with n ≥ 100.
+
+### Statistical Methods
+
+All queries use proper statistical testing:
+
+- **Welch's t-test**: Comparing groups with unequal variances
+- **Bootstrap CI**: 95% confidence intervals via 10,000 resamples
+- **Cohen's d**: Effect size interpretation (negligible < 0.2 < small < 0.5 < medium < 0.8 < large)
+- **Benjamini-Hochberg**: FDR correction for multiple comparisons
+
 Run `box query all` for full statistics.
 
 ---
@@ -88,16 +101,16 @@ Run `box query all` for full statistics.
 ## Quick Start
 
 ```bash
-git clone https://github.com/youqad/boxing-gym.git
-cd boxing-gym
+git clone https://github.com/youqad/boxing-gym-wip.git
+cd boxing-gym-wip
 
 # Install with uv
 uv sync
 uv run python -c "import boxing_gym; print('✓ Import OK')"
 
-# Set API keys
-cp .env.example .env
-# Edit .env with your keys: OPENAI_API_KEY, ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, etc.
+# Set API keys (create .env with your keys)
+echo "OPENAI_API_KEY=sk-..." >> .env
+echo "DEEPSEEK_API_KEY=sk-..." >> .env
 
 # Run single experiment
 uv run python run_experiment.py seeds=null seed=1 exp=oed envs=hyperbolic_direct llms=gpt-4o
@@ -135,21 +148,23 @@ uv run box sync --status            # check cache: 6,068 runs, 16 models, 10 env
 
 Then run queries (instant):
 ```bash
-uv run box query leaderboard        # model rankings with 95% CIs
-uv run box query oed-discovery      # OED vs Discovery 2×2 with p-values
-uv run box query ppl-impact         # PPL effect (Welch's t-test)
+uv run box query --list             # list available queries
+uv run box query leaderboard        # model rankings with significance tests
+uv run box query oed-discovery      # OED vs Discovery 2×2 comparison
+uv run box query ppl-impact         # PPL effect analysis
 uv run box query env-difficulty     # environment difficulty rankings
 uv run box query best-configs       # best config per environment
-uv run box query all                # full report
-uv run box query --list             # list available queries
+uv run box query paper-comparison   # comparison with paper baselines
+uv run box query all                # full report (all queries)
 ```
 
 Filter and format options:
 ```bash
-uv run box query leaderboard --min-budget 10    # filter by budget
-uv run box query leaderboard --env hyperbolic   # filter by environment
-uv run box query leaderboard --format md        # markdown output
-uv run box query leaderboard --format json      # JSON output
+uv run box query leaderboard --min-budget 10     # filter by minimum budget
+uv run box query leaderboard --env dugongs       # filter by environment
+uv run box query leaderboard --format md         # markdown output
+uv run box query leaderboard --format json       # JSON output
+uv run box query all --include-outliers          # include flagged outliers
 ```
 
 ### CLI, TUI, and Web
@@ -166,14 +181,28 @@ uv run box query all
 uv run box results --tui
 ```
 
-Keyboard navigation through model rankings, heatmaps, parameter importance, budget progression, best configs, call logs.
+| View | Description |
+|------|-------------|
+| model-rankings | Leaderboard: z-scores, SEM, spread |
+| heatmap | Environment × Model z-mean matrix |
+| best-configs | Top configuration per environment |
+| budget-progression | Performance trends across budget values |
+| parameter-importance | Permutation importance analysis |
+| seed-stability | Cross-seed variance, unstable configs |
+| local-summary | Quick summary of local results |
 
 **Web** — Streamlit dashboard:
 ```bash
 uv run box results --web
 ```
 
-Five pages: benchmark dashboard (vs paper baselines), sweep analysis, paper comparison, PPL diagnostics, LLM call logs with cost tracking.
+| Page | Description |
+|------|-------------|
+| Benchmark Dashboard | Paper baselines (GPT-4o, BOX), filtering, delta coloring |
+| Sweep Analysis | Parameter importance, model rankings, heatmaps, best configs |
+| Paper Comparison | Gandhi et al. baseline comparison |
+| PPL Examples | Generated PyMC models with sampling diagnostics |
+| LLM Call Logs | Cost breakdown by model, latency histograms, token counts |
 
 ### Make shortcuts
 
@@ -201,8 +230,8 @@ uv run python run_experiment.py \
 
 **Configs**:
 - Environments: `conf/envs/*.yaml` (10 environments × 2 goal types)
-- LLMs: `conf/llms/*.yaml` (15+ models across 7 providers)
-- Experiments: `conf/exp/{oed,discovery,naive}.yaml`
+- LLMs: `conf/llms/*.yaml` (19 models across 9 providers)
+- Experiments: `conf/exp/{oed,oed_box,discovery}.yaml`
 - Sweeps: `sweeps/*.yaml` (WandB sweep configs)
 
 ---
