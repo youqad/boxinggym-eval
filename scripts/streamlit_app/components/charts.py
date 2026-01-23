@@ -756,7 +756,6 @@ def build_env_champions_chart(champions: List[Dict]) -> go.Figure:
             text=label,
             showarrow=False,
             xanchor=anchor,
-            cliponaxis=False,
             font=dict(size=10, color=COLORS["text"]),
         )
 
