@@ -409,10 +409,58 @@ with col1:
 
 # Model Rankings
 with col2:
-    agg_model = aggregate_by_parameter(df, "config/llms", target_metric)
-    if not agg_model.empty:
-        fig = build_model_ranking_chart(agg_model.to_dict("records"))
-        st.plotly_chart(fig, use_container_width=True)
+    try:
+        from boxing_gym.analysis.stats import bootstrap_ci, compare_models
+        from components.charts import build_leaderboard_chart
+
+        model_col = "config/llms"
+        if model_col not in df.columns:
+            model_col = "model" if "model" in df.columns else None
+
+        if model_col and target_metric in df.columns:
+            with st.spinner("Computing bootstrap CIs..."):
+                rankings = []
+                for model in df[model_col].dropna().unique():
+                    scores = df[df[model_col] == model][target_metric].dropna().values
+                    if len(scores) < 2:
+                        continue
+                    ci = bootstrap_ci(scores, confidence=0.95, n_bootstrap=10000)
+                    rankings.append({
+                        "model": model,
+                        "mean": ci.mean,
+                        "ci_low": ci.ci_low,
+                        "ci_high": ci.ci_high,
+                        "n": len(scores),
+                    })
+
+                if rankings:
+                    best = min(rankings, key=lambda r: r["mean"])["model"]
+                    cmp_df = df[[model_col, target_metric]].dropna().rename(
+                        columns={model_col: "model", target_metric: "z_mean"}
+                    )
+                    comparison = compare_models(
+                        cmp_df, model_col="model", score_col="z_mean",
+                        reference_model=best,
+                    )
+                    sig_models = {
+                        c["model"] for c in comparison["comparisons"]
+                        if c.get("significant_fdr")
+                    }
+                    for r in rankings:
+                        r["significant"] = r["model"] in sig_models
+
+                    fig = build_leaderboard_chart(rankings)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Not enough data for model rankings")
+        else:
+            st.info("Model column not found in data")
+    except (ImportError, ValueError, KeyError):
+        # fall back to existing SEM-based chart
+        agg_model = aggregate_by_parameter(df, "config/llms", target_metric)
+        if not agg_model.empty:
+            fig = build_model_ranking_chart(agg_model.to_dict("records"))
+            st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 

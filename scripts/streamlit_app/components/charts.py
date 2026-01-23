@@ -17,6 +17,13 @@ COLORS = {
     "grid": "rgba(148, 163, 184, 0.1)",
 }
 
+# Colorblind-safe palette (blue/orange/gray, distinguishable under all CVD types)
+COLORS_ACCESSIBLE = {
+    "good": "#2563eb",      # Blue - beats baseline (z < 0)
+    "bad": "#ea580c",       # Orange - worse than baseline (z > 0.3)
+    "neutral": "#6b7280",   # Gray - near baseline
+}
+
 # Dark mode tooltip styling (applied to each trace to override Plotly's trace-color default)
 DARK_HOVERLABEL = dict(
     bgcolor="#1e293b",  # slate-800
@@ -606,5 +613,171 @@ def build_model_comparison_bars(
         ),
     )
     fig.update_layout(margin=dict(l=20, r=20, t=80, b=100))
+
+    return fig
+
+
+def build_leaderboard_chart(rankings: List[Dict]) -> go.Figure:
+    """Horizontal bar chart with bootstrap CI error bars for model rankings.
+
+    Args:
+        rankings: List of dicts with keys: model, mean, ci_low, ci_high, n,
+                  and optionally 'significant' (bool).
+
+    Returns:
+        Plotly figure with asymmetric error bars.
+    """
+    if not rankings:
+        return go.Figure().add_annotation(text="No ranking data", showarrow=False)
+
+    df = pd.DataFrame(rankings).sort_values("mean", ascending=True)
+
+    colors = []
+    for z in df["mean"].values:
+        if z < 0:
+            colors.append(COLORS_ACCESSIBLE["good"])
+        elif z > 0.3:
+            colors.append(COLORS_ACCESSIBLE["bad"])
+        else:
+            colors.append(COLORS_ACCESSIBLE["neutral"])
+
+    error_minus = (df["mean"] - df["ci_low"]).clip(lower=0).values
+    error_plus = (df["ci_high"] - df["mean"]).clip(lower=0).values
+
+    labels = []
+    for _, row in df.iterrows():
+        sig = "*" if row.get("significant", False) else ""
+        labels.append(f"{row['mean']:+.3f}{sig}")
+
+    fig = go.Figure(
+        go.Bar(
+            x=df["mean"].values,
+            y=[str(m) for m in df["model"].values],
+            orientation="h",
+            marker_color=colors,
+            error_x=dict(
+                type="data",
+                symmetric=False,
+                array=error_plus,
+                arrayminus=error_minus,
+                visible=True,
+                color="rgba(255,255,255,0.4)",
+                thickness=1.5,
+            ),
+            text=labels,
+            textposition="outside",
+            textfont=dict(size=11),
+            cliponaxis=False,
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Mean z: %{x:+.3f}<br>"
+                "<extra></extra>"
+            ),
+            hoverlabel=DARK_HOVERLABEL,
+        )
+    )
+
+    x_max = (df["mean"] + error_plus).max()
+    x_padding = max(0.08, x_max * 0.25)
+
+    fig.update_layout(
+        **LAYOUT_DEFAULTS,
+        title=dict(text="Model rankings (mean z-score, 95% CI)", x=0),
+        height=max(300, len(df) * 45),
+        xaxis=dict(
+            title="Mean z-score (lower is better)",
+            gridcolor=COLORS["grid"],
+            zeroline=True,
+            zerolinecolor="rgba(148, 163, 184, 0.3)",
+            range=[min(-0.05, df["mean"].min() - 0.05), x_max + x_padding],
+        ),
+        yaxis=dict(title=None, tickfont=dict(size=12)),
+    )
+    fig.update_layout(margin=dict(l=200, r=80, t=50, b=40))
+
+    return fig
+
+
+def build_env_champions_chart(champions: List[Dict]) -> go.Figure:
+    """Horizontal bar chart showing best model per environment.
+
+    Args:
+        champions: List of dicts with keys: env, model, z_mean.
+
+    Returns:
+        Plotly figure.
+    """
+    if not champions:
+        return go.Figure().add_annotation(text="No champion data", showarrow=False)
+
+    df = pd.DataFrame(champions).sort_values("z_mean", ascending=True)
+
+    colors = []
+    for z in df["z_mean"].values:
+        if z < 0:
+            colors.append(COLORS_ACCESSIBLE["good"])
+        elif z > 0.3:
+            colors.append(COLORS_ACCESSIBLE["bad"])
+        else:
+            colors.append(COLORS_ACCESSIBLE["neutral"])
+
+    env_labels = [
+        e.replace("_direct", "").replace("_", " ").title()
+        for e in df["env"].values
+    ]
+
+    fig = go.Figure(
+        go.Bar(
+            x=df["z_mean"].values,
+            y=env_labels,
+            orientation="h",
+            marker_color=colors,
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "z: %{x:+.3f}<br>"
+                "<extra></extra>"
+            ),
+            hoverlabel=DARK_HOVERLABEL,
+        )
+    )
+
+    for i, (_, row) in enumerate(df.iterrows()):
+        z = row["z_mean"]
+        label = f"{z:+.3f} ({row['model']})"
+        if z >= 0:
+            x_pos = z + 0.02
+            anchor = "left"
+        else:
+            x_pos = 0.02
+            anchor = "left"
+        fig.add_annotation(
+            x=x_pos,
+            y=env_labels[i],
+            text=label,
+            showarrow=False,
+            xanchor=anchor,
+            cliponaxis=False,
+            font=dict(size=10, color=COLORS["text"]),
+        )
+
+    x_min = df["z_mean"].min()
+    x_max = df["z_mean"].max()
+    max_label_len = max(len(f"{r['z_mean']:+.3f} ({r['model']})") for _, r in df.iterrows())
+    x_right_pad = max(0.5, max_label_len * 0.022)
+
+    fig.update_layout(
+        **LAYOUT_DEFAULTS,
+        title=dict(text="Per-environment champions (best model)", x=0),
+        height=max(380, len(df) * 44),
+        xaxis=dict(
+            title="Mean z-score (lower is better)",
+            gridcolor=COLORS["grid"],
+            zeroline=True,
+            zerolinecolor="rgba(148, 163, 184, 0.3)",
+            range=[min(x_min - 0.1, -0.1), x_max + x_right_pad],
+        ),
+        yaxis=dict(title=None, tickfont=dict(size=11)),
+    )
+    fig.update_layout(margin=dict(l=200, r=40, t=50, b=40))
 
     return fig

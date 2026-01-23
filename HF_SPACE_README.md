@@ -16,17 +16,20 @@ Interactive dashboard for analyzing LLM agent performance on the BoxingGym bench
 
 ## Features
 
+- **Leaderboard**: Model rankings with bootstrap 95% CIs and significance testing (works out-of-the-box with bundled data)
 - **Sweep Analysis**: Compare multiple W&B sweeps with auto-discovery
 - **Model Rankings**: See all models ranked by performance
-- **Parameter Importance**: Understand what hyperparameters matter
+- **Parameter Importance**: Which hyperparameters matter most
 - **Heatmaps**: Environment × Model performance visualization
 - **Paper Comparison**: Compare against baseline results
 
 ## Setup
 
-### Required Secrets
+The **Leaderboard** page works with bundled demo data — no secrets needed.
 
-This Space requires a WandB API key to fetch sweep data. Add it in the Space settings:
+### Optional Secrets (for Sweep Analysis)
+
+To fetch live sweep data, add a WandB API key in Space settings:
 
 1. Go to Space Settings → Variables and secrets
 2. Add a new secret:
@@ -37,13 +40,6 @@ This Space requires a WandB API key to fetch sweep data. Add it in the Space set
 
 - `WANDB_ENTITY`: Your W&B entity
 - `WANDB_PROJECT`: Your W&B project (default: "boxing-gym")
-
-## Usage
-
-1. Go to **Sweep Analysis** in the sidebar
-2. Dashboard auto-discovers available sweeps
-3. Select sweeps from the dropdown
-4. View charts and tables
 
 ## About
 

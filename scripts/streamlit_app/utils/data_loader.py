@@ -58,6 +58,31 @@ def load_local_wandb_results(wandb_dir: str = "wandb-dir") -> List[RunResult]:
     return load_results_from_local_wandb(wandb_dir)
 
 
+@st.cache_data(ttl=300, show_spinner="Loading cached results...")
+def load_parquet_results(parquet_path: str | None = None) -> pd.DataFrame:
+    """Load results from parquet cache. Search order:
+    1. Explicit path argument
+    2. .boxing-gym-cache/runs.parquet (local dev, from `box sync`)
+    3. demo_data/demo_runs.parquet (bundled for HF Space)
+
+    Returns empty DataFrame if nothing found.
+    """
+    search_paths = []
+
+    if parquet_path:
+        search_paths.append(Path(parquet_path))
+
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    search_paths.append(project_root / ".boxing-gym-cache" / "runs.parquet")
+    search_paths.append(Path(__file__).resolve().parent.parent / "demo_data" / "demo_runs.parquet")
+
+    for p in search_paths:
+        if p.exists():
+            return pd.read_parquet(p)
+
+    return pd.DataFrame()
+
+
 @st.cache_data(show_spinner=False)
 def get_paper_baselines() -> List[RunResult]:
     """Load paper reference rows (static, cache forever)."""

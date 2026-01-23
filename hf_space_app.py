@@ -16,6 +16,7 @@ if src_path.exists():
 # Set default environment variables for HF Space
 os.environ.setdefault("WANDB_ENTITY", os.getenv("WANDB_ENTITY", ""))
 os.environ.setdefault("WANDB_PROJECT", os.getenv("WANDB_PROJECT", "boxing-gym"))
+os.environ.setdefault("BOXING_GYM_DEMO_MODE", "1")
 
 # Run the Streamlit app
 if __name__ == "__main__":

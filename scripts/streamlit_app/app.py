@@ -46,6 +46,7 @@ st.markdown("---")
 
 st.markdown("""
 **Sidebar pages:**
+- **Leaderboard**: Model rankings with bootstrap CIs and significance testing
 - **Benchmark Dashboard**: Compare results against paper baselines
 - **Sweep Analysis**: Interactive W&B sweep charts
 - **Paper Comparison**: Replicate paper figures with your data

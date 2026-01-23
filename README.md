@@ -183,7 +183,7 @@ uv run box results --tui
 
 | View | Description |
 |------|-------------|
-| model-rankings | Leaderboard: z-scores, SEM, spread |
+| model-rankings | Leaderboard: z-scores, bootstrap CIs, significance |
 | heatmap | Environment × Model z-mean matrix |
 | best-configs | Top configuration per environment |
 | budget-progression | Performance trends across budget values |
@@ -198,6 +198,7 @@ uv run box results --web
 
 | Page | Description |
 |------|-------------|
+| Leaderboard | Model rankings with bootstrap 95% CIs and significance testing |
 | Benchmark Dashboard | Paper baselines (GPT-4o, BOX), filtering, delta coloring |
 | Sweep Analysis | Parameter importance, model rankings, heatmaps, best configs |
 | Paper Comparison | Gandhi et al. baseline comparison |
