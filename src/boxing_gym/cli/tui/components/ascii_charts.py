@@ -1,38 +1,20 @@
 """ASCII chart utilities for TUI visualization."""
 
-from typing import Optional
+import math
 
 
 def horizontal_bar(value: float, max_value: float, width: int = 10) -> str:
-    """Render a horizontal bar chart.
-
-    Args:
-        value: Current value
-        max_value: Maximum value for scaling
-        width: Total width in characters
-
-    Returns:
-        String like "████░░░░░░"
-    """
-    if max_value <= 0:
+    """Return bar like '████░░░░░░'."""
+    if max_value <= 0 or not math.isfinite(max_value) or not math.isfinite(value):
         return "░" * width
 
-    filled = min(int((value / max_value) * width), width)
+    filled = max(0, min(int((value / max_value) * width), width))
     empty = width - filled
     return "█" * filled + "░" * empty
 
 
 def z_color(z: float, low: float = -0.3, high: float = 0.3) -> str:
-    """Get Rich color name based on z_mean value.
-
-    Args:
-        z: The z_mean value
-        low: Threshold for green (good)
-        high: Threshold for red (poor)
-
-    Returns:
-        Rich color name: "green", "yellow", or "red"
-    """
+    """Return Rich color name (green/yellow/red) based on z thresholds."""
     if z < low:
         return "green"
     elif z > high:
@@ -41,65 +23,54 @@ def z_color(z: float, low: float = -0.3, high: float = 0.3) -> str:
 
 
 def colored_z(z: float, low: float = -0.3, high: float = 0.3) -> str:
-    """Return z value with Rich color markup.
-
-    Args:
-        z: The z_mean value
-        low: Threshold for green (good)
-        high: Threshold for red (poor)
-
-    Returns:
-        Rich markup string like "[green]-0.450[/green]"
-    """
+    """Return z value with Rich color markup."""
+    if math.isnan(z):
+        return "[dim]NaN[/dim]"
     color = z_color(z, low, high)
     return f"[{color}]{z:+.3f}[/{color}]"
 
 
 def trend_indicator(start: float, end: float, threshold: float = 0.1) -> str:
-    """Return trend indicator comparing start and end values.
-
-    Lower z_mean is better, so:
-    - ▼▼ = significant improvement (decrease)
-    - ▼ = slight improvement
-    - ─ = no change
-    - ▲ = slight worsening
-    - ▲▲ = significant worsening
-
-    Args:
-        start: Starting value
-        end: Ending value
-        threshold: Change threshold for single arrow
-
-    Returns:
-        Trend indicator string
-    """
+    """Return trend arrow (lower is better): ▼▼/▼ = improving, ▲/▲▲ = worsening."""
     diff = end - start
 
     if diff < -threshold * 2:
         return "[green]▼▼[/green]"  # big improvement
     elif diff < -threshold:
-        return "[green]▼[/green]"   # slight improvement
+        return "[green]▼[/green]"  # slight improvement
     elif diff > threshold * 2:
-        return "[red]▲▲[/red]"      # big worsening
+        return "[red]▲▲[/red]"  # big worsening
     elif diff > threshold:
-        return "[red]▲[/red]"       # slight worsening
-    return "[dim]─[/dim]"           # stable
+        return "[red]▲[/red]"  # slight worsening
+    return "[dim]─[/dim]"  # stable
+
+
+def short_model_name(name: str, max_len: int = 12) -> str:
+    """Strip provider prefix and truncate for column headers."""
+    if not name:
+        return "???"
+    if "/" in name:
+        name = name.rsplit("/", 1)[-1]
+    is_box = name.endswith(" (box)")
+    if is_box:
+        name = name[:-6]
+    name = name.replace("deepseek-", "ds-")
+    name = name.replace("codex-mini", "codex")
+    name = name.replace("qwen3-32b-v1:0", "qwen3-32b")
+    if is_box:
+        if len(name) > max_len - 1:
+            return name[: max_len - 2] + "…†"
+        return name + "†"
+    if len(name) > max_len:
+        return name[: max_len - 1] + "…"
+    return name
 
 
 def sparkline(values: list, width: int = 10) -> str:
-    """Render a simple sparkline from a list of values.
-
-    Args:
-        values: List of numeric values
-        width: Target width (values will be sampled if longer)
-
-    Returns:
-        Sparkline string using block characters
-    """
+    """Return sparkline using block chars (▁▂▃▄▅▆▇█), sampled to width."""
     if not values:
         return "─" * width
 
-    # sample values if too many
     if len(values) > width:
         step = len(values) / width
         values = [values[int(i * step)] for i in range(width)]
