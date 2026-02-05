@@ -91,7 +91,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest==9.0.2",
+    "pytest>=9.0.2",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
 ]
 
 [project.scripts]
@@ -103,7 +105,42 @@ package-dir = { "" = "src" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[dependency-groups]
-dev = [
-    "pytest>=9.0.2",
+[tool.pytest.ini_options]
+# Restrict default discovery to the test suite; scripts/ contains utilities.
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "E501",   # allow long lines when needed
+    "E712",   # pandas boolean comparisons (== True/False)
+    "E402",   # module-level import not at top (common in scripts)
+    "E722",   # bare except (sometimes needed)
+    "E721",   # type comparison using isinstance preferred
+    "SIM102", # nested if statements (often clearer in data pipelines)
+    "SIM105", # use contextlib.suppress
+    "SIM108", # use ternary operator
+    "SIM113", # enumerate() suggestions
+    "SIM115", # use context manager for open
+    "SIM117", # multiple with statements
+    "SIM118", # use key in dict instead of keys()
+    "E741",   # ambiguous variable names (l, I, O)
+    "B007",   # unused loop variable
+    "B905",   # zip strict parameter
+    "B006",   # mutable default argument (often intentional)
+    "B904",   # raise from
+    "F841",   # unused variable (often intentional in exploratory code)
+    "UP028",  # yield from suggestion
+    "UP035",  # deprecated import
+    "SIM103", # return condition directly
 ]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true

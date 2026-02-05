@@ -10,7 +10,8 @@
   <a href="https://www.pymc.io/"><img src="https://img.shields.io/badge/PyMC-3498DB?style=flat-square" alt="PyMC"></a>&nbsp;
   <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/LiteLLM-enabled-blueviolet?style=flat-square" alt="LiteLLM"></a>&nbsp;
   <a href="https://arxiv.org/abs/2501.01540"><img src="https://img.shields.io/badge/arXiv-2501.01540-b31b1b.svg?style=flat-square" alt="arXiv"></a>&nbsp;
-  <a href="https://huggingface.co/spaces/youkad/boxing-gym-dashboard"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20HF%20Space-Live%20Demo-yellow?style=flat-square" alt="HF Space"></a>
+  <a href="https://huggingface.co/spaces/youkad/boxing-gym-dashboard"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20HF%20Space-Live%20Demo-yellow?style=flat-square" alt="HF Space"></a>&nbsp;
+  <a href="https://github.com/youqad/boxing-gym-wip/actions/workflows/ci.yml"><img src="https://github.com/youqad/boxing-gym-wip/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
 <p align="center">

@@ -1,0 +1,29 @@
+name: Deploy to HF Space
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/streamlit_app/**'
+      - 'src/boxing_gym/**'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global credential.helper store
+          echo "https://oauth2:${HF_TOKEN}@huggingface.co" > ~/.git-credentials
+          git remote add hf https://huggingface.co/spaces/youkad/boxing-gym-dashboard || true
+          git push hf main --force
+          rm -f ~/.git-credentials
