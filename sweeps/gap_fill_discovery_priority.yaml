@@ -1,0 +1,52 @@
+program: run_experiment.py
+project: boxing-gym
+name: gap_fill_discovery_priority
+method: random
+
+metric:
+  goal: minimize
+  name: eval/z_mean
+
+# Priority Discovery gap-fill: 4 broken-baseline envs × 7 models × 5 seeds = 140 runs
+# Naive/discovery variants of the recomputed-baseline environments
+
+parameters:
+  llms:
+    values:
+      - gpt-4o
+      - gpt-5.1-codex-mini
+      - deepseek-v3.2
+      - glm-4.7
+      - minimax-m2.1
+      - kimi-k2-thinking
+      - bedrock-qwen3-32b
+
+  envs:
+    values:
+      - death_process_direct_naive
+      - dugongs_direct_naive
+      - hyperbolic_direct_naive
+      - peregrines_direct_naive
+
+  exp:
+    value: discovery
+
+  seed:
+    values: [1, 2, 3, 4, 5]
+
+  include_prior:
+    value: true
+
+  use_ppl:
+    value: false
+
+  hydra.job.chdir:
+    value: false
+
+command:
+  - ${env}
+  - uv
+  - run
+  - python
+  - ${program}
+  - ${args_no_hyphens}
