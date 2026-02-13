@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 import sys
 from pathlib import Path
 
@@ -13,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from boxing_gym.data_quality.config import ValidationLevel
 from boxing_gym.data_quality.quarantine import QuarantineManager
-from boxing_gym.data_quality.rules import QualityValidator, ValidationIssue, ValidationResult
+from boxing_gym.data_quality.rules import QualityValidator
 
 
 def _make_valid_data(
@@ -130,7 +129,10 @@ def test_z_mean_null(tmp_path):
     data["data"]["z_results"][0]["z_mean"] = None
     p = _write_json(tmp_path, data)
     result = QualityValidator().validate_file(p)
-    assert any(i.layer == ValidationLevel.L1_NON_FINITE and "z_mean is null" in i.message for i in result.issues)
+    assert any(
+        i.layer == ValidationLevel.L1_NON_FINITE and "z_mean is null" in i.message
+        for i in result.issues
+    )
 
 
 def test_z_mean_non_numeric(tmp_path):
@@ -138,7 +140,10 @@ def test_z_mean_non_numeric(tmp_path):
     data["data"]["z_results"][0]["z_mean"] = "abc"
     p = _write_json(tmp_path, data)
     result = QualityValidator().validate_file(p)
-    assert any(i.layer == ValidationLevel.L1_NON_FINITE and "not numeric" in i.message for i in result.issues)
+    assert any(
+        i.layer == ValidationLevel.L1_NON_FINITE and "not numeric" in i.message
+        for i in result.issues
+    )
 
 
 def test_z_mean_nan(tmp_path):
@@ -151,7 +156,9 @@ def test_z_mean_nan(tmp_path):
     data["data"]["z_results"][0]["z_mean"] = float("inf")
     p.write_text(json.dumps(data))
     result = QualityValidator().validate_file(p)
-    assert any(i.layer == ValidationLevel.L1_NON_FINITE and "z_mean" in i.message for i in result.issues)
+    assert any(
+        i.layer == ValidationLevel.L1_NON_FINITE and "z_mean" in i.message for i in result.issues
+    )
 
 
 def test_raw_mean_null(tmp_path):
@@ -159,7 +166,10 @@ def test_raw_mean_null(tmp_path):
     data["data"]["z_results"][0]["raw_mean"] = None
     p = _write_json(tmp_path, data)
     result = QualityValidator().validate_file(p)
-    assert any(i.layer == ValidationLevel.L1_NON_FINITE and "raw_mean is null" in i.message for i in result.issues)
+    assert any(
+        i.layer == ValidationLevel.L1_NON_FINITE and "raw_mean is null" in i.message
+        for i in result.issues
+    )
 
 
 def test_raw_mean_non_numeric(tmp_path):
@@ -168,7 +178,8 @@ def test_raw_mean_non_numeric(tmp_path):
     p = _write_json(tmp_path, data)
     result = QualityValidator().validate_file(p)
     assert any(
-        i.layer == ValidationLevel.L1_NON_FINITE and "raw_mean is not numeric" in i.message for i in result.issues
+        i.layer == ValidationLevel.L1_NON_FINITE and "raw_mean is not numeric" in i.message
+        for i in result.issues
     )
 
 
@@ -177,7 +188,9 @@ def test_z_std_non_positive(tmp_path):
     data["data"]["z_results"][0]["z_std"] = 0
     p = _write_json(tmp_path, data)
     result = QualityValidator().validate_file(p)
-    assert any(i.layer == ValidationLevel.L1_NON_FINITE and "z_std" in i.message for i in result.issues)
+    assert any(
+        i.layer == ValidationLevel.L1_NON_FINITE and "z_std" in i.message for i in result.issues
+    )
 
 
 def test_z_std_negative(tmp_path):
@@ -185,7 +198,9 @@ def test_z_std_negative(tmp_path):
     data["data"]["z_results"][0]["z_std"] = -1.0
     p = _write_json(tmp_path, data)
     result = QualityValidator().validate_file(p)
-    assert any(i.layer == ValidationLevel.L1_NON_FINITE and "z_std" in i.message for i in result.issues)
+    assert any(
+        i.layer == ValidationLevel.L1_NON_FINITE and "z_std" in i.message for i in result.issues
+    )
 
 
 def test_z_std_non_numeric(tmp_path):
@@ -194,7 +209,8 @@ def test_z_std_non_numeric(tmp_path):
     p = _write_json(tmp_path, data)
     result = QualityValidator().validate_file(p)
     assert any(
-        i.layer == ValidationLevel.L1_NON_FINITE and "z_std is not numeric" in i.message for i in result.issues
+        i.layer == ValidationLevel.L1_NON_FINITE and "z_std is not numeric" in i.message
+        for i in result.issues
     )
 
 
@@ -228,7 +244,10 @@ def test_raw_mean_outside_bounds(tmp_path):
     data = _make_valid_data(raw_mean=-1.0, env_name="dugongs")
     p = _write_json(tmp_path, data)
     result = QualityValidator().validate_file(p)
-    assert any(i.layer == ValidationLevel.L2_HARD_INVARIANTS and "outside" in i.message for i in result.issues)
+    assert any(
+        i.layer == ValidationLevel.L2_HARD_INVARIANTS and "outside" in i.message
+        for i in result.issues
+    )
 
 
 def test_raw_mean_inf(tmp_path):
