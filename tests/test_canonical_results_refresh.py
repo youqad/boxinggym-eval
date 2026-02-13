@@ -49,13 +49,7 @@ def test_champion_definitions_can_differ():
 
 
 def test_replace_marked_block_updates_only_marker_body(tmp_path: Path):
-    src = (
-        "before\n"
-        "<!-- CANONICAL_RESULTS:START -->\n"
-        "old\n"
-        "<!-- CANONICAL_RESULTS:END -->\n"
-        "after\n"
-    )
+    src = "before\n<!-- CANONICAL_RESULTS:START -->\nold\n<!-- CANONICAL_RESULTS:END -->\nafter\n"
     path = tmp_path / "README.md"
     path.write_text(src)
 
@@ -82,9 +76,7 @@ def test_render_readme_results_block_contains_both_champion_sections():
                 "p_adjusted_vs_best": None,
             }
         ],
-        "champions_model_only": [
-            {"env": "e1", "model_display": "Model A", "z_mean": -0.1}
-        ],
+        "champions_model_only": [{"env": "e1", "model_display": "Model A", "z_mean": -0.1}],
         "champions_model_plus_ppl": [
             {"env": "e1", "model_display": "Model A", "use_ppl": True, "z_mean": -0.2}
         ],

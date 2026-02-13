@@ -415,12 +415,18 @@ def refresh_canonical_artifacts(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     filtered_df.to_parquet(output_dir / CANONICAL_PARQUET, index=False)
-    (output_dir / CANONICAL_METADATA).write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
-    (output_dir / CANONICAL_METRICS).write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n")
+    (output_dir / CANONICAL_METADATA).write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+    )
+    (output_dir / CANONICAL_METRICS).write_text(
+        json.dumps(metrics, indent=2, sort_keys=True) + "\n"
+    )
 
     if readme_path.exists():
         replace_marked_block(readme_path, "CANONICAL_METADATA", render_metadata_block(metadata))
-        replace_marked_block(readme_path, "CANONICAL_RESULTS", render_readme_results_block(metrics, metadata))
+        replace_marked_block(
+            readme_path, "CANONICAL_RESULTS", render_readme_results_block(metrics, metadata)
+        )
     if hf_readme_path.exists():
         replace_marked_block(
             hf_readme_path,
@@ -432,7 +438,9 @@ def refresh_canonical_artifacts(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Refresh canonical snapshot and generated result docs.")
+    parser = argparse.ArgumentParser(
+        description="Refresh canonical snapshot and generated result docs."
+    )
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT, help="Input parquet file.")
     parser.add_argument(
         "--output-dir",
@@ -441,15 +449,21 @@ def parse_args() -> argparse.Namespace:
         help="Directory where canonical artifacts are written.",
     )
     parser.add_argument("--readme", type=Path, default=DEFAULT_README, help="README path.")
-    parser.add_argument("--hf-readme", type=Path, default=DEFAULT_HF_README, help="HF Space README path.")
+    parser.add_argument(
+        "--hf-readme", type=Path, default=DEFAULT_HF_README, help="HF Space README path."
+    )
     parser.add_argument("--min-budget", type=int, default=10, help="Minimum budget filter.")
     parser.add_argument(
         "--include-outliers",
         action="store_true",
         help="Include rows flagged as outliers in canonical artifacts.",
     )
-    parser.add_argument("--snapshot-version", default=utc_now_iso().split("T")[0], help="Snapshot label.")
-    parser.add_argument("--n-bootstrap", type=int, default=10_000, help="Bootstrap resamples for CIs.")
+    parser.add_argument(
+        "--snapshot-version", default=utc_now_iso().split("T")[0], help="Snapshot label."
+    )
+    parser.add_argument(
+        "--n-bootstrap", type=int, default=10_000, help="Bootstrap resamples for CIs."
+    )
     parser.add_argument("--dry-run", action="store_true", help="Compute but do not write files.")
     return parser.parse_args()
 

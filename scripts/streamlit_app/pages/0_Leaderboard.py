@@ -53,7 +53,9 @@ source_labels = {
     "none": "Not Found",
 }
 
-st.caption(f"Data source: **{source_labels.get(active_source, active_source)}** (`{active_source}`)")
+st.caption(
+    f"Data source: **{source_labels.get(active_source, active_source)}** (`{active_source}`)"
+)
 if active_source == "canonical_snapshot" and canonical_metadata:
     st.caption(
         "Snapshot generated: "
@@ -308,9 +310,7 @@ if runner_up and abs(leader["mean"] - runner_up["mean"]) < 0.05:
 findings.append(leader_line)
 
 # 2. baseline performance
-findings.append(
-    f"**{n_beating}/{len(champions)}** environments beaten (z\u2009<\u20090)"
-)
+findings.append(f"**{n_beating}/{len(champions)}** environments beaten (z\u2009<\u20090)")
 
 # 3. PPL impact (if column present)
 if "use_ppl" in valid_scores_df.columns:
@@ -340,9 +340,8 @@ if len(champions) >= 2:
 # 5. model specialization — count env wins per model
 if len(champions) >= 3:
     from collections import Counter
-    win_counts = Counter(
-        get_model_display_name(str(ch["model"])) for ch in champions
-    )
+
+    win_counts = Counter(get_model_display_name(str(ch["model"])) for ch in champions)
     top_winners = win_counts.most_common(2)
     if top_winners[0][1] > 1:
         parts = [f"**{name}** ({count} envs)" for name, count in top_winners if count > 1]
