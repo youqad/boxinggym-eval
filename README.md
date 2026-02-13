@@ -1,6 +1,4 @@
-# 🥊 SynthStats Multi-Model Evaluation and Analysis of BoxingGym 
-
-
+# 🥊 SynthStats Multi-Model Evaluation and Analysis of BoxingGym
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-3670A0?style=flat-square&logo=python&logoColor=ffdd54" alt="Python 3.11+"></a>&nbsp;
@@ -21,7 +19,9 @@
 ---
 
 ## What's New
-Stanford's BoxingGym is a benchmarking framework designed to evaluate the capabilities of language-based agents in experimental design and model discovery. The original benchmark was primarily designed for evalution through OpenAI endpoints.
+
+Stanford's BoxingGym is a benchmarking framework designed to evaluate the capabilities of language-based agents in experimental design and model discovery. The original benchmark was primarily designed for evaluation through OpenAI endpoints.
+
 This fork adds multi-model evaluation tooling to Stanford's BoxingGym:
 
 - 7 LLM providers (DeepSeek, MiniMax-M2.1, GLM-4.7, Kimi-K2, GPT-4o, GPT-5.1-Codex-mini, Qwen3-32B)
@@ -30,75 +30,82 @@ This fork adds multi-model evaluation tooling to Stanford's BoxingGym:
 - Cost tracking per model
 - 522 tests
 - `uv` for dependency management
-- 2,001 completed sweep runs across 10 environments
+- Canonical snapshot + generated README/HF summaries from one shared parquet source
 
 ---
 
 ## 🎯 Evaluation Results
 
-> **2,001 valid runs** (budget ≥ 10, |z| < 100) across **7 models** and **10 environments**
+<!-- CANONICAL_METADATA:START -->
+> Canonical snapshot generated: **2026-02-13T21:14:31Z**
+> Source: `.boxing-gym-cache/runs.parquet` @ `a0211d7c6e83300cb1216d4789b084a910523083`
+> Filters: `budget >= 10`, `exclude_outliers=true`
+> Valid runs: **1,948** across **7 models** and **10 environments**
+<!-- CANONICAL_METADATA:END -->
 
+<!-- CANONICAL_RESULTS:START -->
 ### Overall Model Rankings
 
-Mean z-score across all environments (lower is better):
+Mean z-score across all filtered runs (lower is better):
 
-| Rank | Model | Mean z | 95% CI | Runs |
-|------|-------|--------|--------|------|
-| 1 | **MiniMax-M2.1** | **+0.059** | [+0.000, +0.119] | 327 |
-| 2 | DeepSeek | +0.068 | [+0.002, +0.144] | 376 |
-| 3 | Kimi-K2 | +0.126 | [+0.047, +0.212] | 306 |
-| 4 | GLM-4.7 | +0.137 | [+0.041, +0.245] | 326 |
-| 5 | Qwen3-32B | +0.179 | [+0.083, +0.290] | 190 |
-| 6 | GPT-4o | +0.257 | [+0.123, +0.446] | 230 |
-| 7 | GPT-5.1-Codex-mini | +0.265 | [+0.147, +0.398] | 246 |
+| Rank | Model | Mean z | 95% CI | vs #1 (FDR p) | Runs |
+| --- | --- | --- | --- | --- | --- |
+| 1 | MiniMax-M2.1 | +0.185 | [+0.071, +0.315] | — | 311 |
+| 2 | GPT-4o | +0.256 | [+0.138, +0.388] | 0.424 | 226 |
+| 3 | Kimi-K2 | +0.262 | [+0.130, +0.408] | 0.424 | 302 |
+| 4 | Qwen3-32B | +0.275 | [+0.115, +0.464] | 0.424 | 188 |
+| 5 | DeepSeek-V3.2 | +0.296 | [+0.122, +0.532] | 0.424 | 369 |
+| 6 | GLM-4.7 | +0.546 | [+0.257, +0.904] | 0.120 | 314 |
+| 7 | GPT-5.1-Codex-Mini | +0.586 | [+0.310, +0.966] | 0.120 | 238 |
 
-### Per-Environment Champions
+### Per-Environment Champions (Best Model Only)
 
-Best mean performance per environment (lower z-score = better):
+_Definition: mean over all runs for each model within environment (ignores `use_ppl`)._
 
-| Environment | Description | Best Model | Mean z |
-|-------------|-------------|------------|--------|
-| **death_process** | Disease spread modeling | GPT-5.1-Codex-mini | **-0.639** ✓ |
-| **hyperbolic_temporal_discount** | Intertemporal choice | DeepSeek | **-0.430** ✓ |
-| **lotka_volterra** | Predator-prey dynamics | DeepSeek | -0.306 ✓ |
-| **moral_machines** | Autonomous vehicle ethics | GPT-5.1-Codex-mini | -0.140 ✓ |
-| **irt** | Item response theory | GPT-4o | -0.120 ✓ |
-| **location_finding** | Signal source localization | GPT-4o | -0.106 ✓ |
-| **peregrines** | Falcon population dynamics | DeepSeek | -0.084 ✓ |
-| **dugongs** | Sea cow growth modeling | GPT-4o | -0.041 ✓ |
-| **survival** | Breast cancer survival | GLM-4.7 | +0.429 |
-| **emotion** | Emotion from gambling | Qwen3-32B | +1.286 |
+| Environment | Best Model | Mean z | Status |
+| --- | --- | --- | --- |
+| death_process | GPT-4o | -0.903 | ✓ Beats baseline |
+| lotka_volterra | DeepSeek-V3.2 | -0.301 | ✓ Beats baseline |
+| hyperbolic_temporal_discount | DeepSeek-V3.2 | -0.152 | ✓ Beats baseline |
+| moral_machines | GPT-5.1-Codex-Mini | -0.140 | ✓ Beats baseline |
+| irt | GPT-5.1-Codex-Mini | -0.050 | ✓ Beats baseline |
+| dugongs | Qwen3-32B | -0.040 | ✓ Beats baseline |
+| peregrines | DeepSeek-V3.2 | +0.094 | Above baseline |
+| survival | GLM-4.7 | +0.434 | Above baseline |
+| emotion | Qwen3-32B | +1.286 | Above baseline |
+| location_finding | GPT-4o | +1.396 | Above baseline |
 
-✓ = Beats baseline (negative z-score)
+### Per-Environment Champions (Best Model + PPL)
 
-### Takeaways
+_Definition: mean over each `(model, use_ppl)` combination within environment._
 
-**MiniMax-M2.1** wins overall (+0.059 mean z), statistically tied with DeepSeek.
+| Environment | Best Model | use_ppl | Mean z | Status |
+| --- | --- | --- | --- | --- |
+| death_process | Qwen3-32B | true | -1.170 | ✓ Beats baseline |
+| lotka_volterra | DeepSeek-V3.2 | false | -0.301 | ✓ Beats baseline |
+| hyperbolic_temporal_discount | DeepSeek-V3.2 | false | -0.159 | ✓ Beats baseline |
+| moral_machines | GPT-5.1-Codex-Mini | false | -0.140 | ✓ Beats baseline |
+| irt | GPT-4o | true | -0.120 | ✓ Beats baseline |
+| dugongs | GPT-4o | true | -0.047 | ✓ Beats baseline |
+| location_finding | GPT-4o | true | -0.041 | ✓ Beats baseline |
+| peregrines | DeepSeek-V3.2 | false | +0.094 | Above baseline |
+| survival | GLM-4.7 | false | +0.429 | Above baseline |
+| emotion | Qwen3-32B | false | +1.286 | Above baseline |
 
-**DeepSeek** dominates temporal/dynamic tasks: hyperbolic (-0.430), lotka_volterra (-0.306), peregrines (-0.084).
+### Key Findings
 
-**GPT-4o with PPL** wins dugongs, irt, location_finding. PPL helps on some tasks despite overall negative effect.
-
-**Hard environments**: emotion (+1.286) and survival (+0.429) remain above baseline for all models.
-
-**PPL finding**: OED without PPL (z=+0.009) significantly beats OED+PPL (z=+0.702). Effect size: d=0.70 (medium).
-
-**Only GPT-5.1-Codex-mini** is significantly worse than #1 (p=0.02 after FDR correction).
-
-**Environment difficulty**: death_process easiest (z=-0.34), emotion hardest (z=+1.29). Diminishing returns after budget ~20.
-
-**Filtering**: 2,001 runs after budget ≥ 10, |z| < 100 (outlier removal). Rankings above include only models with n ≥ 100.
+- **MiniMax-M2.1** leads overall with z=+0.185
+- **6/10** environments beat baseline under model-only definition
+- Models significantly worse than #1 (FDR < 0.05): None
 
 ### Statistical Methods
 
-All queries use proper statistical testing:
-
-- **Welch's t-test**: Comparing groups with unequal variances
-- **Bootstrap CI**: 95% confidence intervals via 10,000 resamples
-- **Cohen's d**: Effect size interpretation (negligible < 0.2 < small < 0.5 < medium < 0.8 < large)
+- **Welch's t-test**: Group comparison with unequal variances
+- **Bootstrap CI**: 95% confidence intervals from resampling
 - **Benjamini-Hochberg**: FDR correction for multiple comparisons
 
-Run `box query all` for full statistics.
+_Snapshot version: `2026-02-13`_
+<!-- CANONICAL_RESULTS:END -->
 
 ---
 
@@ -147,7 +154,7 @@ The `box` CLI handles result analysis. Sync once, query as needed.
 Cache results first (run once, or after adding new results):
 ```bash
 uv run box sync --local results/    # parse JSON → .boxing-gym-cache/runs.parquet
-uv run box sync --status            # check cache: 6,068 runs, 16 models, 10 envs
+uv run box sync --status            # check current cache counts
 ```
 
 Then run queries (instant):
@@ -169,6 +176,15 @@ uv run box query leaderboard --env dugongs       # filter by environment
 uv run box query leaderboard --format md         # markdown output
 uv run box query leaderboard --format json       # JSON output
 uv run box query all --include-outliers          # include flagged outliers
+```
+
+### Canonical Snapshot Refresh
+
+Regenerate the pinned snapshot + README/HF summary blocks from the local cache:
+
+```bash
+uv run box sync --local results/
+uv run python scripts/refresh_canonical_results.py
 ```
 
 ### CLI, TUI, and Web
@@ -276,4 +292,3 @@ Cite the original paper:
   year={2025}
 }
 ```
-
