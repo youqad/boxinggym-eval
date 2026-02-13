@@ -1,32 +1,33 @@
 """LLM Call Logs view for TUI."""
 
+import sys
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import pandas as pd
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.prompt import IntPrompt
+from rich.table import Table
 from rich.text import Text
 
-from . import BaseView
 from ..loaders.jsonl_loader import (
-    load_jsonl,
     compute_stats,
+    find_jsonl_files,
     find_latest_jsonl,
-    CallLogEntry,
+    load_jsonl,
 )
+from . import BaseView
 
 
 def _truncate(text: str, max_len: int = 60) -> str:
-    """Truncate text with ellipsis."""
     if len(text) <= max_len:
         return text
     return text[: max_len - 3] + "..."
 
 
 def _format_cost(cost: float) -> str:
-    """Format cost with appropriate precision."""
     if cost < 0.0001:
         return f"${cost:.6f}"
     if cost < 0.01:
@@ -35,33 +36,114 @@ def _format_cost(cost: float) -> str:
 
 
 def _format_latency(latency_ms: float) -> str:
-    """Format latency with commas."""
     return f"{latency_ms:,.0f}ms"
 
 
 class CallLogsView(BaseView):
-    """Display LLM call logs from JSONL files."""
-
     def __init__(
         self,
         console: Console,
         metric: str = "metric/eval/z_mean",
-        jsonl_path: Optional[Path] = None,
+        jsonl_path: Path | None = None,
     ):
         self.jsonl_path = jsonl_path or find_latest_jsonl()
+        self.available_files = find_jsonl_files()
         self.entries = []
         if self.jsonl_path and self.jsonl_path.exists():
             try:
                 self.entries = load_jsonl(self.jsonl_path)
             except Exception:
-                pass
+                self.entries = []
         super().__init__(pd.DataFrame(), console, metric)
 
     @property
     def title(self) -> str:
         return "LLM Call Logs"
 
-    def render(self) -> None:
+    def _load_file(self, path: Path) -> None:
+        self.jsonl_path = path
+        self.entries = []
+        if path.exists():
+            try:
+                self.entries = load_jsonl(path)
+            except Exception:
+                pass
+
+    def _show_file_selector(self) -> bool:
+        if not self.available_files:
+            self.console.print("[yellow]No JSONL call log files found[/yellow]")
+            return False
+
+        self.console.print("\n[bold cyan]Available Call Log Files[/bold cyan]\n")
+
+        table = Table(border_style="dim", show_header=True, header_style="bold")
+        table.add_column("#", justify="right", width=4)
+        table.add_column("File", width=40)
+        table.add_column("Size", justify="right", width=10)
+        table.add_column("Modified", width=20)
+
+        for i, path in enumerate(self.available_files[:20], 1):
+            stat = path.stat()
+            size_kb = stat.st_size / 1024
+            mtime = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+
+            marker = " *" if path == self.jsonl_path else ""
+            table.add_row(
+                str(i),
+                path.name + marker,
+                f"{size_kb:.1f} KB",
+                mtime,
+            )
+
+        self.console.print(table)
+
+        if len(self.available_files) > 20:
+            self.console.print(f"[dim]... and {len(self.available_files) - 20} more files[/dim]")
+
+        self.console.print("\n[dim]* = currently selected[/dim]")
+        self.console.print("[dim]Enter 0 to go back without changing[/dim]\n")
+
+        try:
+            choice = IntPrompt.ask(
+                "[bold yellow]Select file[/bold yellow]",
+                console=self.console,
+                default=0,
+            )
+        except (KeyboardInterrupt, EOFError):
+            return False
+
+        if choice == 0:
+            return False
+
+        if 1 <= choice <= min(20, len(self.available_files)):
+            selected = self.available_files[choice - 1]
+            self._load_file(selected)
+            self.console.print(f"[green]Loaded: {selected.name}[/green]\n")
+            return True
+
+        self.console.print("[red]Invalid selection[/red]")
+        return False
+
+    def render(self, interactive: bool = True) -> None:
+        # Disable prompts in non-TTY contexts (e.g., --view call-logs in CI/agents).
+        interactive = interactive and sys.stdin.isatty()
+        n_files = len(self.available_files)
+        if interactive and n_files > 1:
+            self.console.print(f"[cyan]{n_files} call log files available[/cyan]\n")
+            self.console.print("[dim]  [1] View current file[/dim]")
+            self.console.print("[dim]  [2] Select different file[/dim]\n")
+
+            try:
+                choice = IntPrompt.ask(
+                    "[bold yellow]Choice[/bold yellow]",
+                    console=self.console,
+                    default=1,
+                )
+                if choice == 2:
+                    self._show_file_selector()
+            except (KeyboardInterrupt, EOFError):
+                return
+
         if not self.jsonl_path:
             self.console.print("[yellow]No JSONL call log files found[/yellow]")
             self.console.print("[dim]Run an experiment with call recording enabled[/dim]")
@@ -73,9 +155,7 @@ class CallLogsView(BaseView):
 
         stats = compute_stats(self.entries)
 
-        self.console.print(
-            f"[dim]File: {self.jsonl_path.name}[/dim]\n"
-        )
+        self.console.print(f"[dim]File: {self.jsonl_path.name} ({len(self.entries)} calls)[/dim]\n")
 
         summary_table = Table(
             title="LLM Call Logs Summary",
@@ -103,9 +183,7 @@ class CallLogsView(BaseView):
         summary_table.add_section()
         error_style = "red" if stats.error_count > 0 else "dim"
         total_tokens = (
-            stats.total_prompt_tokens
-            + stats.total_completion_tokens
-            + stats.total_reasoning_tokens
+            stats.total_prompt_tokens + stats.total_completion_tokens + stats.total_reasoning_tokens
         )
         summary_table.add_row(
             "TOTAL",
@@ -129,7 +207,6 @@ class CallLogsView(BaseView):
             self._render_errors()
 
     def _render_recent_calls(self, limit: int = 10) -> None:
-        """Render most recent calls table."""
         if not self.entries:
             return
 
@@ -161,7 +238,6 @@ class CallLogsView(BaseView):
         self.console.print(table)
 
     def _render_errors(self) -> None:
-        """Render error summary."""
         errors = [e for e in self.entries if e.error]
         if not errors:
             return
@@ -181,8 +257,7 @@ class CallLogsView(BaseView):
         if len(errors) > 5:
             self.console.print(f"  ... and {len(errors) - 5} more")
 
-    def get_data(self) -> Dict[str, Any]:
-        """Return structured data for JSON/CSV export."""
+    def get_data(self) -> dict[str, Any]:
         if not self.entries:
             return {
                 "file": str(self.jsonl_path) if self.jsonl_path else None,
@@ -235,3 +310,79 @@ class CallLogsView(BaseView):
                 for e in self.entries
             ],
         }
+
+    def get_csv_rows(self) -> list:
+        data = self.get_data()
+        rows = []
+
+        summary = data.get("summary", {})
+        if summary:
+            rows.append(["# Call Logs Summary"])
+            rows.append(["metric", "value"])
+            rows.append(["total_calls", summary.get("total_calls", "")])
+            rows.append(["total_cost", summary.get("total_cost", "")])
+            rows.append(["avg_latency_ms", summary.get("avg_latency_ms", "")])
+            rows.append(["error_count", summary.get("error_count", "")])
+            rows.append(["total_prompt_tokens", summary.get("total_prompt_tokens", "")])
+            rows.append(["total_completion_tokens", summary.get("total_completion_tokens", "")])
+            rows.append(["models", ", ".join(summary.get("models", []))])
+
+        by_agent = data.get("by_agent", [])
+        if by_agent:
+            rows.append([])
+            rows.append(["# By Agent"])
+            rows.append(
+                [
+                    "agent",
+                    "call_count",
+                    "total_cost",
+                    "avg_latency_ms",
+                    "error_count",
+                    "total_tokens",
+                ]
+            )
+            for a in by_agent:
+                rows.append(
+                    [
+                        a.get("agent", ""),
+                        a.get("call_count", ""),
+                        a.get("total_cost", ""),
+                        a.get("avg_latency_ms", ""),
+                        a.get("error_count", ""),
+                        a.get("total_tokens", ""),
+                    ]
+                )
+
+        calls = data.get("calls", [])
+        if calls:
+            rows.append([])
+            rows.append(["# All Calls"])
+            rows.append(
+                [
+                    "agent",
+                    "model",
+                    "call_type",
+                    "latency_ms",
+                    "cost_usd",
+                    "prompt_tokens",
+                    "completion_tokens",
+                    "step_idx",
+                    "error",
+                ]
+            )
+            for c in calls:
+                rows.append(
+                    [
+                        c.get("agent", ""),
+                        c.get("model", ""),
+                        c.get("call_type", ""),
+                        c.get("latency_ms", ""),
+                        c.get("cost_usd", ""),
+                        c.get("prompt_tokens", ""),
+                        c.get("completion_tokens", ""),
+                        c.get("step_idx", ""),
+                        c.get("error", ""),
+                    ]
+                )
+
+        return rows

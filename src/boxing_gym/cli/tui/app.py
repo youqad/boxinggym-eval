@@ -1,18 +1,17 @@
 """Main TUI application for sweep analysis."""
 
 import csv
+import inspect
 import json
 import math
 import sys
-from typing import List, Optional, Dict, Type, Literal, Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 
 
 class NumpyJSONEncoder(json.JSONEncoder):
-    """JSON encoder that handles NumPy types and NaN values."""
-
     def default(self, obj: Any) -> Any:
         if isinstance(obj, (np.integer, np.int_)):
             return int(obj)
@@ -31,21 +30,21 @@ from rich.console import Console
 from rich.prompt import IntPrompt
 from rich.rule import Rule
 
-from .components.menu import render_menu, clear_screen, press_enter_to_continue
+from boxing_gym.cli.quality_filter import apply_quality_filters
+
+from .components.menu import clear_screen, press_enter_to_continue, render_menu
 from .views import BaseView
-from .views.parameter_importance import ParameterImportanceView
-from .views.model_rankings import ModelRankingsView
-from .views.heatmap import HeatmapView
 from .views.best_configs import BestConfigsView
 from .views.budget_progression import BudgetProgressionView
-from .views.seed_stability import SeedStabilityView
-from .views.local_summary import LocalSummaryView
 from .views.call_logs import CallLogsView
+from .views.heatmap import HeatmapView
+from .views.local_summary import LocalSummaryView
+from .views.model_rankings import ModelRankingsView
+from .views.parameter_importance import ParameterImportanceView
 from .views.ppl_examples import PPLExamplesView
+from .views.seed_stability import SeedStabilityView
 
-
-# view name → view class mapping for non-interactive mode
-VIEW_REGISTRY: Dict[str, Type[BaseView]] = {
+VIEW_REGISTRY: dict[str, type[BaseView]] = {
     "parameter-importance": ParameterImportanceView,
     "model-rankings": ModelRankingsView,
     "heatmap": HeatmapView,
@@ -57,102 +56,96 @@ VIEW_REGISTRY: Dict[str, Type[BaseView]] = {
     "ppl-examples": PPLExamplesView,
 }
 
-# all available view names (for CLI help text)
 AVAILABLE_VIEWS = list(VIEW_REGISTRY.keys()) + ["all"]
 
 
 class SweepTUI:
-    """Interactive TUI for sweep analysis."""
-
     def __init__(
         self,
         df: pd.DataFrame,
-        sweep_ids: List[str],
+        sweep_ids: list[str],
         metric: str = "metric/eval/z_mean",
         include_seed: bool = False,
         is_local: bool = False,
     ):
         self.original_df = df.copy()  # store unfiltered for dynamic filtering
-        self.df = df
+        self.df = apply_quality_filters(df, z_col=metric)
         self.sweep_ids = sweep_ids
         self.metric = metric
         self.include_seed = include_seed
         self.is_local = is_local
         self.console = Console(width=120)
-        self.current_env_filter: Optional[str] = None
+        self.current_env_filter: str | None = None
         self._init_views()
 
     def _init_views(self) -> None:
-        """Initialize or reinitialize views with current DataFrame."""
         self.views = []
 
-        # add local summary view first when using local data
         if self.is_local:
             self.views.append(LocalSummaryView(self.df, self.console, self.metric))
 
-        self.views.extend([
-            ParameterImportanceView(self.df, self.console, self.metric, include_seed=self.include_seed),
-            ModelRankingsView(self.df, self.console, self.metric),
-            HeatmapView(self.df, self.console, self.metric),
-            BestConfigsView(self.df, self.console, self.metric),
-            BudgetProgressionView(self.df, self.console, self.metric),
-            SeedStabilityView(self.df, self.console, self.metric),
-            CallLogsView(self.console, self.metric),
-            PPLExamplesView(self.console, self.metric),
-        ])
+        self.views.extend(
+            [
+                ParameterImportanceView(
+                    self.df, self.console, self.metric, include_seed=self.include_seed
+                ),
+                ModelRankingsView(self.df, self.console, self.metric),
+                HeatmapView(self.df, self.console, self.metric),
+                BestConfigsView(self.df, self.console, self.metric),
+                BudgetProgressionView(self.df, self.console, self.metric),
+                SeedStabilityView(self.df, self.console, self.metric),
+                CallLogsView(self.console, self.metric),
+                PPLExamplesView(self.console, self.metric),
+            ]
+        )
 
-        # name → view instance mapping
-        self._view_map = {v.title.lower().replace(" ", "-"): v for v in self.views}
-        # also add canonical names for backwards compatibility
-        self._view_map.update({
-            "parameter-importance": next((v for v in self.views if isinstance(v, ParameterImportanceView)), None),
-            "model-rankings": next((v for v in self.views if isinstance(v, ModelRankingsView)), None),
-            "heatmap": next((v for v in self.views if isinstance(v, HeatmapView)), None),
-            "best-configs": next((v for v in self.views if isinstance(v, BestConfigsView)), None),
-            "budget-progression": next((v for v in self.views if isinstance(v, BudgetProgressionView)), None),
-            "seed-stability": next((v for v in self.views if isinstance(v, SeedStabilityView)), None),
-            "local-summary": next((v for v in self.views if isinstance(v, LocalSummaryView)), None),
-            "call-logs": next((v for v in self.views if isinstance(v, CallLogsView)), None),
-            "ppl-examples": next((v for v in self.views if isinstance(v, PPLExamplesView)), None),
-        })
-        # remove None entries
-        self._view_map = {k: v for k, v in self._view_map.items() if v is not None}
+        # Canonical map: iterate/export only VIEW_REGISTRY keys.
+        instance_by_type: dict[type[BaseView], BaseView] = {}
+        for v in self.views:
+            instance_by_type[type(v)] = v
+        self._view_map = {
+            key: instance_by_type.get(view_type)
+            for key, view_type in VIEW_REGISTRY.items()
+            if instance_by_type.get(view_type) is not None
+        }
+        # Title-based aliases for lookup only (not iteration).
+        self._alias_map: dict[str, str] = {}
+        for key, view in self._view_map.items():
+            title_key = view.title.lower().replace(" ", "-")
+            if title_key != key:
+                self._alias_map[title_key] = key
 
     def _get_subtitle(self) -> str:
-        """Build subtitle with sweep info and current filter."""
         sweep_str = ", ".join(self.sweep_ids[:3])
         if len(self.sweep_ids) > 3:
             sweep_str += f" +{len(self.sweep_ids) - 3} more"
         filter_str = f" | Env: {self.current_env_filter}" if self.current_env_filter else ""
         return f"Sweep: {sweep_str} | Runs: {len(self.df)}{filter_str}"
 
-    def _get_env_column(self) -> Optional[str]:
-        """Find the environment column in the DataFrame."""
+    def _get_env_column(self) -> str | None:
         for candidate in ["config/envs", "envs", "config/env", "env"]:
             if candidate in self.original_df.columns:
                 return candidate
         return None
 
-    def _get_environments(self) -> List[str]:
-        """Get unique environments from original (unfiltered) data."""
+    def _get_environments(self) -> list[str]:
         env_col = self._get_env_column()
         if not env_col:
             return []
         return sorted(self.original_df[env_col].dropna().unique().tolist())
 
-    def _filter_by_environment(self, env: Optional[str]) -> None:
-        """Apply environment filter and reinitialize views."""
+    def _filter_by_environment(self, env: str | None) -> None:
         self.current_env_filter = env
         env_col = self._get_env_column()
 
         if env is None or not env_col:
-            self.df = self.original_df.copy()
+            base = self.original_df.copy()
         else:
-            self.df = self.original_df[self.original_df[env_col] == env].copy()
+            base = self.original_df[self.original_df[env_col] == env].copy()
+        self.df = apply_quality_filters(base, z_col=self.metric)
         self._init_views()
 
     def _show_env_filter_menu(self) -> None:
-        """Show environment selection submenu."""
         envs = self._get_environments()
         env_col = self._get_env_column()
 
@@ -198,7 +191,6 @@ class SweepTUI:
         press_enter_to_continue(self.console)
 
     def run(self) -> None:
-        """Main TUI loop."""
         while True:
             clear_screen(self.console)
             options = [(str(i + 1), view.title) for i, view in enumerate(self.views)]
@@ -243,305 +235,109 @@ class SweepTUI:
 
     def run_non_interactive(
         self,
-        view_names: List[str],
-        output_format: Literal["rich", "json", "csv"] = "rich"
+        view_names: list[str],
+        output_format: Literal["rich", "json", "csv", "plotly"] = "rich",
+        plotly_output_dir: str | None = None,
     ) -> None:
-        """Run specified views without user interaction.
-
-        Renders views directly to stdout without menus or prompts.
-        Suitable for piping output to other tools or AI agents.
-
-        Args:
-            view_names: List of view names to render. Use ["all"] for all views.
-            output_format: Output format - "rich" (default), "json", or "csv"
-        """
-        # resolve "all" to all view names
         if "all" in view_names:
             view_names = list(self._view_map.keys())
 
-        # handle machine-readable output formats
         if output_format == "json":
             self._output_json(view_names)
             return
         elif output_format == "csv":
             self._output_csv(view_names)
             return
+        elif output_format == "plotly":
+            self._output_plotly(view_names, plotly_output_dir)
+            return
 
-        # rich format (default)
-        # print header
         self.console.print(Rule("[bold cyan]BoxingGym Sweep Analysis[/bold cyan]"))
         self.console.print(f"[dim]{self._get_subtitle()}[/dim]\n")
 
-        # render each requested view
         for i, name in enumerate(view_names):
-            if name not in self._view_map:
+            canonical = self._alias_map.get(name, name)
+            if canonical not in self._view_map:
                 self.console.print(f"[red]Unknown view: {name}[/red]")
                 self.console.print(f"[dim]Available: {', '.join(self._view_map.keys())}[/dim]\n")
                 continue
 
-            view = self._view_map[name]
+            view = self._view_map[canonical]
 
             if i > 0:
                 self.console.print()  # blank line between views
 
             self.console.print(Rule(f"[bold cyan]{view.title}[/bold cyan]"))
-            view.render()
+            render_sig = inspect.signature(view.render)
+            if "interactive" in render_sig.parameters:
+                view.render(interactive=False)
+            else:
+                view.render()
             self.console.print()  # spacing after view
 
-    def _output_json(self, view_names: List[str]) -> None:
-        """Output view data as JSON."""
+    def _output_json(self, view_names: list[str]) -> None:
         result = {}
         for name in view_names:
-            if name not in self._view_map:
+            canonical = self._alias_map.get(name, name)
+            if canonical not in self._view_map:
                 continue
-            view = self._view_map[name]
-            result[name] = view.get_data()
+            view = self._view_map[canonical]
+            result[canonical] = view.get_data()
 
-        # output to stdout with custom encoder for NumPy types
         json.dump(result, sys.stdout, indent=2, cls=NumpyJSONEncoder)
-        sys.stdout.write('\n')
+        sys.stdout.write("\n")
 
-    def _output_csv(self, view_names: List[str]) -> None:
-        """Output view data as CSV.
-
-        For views with nested data, creates one CSV per view.
-        Flattens complex structures where possible.
-        """
+    def _output_csv(self, view_names: list[str]) -> None:
+        """Output view data as CSV. Each view implements get_csv_rows()."""
         writer = csv.writer(sys.stdout)
 
         for name in view_names:
-            if name not in self._view_map:
+            canonical = self._alias_map.get(name, name)
+            if canonical not in self._view_map:
                 continue
 
-            view = self._view_map[name]
-            data = view.get_data()
-
-            # write view header
+            view = self._view_map[canonical]
             writer.writerow([f"# {view.title}"])
 
-            # handle different view types
-            if name == "parameter-importance":
-                # list of parameters with importance/correlation
-                params = data.get("parameters", [])
-                if params:
-                    writer.writerow(["parameter", "importance", "std", "correlation"])
-                    for p in params:
-                        writer.writerow([
-                            p.get("parameter", ""),
-                            p.get("importance", ""),
-                            p.get("std", ""),
-                            p.get("correlation", "")
-                        ])
+            for row in view.get_csv_rows():
+                writer.writerow(row)
 
-            elif name == "model-rankings":
-                # list of models with rankings
-                rankings = data.get("rankings", [])
-                if rankings:
-                    writer.writerow(["rank", "model", "mean", "std", "sem", "count"])
-                    for r in rankings:
-                        writer.writerow([
-                            r.get("rank", ""),
-                            r.get("model", ""),
-                            r.get("mean", ""),
-                            r.get("std", ""),
-                            r.get("sem", ""),
-                            r.get("count", "")
-                        ])
-
-            elif name == "heatmap":
-                # pivot table: environments vs models
-                heatmap = data.get("heatmap", {})
-                if heatmap:
-                    # get all models (columns)
-                    models = set()
-                    for env_data in heatmap.values():
-                        models.update(env_data.keys())
-                    models = sorted(models)
-
-                    # header row
-                    writer.writerow(["environment"] + models)
-
-                    # data rows
-                    for env, env_data in heatmap.items():
-                        row = [env]
-                        for model in models:
-                            val = env_data.get(model)
-                            row.append("" if val is None else val)
-                        writer.writerow(row)
-
-            elif name == "best-configs":
-                # top configurations
-                configs = data.get("best_configs", [])
-                if configs:
-                    # determine all keys
-                    all_keys = set()
-                    for c in configs:
-                        all_keys.update(c.keys())
-                    all_keys = sorted(all_keys)
-
-                    writer.writerow(all_keys)
-                    for c in configs:
-                        writer.writerow([c.get(k, "") for k in all_keys])
-
-                # best per environment (separate section)
-                best_per_env = data.get("best_per_env", [])
-                if best_per_env:
-                    writer.writerow([])  # blank line
-                    writer.writerow(["# Best per Environment"])
-                    writer.writerow(["environment", "best_model", "z_mean"])
-                    for b in best_per_env:
-                        writer.writerow([
-                            b.get("environment", ""),
-                            b.get("best_model", ""),
-                            b.get("z_mean", "")
-                        ])
-
-            elif name == "budget-progression":
-                # progression data with budgets
-                progression = data.get("progression", [])
-                if progression:
-                    # get all budgets
-                    budgets = set()
-                    for p in progression:
-                        budgets.update(p.get("budgets", {}).keys())
-                    budgets = sorted(budgets)
-
-                    # header
-                    writer.writerow(["env_model"] + [f"budget_{b}" for b in budgets])
-
-                    # data rows
-                    for p in progression:
-                        row = [p.get("env_model", "")]
-                        for b in budgets:
-                            val = p.get("budgets", {}).get(b)
-                            row.append("" if val is None else val)
-                        writer.writerow(row)
-
-            elif name == "seed-stability":
-                # per-seed stats
-                per_seed = data.get("per_seed_stats", [])
-                if per_seed:
-                    writer.writerow(["# Per-Seed Performance"])
-                    writer.writerow(["seed", "mean", "std", "count"])
-                    for s in per_seed:
-                        writer.writerow([
-                            s.get("config/seed", ""),
-                            s.get("mean", ""),
-                            s.get("std", ""),
-                            s.get("count", "")
-                        ])
-
-                # variance decomposition
-                variance_decomp = data.get("variance_decomposition", {})
-                if variance_decomp:
-                    writer.writerow([])  # blank line
-                    writer.writerow(["# Variance Decomposition"])
-                    writer.writerow(["metric", "value"])
-                    writer.writerow(["global_std", variance_decomp.get("global_std", "")])
-                    writer.writerow(["between_seed_std", variance_decomp.get("between_seed_std", "")])
-                    writer.writerow(["within_seed_std", variance_decomp.get("within_seed_std", "")])
-
-                # unstable configs
-                unstable = data.get("unstable_configs", [])
-                if unstable:
-                    writer.writerow([])  # blank line
-                    writer.writerow(["# Most Unstable Configs"])
-                    writer.writerow(["config", "variance", "std", "mean", "count"])
-                    for u in unstable:
-                        config_str = str(u.get("config", {}))
-                        writer.writerow([
-                            config_str,
-                            u.get("variance", ""),
-                            u.get("std", ""),
-                            u.get("mean", ""),
-                            u.get("count", "")
-                        ])
-
-            elif name == "local-summary":
-                # model rankings
-                rankings = data.get("rankings", [])
-                if rankings:
-                    writer.writerow(["rank", "model", "z_mean", "abs_z_mean", "std", "run_count", "effective_seeds"])
-                    for r in rankings:
-                        writer.writerow([
-                            r.get("rank", ""),
-                            r.get("model", ""),
-                            r.get("z_mean", ""),
-                            r.get("abs_z_mean", ""),
-                            r.get("std", ""),
-                            r.get("run_count", ""),
-                            r.get("effective_seeds", "")
-                        ])
-
-                # per-environment top 3
-                per_env = data.get("per_environment", {})
-                if per_env:
-                    writer.writerow([])  # blank line
-                    writer.writerow(["# Per-Environment Top 3"])
-                    writer.writerow(["environment", "model", "z_mean", "effective_seeds"])
-                    for env, models in sorted(per_env.items()):
-                        for m in models:
-                            writer.writerow([
-                                env,
-                                m.get("model", ""),
-                                m.get("z_mean", ""),
-                                m.get("effective_seeds", "")
-                            ])
-
-                # summary stats
-                writer.writerow([])
-                writer.writerow(["# Summary"])
-                writer.writerow(["total_runs", data.get("total_runs", "")])
-                writer.writerow(["total_models", data.get("total_models", "")])
-                writer.writerow(["total_environments", data.get("total_environments", "")])
-
-            elif name == "ppl-examples":
-                # summary
-                summary = data.get("summary", {})
-                if summary:
-                    writer.writerow(["# PPL Summary"])
-                    writer.writerow(["metric", "value"])
-                    writer.writerow(["total_runs", summary.get("total_runs", "")])
-                    writer.writerow(["environments", summary.get("environments", "")])
-                    writer.writerow(["models", summary.get("models", "")])
-                    writer.writerow(["best_loo", summary.get("best_loo", "")])
-                    writer.writerow(["total_programs", summary.get("total_programs", "")])
-
-                # best per env
-                best_per_env = data.get("best_per_env", [])
-                if best_per_env:
-                    writer.writerow([])
-                    writer.writerow(["# Best PPL Model per Environment"])
-                    writer.writerow(["env", "model", "z_mean", "best_loo"])
-                    for b in best_per_env:
-                        writer.writerow([
-                            b.get("env", ""),
-                            b.get("model", ""),
-                            b.get("z_mean", ""),
-                            b.get("best_loo", ""),
-                        ])
-
-                # all runs
-                runs = data.get("runs", [])
-                if runs:
-                    writer.writerow([])
-                    writer.writerow(["# All PPL Runs"])
-                    writer.writerow(["run_id", "env", "model", "budget", "seed", "z_mean", "best_loo", "best_waic", "num_programs", "best_divergences", "best_max_rhat", "best_min_ess"])
-                    for r in runs:
-                        writer.writerow([
-                            r.get("run_id", ""),
-                            r.get("env", ""),
-                            r.get("model", ""),
-                            r.get("budget", ""),
-                            r.get("seed", ""),
-                            r.get("z_mean", ""),
-                            r.get("best_loo", ""),
-                            r.get("best_waic", ""),
-                            r.get("num_programs", ""),
-                            r.get("best_divergences", ""),
-                            r.get("best_max_rhat", ""),
-                            r.get("best_min_ess", ""),
-                        ])
-
-            # blank line between views
             writer.writerow([])
+
+    def _output_plotly(self, view_names: list[str], output_dir: str | None = None) -> None:
+        from pathlib import Path
+
+        output_path = Path(output_dir) if output_dir else Path.cwd()
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        exported = []
+        for name in view_names:
+            canonical = self._alias_map.get(name, name)
+            if canonical not in self._view_map:
+                continue
+
+            view = self._view_map[canonical]
+            fig = view.to_plotly()
+
+            if fig is None:
+                self.console.print(f"[dim]{canonical}: no Plotly export available[/dim]")
+                continue
+
+            filename = f"{canonical.replace(' ', '_')}.html"
+            filepath = output_path / filename
+            fig.write_html(str(filepath), include_plotlyjs="cdn")
+            exported.append((canonical, filepath))
+            self.console.print(f"[green]✓[/green] {canonical} → {filepath}")
+
+        if exported:
+            self.console.print(
+                f"\n[cyan]Exported {len(exported)} Plotly figures to {output_path}[/cyan]"
+            )
+        else:
+            self.console.print(
+                "[yellow]No Plotly figures exported (views may not support Plotly)[/yellow]"
+            )
+
+    def get_plotly_figures(self) -> dict[str, Any]:
+        """Return dict of view name to Plotly Figure (or None if unsupported)."""
+        return {name: view.to_plotly() for name, view in self._view_map.items()}

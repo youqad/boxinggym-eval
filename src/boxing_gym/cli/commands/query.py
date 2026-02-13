@@ -1,9 +1,10 @@
 """Query command - run pre-built analysis queries."""
 
 from pathlib import Path
+
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 
 console = Console()
 
@@ -46,6 +47,7 @@ def run_query(
         raise SystemExit(1)
 
     import pandas as pd
+
     df = pd.read_parquet(CACHE_FILE)
 
     # filter flagged outliers by default (unless --include-outliers)
@@ -54,7 +56,9 @@ def run_query(
         df = df[~df["is_outlier"].fillna(False)]
         n_excluded = n_total - len(df)
         if n_excluded > 0:
-            console.print(f"[dim]Excluding {n_excluded:,} flagged outliers (use --include-outliers to include)[/dim]")
+            console.print(
+                f"[dim]Excluding {n_excluded:,} flagged outliers (use --include-outliers to include)[/dim]"
+            )
 
     # apply filters
     if min_budget:
@@ -79,7 +83,7 @@ def run_query(
 
     # output to file if requested
     if output and output_format in ("md", "json"):
-        console.print(f"[dim]Output to file not yet implemented.[/dim]")
+        console.print("[dim]Output to file not yet implemented.[/dim]")
 
 
 def _list_queries():
@@ -114,6 +118,7 @@ def _run_single_query(query_name: str, df, output_format: str):
 def _query_leaderboard(df, output_format: str):
     """Model leaderboard with rankings and statistical significance."""
     import numpy as np
+
     from boxing_gym.analysis.stats import bootstrap_ci, compare_models
 
     agg = df.groupby("model")["z_mean"].agg(["mean", "std", "count"]).reset_index()
@@ -133,13 +138,15 @@ def _query_leaderboard(df, output_format: str):
     # compare all models against best
     comparisons = compare_models(df, reference_model=best["model"])
 
-    console.print(Panel.fit(
-        f"[bold]Question:[/bold] Which model performs best overall?\n"
-        f"[bold]Answer:[/bold] {best['model']} ranks #1 with z={best['mean']:+.3f} "
-        f"(95% CI: [{best_ci.ci_low:+.3f}, {best_ci.ci_high:+.3f}])",
-        title="Model Leaderboard",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold]Question:[/bold] Which model performs best overall?\n"
+            f"[bold]Answer:[/bold] {best['model']} ranks #1 with z={best['mean']:+.3f} "
+            f"(95% CI: [{best_ci.ci_low:+.3f}, {best_ci.ci_high:+.3f}])",
+            title="Model Leaderboard",
+            border_style="cyan",
+        )
+    )
 
     table = Table(show_header=True)
     table.add_column("Rank", justify="right", style="cyan")
@@ -186,27 +193,34 @@ def _query_leaderboard(df, output_format: str):
     # find significantly different models
     sig_worse = [c["model"] for c in comparisons["comparisons"] if c.get("significant_fdr", False)]
 
-    console.print(f"\n[bold]Key Findings:[/bold]")
+    console.print("\n[bold]Key Findings:[/bold]")
     console.print(f"  • Best: {best['model']} (z={best['mean']:+.3f})")
     console.print(f"  • Worst: {worst['model']} (z={worst['mean']:+.3f})")
     console.print(f"  • Spread: {spread:.3f}")
     if sig_worse:
         console.print(f"  • Significantly worse than #1 (FDR<0.05): {', '.join(sig_worse)}")
     else:
-        console.print(f"  • No models significantly different from #1 at FDR<0.05")
+        console.print("  • No models significantly different from #1 at FDR<0.05")
 
 
 def _query_oed_discovery(df, output_format: str):
     """OED vs Discovery 2x2 comparison with statistical tests."""
     import numpy as np
-    from boxing_gym.analysis.stats import welch_ttest, cohens_d
+
+    from boxing_gym.analysis.stats import cohens_d, welch_ttest
 
     # compute main comparison: OED vs Discovery
     oed_scores = df[df["experiment_type"] == "oed"]["z_mean"].values
     disc_scores = df[df["experiment_type"] == "discovery"]["z_mean"].values
 
-    main_test = welch_ttest(oed_scores, disc_scores) if len(oed_scores) > 0 and len(disc_scores) > 0 else None
-    effect = cohens_d(oed_scores, disc_scores) if len(oed_scores) > 0 and len(disc_scores) > 0 else None
+    main_test = (
+        welch_ttest(oed_scores, disc_scores)
+        if len(oed_scores) > 0 and len(disc_scores) > 0
+        else None
+    )
+    effect = (
+        cohens_d(oed_scores, disc_scores) if len(oed_scores) > 0 and len(disc_scores) > 0 else None
+    )
 
     oed_mean = np.mean(oed_scores) if len(oed_scores) > 0 else float("nan")
     disc_mean = np.mean(disc_scores) if len(disc_scores) > 0 else float("nan")
@@ -228,12 +242,14 @@ def _query_oed_discovery(df, output_format: str):
 
     effect_str = f", effect={effect.interpretation}" if effect else ""
 
-    console.print(Panel.fit(
-        f"[bold]Question:[/bold] Does OED beat Discovery?\n"
-        f"[bold]Answer:[/bold] {winner} wins with z={min(oed_mean, disc_mean):+.3f}{sig_str}{effect_str}",
-        title="OED vs Discovery",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold]Question:[/bold] Does OED beat Discovery?\n"
+            f"[bold]Answer:[/bold] {winner} wins with z={min(oed_mean, disc_mean):+.3f}{sig_str}{effect_str}",
+            title="OED vs Discovery",
+            border_style="cyan",
+        )
+    )
 
     table = Table(title="Mode × PPL Matrix (mean z-score, lower = better)")
     table.add_column("Mode", style="cyan")
@@ -252,13 +268,19 @@ def _query_oed_discovery(df, output_format: str):
 
         no_ppl_mean = np.mean(no_ppl) if len(no_ppl) > 0 else float("nan")
         yes_ppl_mean = np.mean(yes_ppl) if len(yes_ppl) > 0 else float("nan")
-        delta = no_ppl_mean - yes_ppl_mean if not (np.isnan(no_ppl_mean) or np.isnan(yes_ppl_mean)) else float("nan")
+        delta = (
+            no_ppl_mean - yes_ppl_mean
+            if not (np.isnan(no_ppl_mean) or np.isnan(yes_ppl_mean))
+            else float("nan")
+        )
 
         # test PPL effect within this mode
         ppl_test = welch_ttest(no_ppl, yes_ppl) if len(no_ppl) > 1 and len(yes_ppl) > 1 else None
 
         no_ppl_str = f"{no_ppl_mean:+.3f} (n={len(no_ppl)})" if not np.isnan(no_ppl_mean) else "N/A"
-        yes_ppl_str = f"{yes_ppl_mean:+.3f} (n={len(yes_ppl)})" if not np.isnan(yes_ppl_mean) else "N/A"
+        yes_ppl_str = (
+            f"{yes_ppl_mean:+.3f} (n={len(yes_ppl)})" if not np.isnan(yes_ppl_mean) else "N/A"
+        )
 
         if not np.isnan(delta):
             delta_style = "green" if delta > 0.05 else "red" if delta < -0.05 else "yellow"
@@ -277,11 +299,13 @@ def _query_oed_discovery(df, output_format: str):
     console.print(table)
 
     # OED vs Discovery comparison row
-    console.print(f"\n[bold]Main Comparison (OED vs Discovery):[/bold]")
+    console.print("\n[bold]Main Comparison (OED vs Discovery):[/bold]")
     console.print(f"  • OED: z={oed_mean:+.3f} (n={len(oed_scores)})")
     console.print(f"  • Discovery: z={disc_mean:+.3f} (n={len(disc_scores)})")
     if main_test:
-        console.print(f"  • Welch t-test: p={main_test.p_value:.4f} ({'significant' if main_test.significant else 'not significant'})")
+        console.print(
+            f"  • Welch t-test: p={main_test.p_value:.4f} ({'significant' if main_test.significant else 'not significant'})"
+        )
     if effect:
         console.print(f"  • Effect size: d={effect.d:+.3f} ({effect.interpretation})")
 
@@ -289,7 +313,8 @@ def _query_oed_discovery(df, output_format: str):
 def _query_ppl_impact(df, output_format: str):
     """PPL effect analysis with statistical testing."""
     import numpy as np
-    from boxing_gym.analysis.stats import welch_ttest, cohens_d, bootstrap_ci
+
+    from boxing_gym.analysis.stats import bootstrap_ci, cohens_d, welch_ttest
 
     ppl_true = df[df["use_ppl"] == True]["z_mean"].values
     ppl_false = df[df["use_ppl"] == False]["z_mean"].values
@@ -309,12 +334,14 @@ def _query_ppl_impact(df, output_format: str):
     elif test:
         sig_str = f" (not significant, p={test.p_value:.3f})"
 
-    console.print(Panel.fit(
-        f"[bold]Question:[/bold] Does PPL help?\n"
-        f"[bold]Answer:[/bold] {verdict} (Δ={delta:+.3f}){sig_str}",
-        title="PPL Impact Analysis",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold]Question:[/bold] Does PPL help?\n"
+            f"[bold]Answer:[/bold] {verdict} (Δ={delta:+.3f}){sig_str}",
+            title="PPL Impact Analysis",
+            border_style="cyan",
+        )
+    )
 
     # confidence intervals
     ci_true = bootstrap_ci(ppl_true) if len(ppl_true) > 1 else None
@@ -331,19 +358,19 @@ def _query_ppl_impact(df, output_format: str):
             "PPL=true",
             f"{ppl_true_mean:+.3f}",
             f"[{ci_true.ci_low:+.3f}, {ci_true.ci_high:+.3f}]",
-            str(len(ppl_true))
+            str(len(ppl_true)),
         )
     if ci_false:
         table.add_row(
             "PPL=false",
             f"{ppl_false_mean:+.3f}",
             f"[{ci_false.ci_low:+.3f}, {ci_false.ci_high:+.3f}]",
-            str(len(ppl_false))
+            str(len(ppl_false)),
         )
 
     console.print(table)
 
-    console.print(f"\n[bold]Key Findings:[/bold]")
+    console.print("\n[bold]Key Findings:[/bold]")
     console.print(f"  • Delta: {delta:+.3f} ({verdict})")
     if test:
         console.print(f"  • Welch t-test: t={test.t_statistic:.2f}, p={test.p_value:.4f}")
@@ -353,13 +380,14 @@ def _query_ppl_impact(df, output_format: str):
 
 def _query_env_difficulty(df, output_format: str):
     """Environment difficulty rankings."""
-    import numpy as np
 
-    console.print(Panel.fit(
-        "[bold]Question:[/bold] Which environments are hardest?",
-        title="Environment Difficulty",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold]Question:[/bold] Which environments are hardest?",
+            title="Environment Difficulty",
+            border_style="cyan",
+        )
+    )
 
     agg = df.groupby("env")["z_mean"].agg(["mean", "std", "count"]).reset_index()
     agg = agg.sort_values("mean")
@@ -394,11 +422,13 @@ def _query_env_difficulty(df, output_format: str):
 
 def _query_best_configs(df, output_format: str):
     """Best configuration per environment."""
-    console.print(Panel.fit(
-        "[bold]Question:[/bold] What's the best config per environment?",
-        title="Best Configurations",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold]Question:[/bold] What's the best config per environment?",
+            title="Best Configurations",
+            border_style="cyan",
+        )
+    )
 
     table = Table()
     table.add_column("Environment", style="cyan")
@@ -425,10 +455,12 @@ def _query_best_configs(df, output_format: str):
 
 def _query_paper_comparison(df, output_format: str):
     """Comparison with paper baselines."""
-    console.print(Panel.fit(
-        "[bold]Question:[/bold] How do we compare to paper baselines?",
-        title="Paper Comparison",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold]Question:[/bold] How do we compare to paper baselines?",
+            title="Paper Comparison",
+            border_style="cyan",
+        )
+    )
     console.print("[yellow]Paper comparison not yet implemented.[/yellow]")
     console.print("[dim]Requires loading PAPER_RESULTS from results_io.py[/dim]")

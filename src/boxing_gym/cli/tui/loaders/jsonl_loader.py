@@ -3,7 +3,6 @@
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -22,20 +21,20 @@ class CallLogEntry:
     reasoning_tokens: int
     cost_usd: float
     has_reasoning: bool
-    step_idx: Optional[int]
+    step_idx: int | None
     call_type: str
     timestamp: str
-    error: Optional[str] = None
+    error: str | None = None
 
 
-def load_jsonl(path: Path) -> List[CallLogEntry]:
+def load_jsonl(path: Path) -> list[CallLogEntry]:
     """Load JSONL file into list of CallLogEntry objects.
 
     Skips malformed lines (e.g., from crash-truncated writes) to ensure
     crash-resilient reading even when crash-resilient writing occurred.
     """
     entries = []
-    with open(path, "r") as f:
+    with open(path) as f:
         for line in f:
             if line.strip():
                 try:
@@ -92,9 +91,9 @@ def load_jsonl_to_df(path: Path) -> pd.DataFrame:
     )
 
 
-def aggregate_by_agent(entries: List[CallLogEntry]) -> Dict[str, List[CallLogEntry]]:
+def aggregate_by_agent(entries: list[CallLogEntry]) -> dict[str, list[CallLogEntry]]:
     """Group entries by agent name."""
-    result: Dict[str, List[CallLogEntry]] = {}
+    result: dict[str, list[CallLogEntry]] = {}
     for entry in entries:
         if entry.agent not in result:
             result[entry.agent] = []
@@ -102,9 +101,9 @@ def aggregate_by_agent(entries: List[CallLogEntry]) -> Dict[str, List[CallLogEnt
     return result
 
 
-def aggregate_by_model(entries: List[CallLogEntry]) -> Dict[str, List[CallLogEntry]]:
+def aggregate_by_model(entries: list[CallLogEntry]) -> dict[str, list[CallLogEntry]]:
     """Group entries by model."""
-    result: Dict[str, List[CallLogEntry]] = {}
+    result: dict[str, list[CallLogEntry]] = {}
     for entry in entries:
         if entry.model not in result:
             result[entry.model] = []
@@ -135,11 +134,11 @@ class CallLogStats:
     total_prompt_tokens: int
     total_completion_tokens: int
     total_reasoning_tokens: int
-    agents: List[AgentStats] = field(default_factory=list)
-    models: List[str] = field(default_factory=list)
+    agents: list[AgentStats] = field(default_factory=list)
+    models: list[str] = field(default_factory=list)
 
 
-def compute_stats(entries: List[CallLogEntry]) -> CallLogStats:
+def compute_stats(entries: list[CallLogEntry]) -> CallLogStats:
     """Compute summary statistics."""
     if not entries:
         return CallLogStats(
@@ -191,7 +190,7 @@ def compute_stats(entries: List[CallLogEntry]) -> CallLogStats:
     )
 
 
-def find_jsonl_files(base_paths: Optional[List[Path]] = None) -> List[Path]:
+def find_jsonl_files(base_paths: list[Path] | None = None) -> list[Path]:
     """Find all JSONL call log files across multiple directories.
 
     Searches both outputs/ and results/ by default, sorted by mtime (newest first).
@@ -208,7 +207,7 @@ def find_jsonl_files(base_paths: Optional[List[Path]] = None) -> List[Path]:
     return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
-def find_latest_jsonl(base_paths: Optional[List[Path]] = None) -> Optional[Path]:
+def find_latest_jsonl(base_paths: list[Path] | None = None) -> Path | None:
     """Find the most recent JSONL call log file."""
     files = find_jsonl_files(base_paths)
     return files[0] if files else None

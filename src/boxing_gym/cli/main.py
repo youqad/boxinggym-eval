@@ -43,13 +43,16 @@ def sync(local, sweep_id, refresh, status):
         box sync --status
     """
     from boxing_gym.cli.commands.sync import run_sync
+
     run_sync(local=local, sweep_id=sweep_id, refresh=refresh, status=status)
 
 
 @main.command()
 @click.argument("query_name", required=False)
 @click.option("--list", "list_queries", is_flag=True, help="List available queries")
-@click.option("--format", "output_format", type=click.Choice(["rich", "md", "json"]), default="rich")
+@click.option(
+    "--format", "output_format", type=click.Choice(["rich", "md", "json"]), default="rich"
+)
 @click.option("--output", type=click.Path(), help="Output file for md/json formats (coming soon)")
 @click.option("--min-budget", type=int, default=10, help="Minimum budget filter")
 @click.option("--env", help="Filter to specific environment")
@@ -75,6 +78,7 @@ def query(query_name, list_queries, output_format, output, min_budget, env, incl
         box query all --format md --output report.md
     """
     from boxing_gym.cli.commands.query import run_query
+
     run_query(
         query_name=query_name,
         list_queries=list_queries,
@@ -90,9 +94,17 @@ def query(query_name, list_queries, output_format, output, min_budget, env, incl
 @click.option("--view", help="Specific view (model-rankings, heatmap, best-configs, etc.)")
 @click.option("--tui", is_flag=True, help="Launch interactive TUI")
 @click.option("--web", is_flag=True, help="Launch Streamlit web dashboard")
-@click.option("--format", "output_format", type=click.Choice(["rich", "json", "csv"]), default="rich")
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["rich", "json", "csv", "plotly"]),
+    default="rich",
+)
+@click.option(
+    "--plotly-dir", type=click.Path(), help="Output dir for Plotly HTML files (default: ./)"
+)
 @click.option("--include-outliers", is_flag=True, help="Include flagged outliers in analysis")
-def results(view, tui, web, output_format, include_outliers):
+def results(view, tui, web, output_format, plotly_dir, include_outliers):
     """View and explore results.
 
     Available views:
@@ -111,9 +123,18 @@ def results(view, tui, web, output_format, include_outliers):
         box results --view model-rankings
         box results --tui
         box results --web
+        box results --format plotly --plotly-dir ./figures
     """
     from boxing_gym.cli.commands.results import run_results
-    run_results(view=view, tui=tui, web=web, output_format=output_format, include_outliers=include_outliers)
+
+    run_results(
+        view=view,
+        tui=tui,
+        web=web,
+        output_format=output_format,
+        plotly_dir=plotly_dir,
+        include_outliers=include_outliers,
+    )
 
 
 if __name__ == "__main__":

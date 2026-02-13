@@ -3,16 +3,13 @@
 import subprocess
 import sys
 from pathlib import Path
+
 from rich.console import Console
 
 console = Console()
 
 
 def _adapt_columns_for_tui(df):
-    """Map simplified cache columns to WandB-style names expected by TUI."""
-    import pandas as pd
-
-    # column mapping: cache name -> TUI expected name
     mapping = {
         "model": "config/llms",
         "env": "config/envs",
@@ -32,8 +29,14 @@ def _adapt_columns_for_tui(df):
     return df
 
 
-def run_results(view: str | None, tui: bool, web: bool, output_format: str, include_outliers: bool = False):
-    """View and explore results."""
+def run_results(
+    view: str | None,
+    tui: bool,
+    web: bool,
+    output_format: str,
+    plotly_dir: str | None = None,
+    include_outliers: bool = False,
+):
     if web:
         _launch_web()
         return
@@ -43,14 +46,18 @@ def run_results(view: str | None, tui: bool, web: bool, output_format: str, incl
         return
 
     if view:
-        _run_view(view, output_format, include_outliers)
+        _run_view(view, output_format, plotly_dir, include_outliers)
+    elif output_format == "plotly":
+        # export all views as Plotly when no specific view given
+        _run_view("all", output_format, plotly_dir, include_outliers)
     else:
         _show_summary(include_outliers)
 
 
 def _launch_web():
-    """Launch Streamlit web dashboard."""
-    app_path = Path(__file__).parent.parent.parent.parent.parent / "scripts" / "streamlit_app" / "app.py"
+    app_path = (
+        Path(__file__).parent.parent.parent.parent.parent / "scripts" / "streamlit_app" / "app.py"
+    )
     if not app_path.exists():
         console.print(f"[red]Streamlit app not found at {app_path}[/red]")
         return
@@ -60,7 +67,6 @@ def _launch_web():
 
 
 def _launch_tui(include_outliers: bool = False):
-    """Launch interactive TUI."""
     from boxing_gym.cli.commands.sync import get_cache_file
 
     cache_file = get_cache_file()
@@ -70,15 +76,14 @@ def _launch_tui(include_outliers: bool = False):
         return
 
     import pandas as pd
+
     from boxing_gym.cli.tui.app import SweepTUI
 
     df = pd.read_parquet(cache_file)
 
-    # filter flagged outliers by default
     if not include_outliers and "is_outlier" in df.columns:
         df = df[~df["is_outlier"].fillna(False)]
 
-    # adapt column names for TUI (expects WandB-style names)
     df = _adapt_columns_for_tui(df)
 
     tui = SweepTUI(
@@ -90,10 +95,11 @@ def _launch_tui(include_outliers: bool = False):
     tui.run()
 
 
-def _run_view(view: str, output_format: str, include_outliers: bool = False):
-    """Run a specific view."""
+def _run_view(
+    view: str, output_format: str, plotly_dir: str | None = None, include_outliers: bool = False
+):
     from boxing_gym.cli.commands.sync import get_cache_file
-    from boxing_gym.cli.tui.app import SweepTUI, AVAILABLE_VIEWS
+    from boxing_gym.cli.tui.app import AVAILABLE_VIEWS, SweepTUI
 
     cache_file = get_cache_file()
     if not cache_file.exists():
@@ -101,20 +107,18 @@ def _run_view(view: str, output_format: str, include_outliers: bool = False):
         console.print("  box sync --local results/")
         return
 
-    # validate view name
     if view not in AVAILABLE_VIEWS:
         console.print(f"[red]Unknown view: {view}[/red]")
         console.print(f"Available views: {', '.join(AVAILABLE_VIEWS)}")
         return
 
     import pandas as pd
+
     df = pd.read_parquet(cache_file)
 
-    # filter flagged outliers by default
     if not include_outliers and "is_outlier" in df.columns:
         df = df[~df["is_outlier"].fillna(False)]
 
-    # adapt column names for TUI
     df = _adapt_columns_for_tui(df)
 
     tui = SweepTUI(
@@ -124,13 +128,11 @@ def _run_view(view: str, output_format: str, include_outliers: bool = False):
         is_local=True,
     )
 
-    # map output_format to TUI format
     fmt = "rich" if output_format == "rich" else output_format
-    tui.run_non_interactive([view], output_format=fmt)
+    tui.run_non_interactive([view], output_format=fmt, plotly_output_dir=plotly_dir)
 
 
 def _show_summary(include_outliers: bool = False):
-    """Show quick summary of available results."""
     from boxing_gym.cli.commands.sync import get_cache_file
 
     cache_file = get_cache_file()
@@ -138,14 +140,16 @@ def _show_summary(include_outliers: bool = False):
 
     if cache_file.exists():
         import pandas as pd
+
         df = pd.read_parquet(cache_file)
 
-        # show total and valid counts
         n_total = len(df)
         if "is_outlier" in df.columns:
             n_flagged = int(df["is_outlier"].fillna(False).sum())
             n_valid = n_total - n_flagged
-            console.print(f"[green]Cache loaded:[/green] {n_total:,} runs ({n_valid:,} valid, {n_flagged:,} flagged)")
+            console.print(
+                f"[green]Cache loaded:[/green] {n_total:,} runs ({n_valid:,} valid, {n_flagged:,} flagged)"
+            )
             if not include_outliers:
                 df = df[~df["is_outlier"].fillna(False)]
         else:

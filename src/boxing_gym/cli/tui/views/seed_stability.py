@@ -1,37 +1,59 @@
 """Seed Stability view for TUI."""
 
-from typing import Any, Dict
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
-from rich.console import Console
 from rich.table import Table
 
-from . import BaseView
 from ..components.ascii_charts import colored_z, horizontal_bar
+from . import BaseView
 
 
 class SeedStabilityView(BaseView):
-    """Diagnostic view showing seed-driven variance in z_mean.
-
-    Supports two formats:
-    1. New multi-seed format: Each run contains aggregated results with z_stderr
-    2. Old per-seed format: Each seed is a separate run
-
-    This view shows seed variance for diagnostics without leaking test-set info.
-    """
-
     @property
     def title(self) -> str:
         return "Seed Stability Diagnostics"
+
+    @staticmethod
+    def _hashable_config_cols(df: pd.DataFrame) -> list[str]:
+        """Return config columns that are safe to groupby (hashable values)."""
+        noise_patterns = [
+            "results",
+            "ppl/",
+            "ppl.",
+            "hydra",
+            "filename",
+            "system_prompt",
+            "_wandb",
+            "_runtime",
+            "seed",
+        ]
+        config_cols = [
+            c
+            for c in df.columns
+            if c.startswith("config/") and not any(noise in c.lower() for noise in noise_patterns)
+        ]
+
+        def _series_is_hashable(s: pd.Series) -> bool:
+            sample = s.dropna().head(50)
+            for v in sample:
+                try:
+                    hash(v)
+                except Exception:
+                    return False
+            return True
+
+        return [c for c in config_cols if _series_is_hashable(df[c])]
 
     def render(self) -> None:
         if self.metric not in self.df.columns:
             self.console.print(f"[yellow]Metric '{self.metric}' not found[/yellow]")
             return
 
-        # detect format: new multi-seed runs have summary/z_stderr
-        has_multi_seed_format = "summary/z_stderr" in self.df.columns or "z_stderr" in self.df.columns
+        has_multi_seed_format = (
+            "summary/z_stderr" in self.df.columns or "z_stderr" in self.df.columns
+        )
 
         if has_multi_seed_format:
             self._render_multi_seed_format()
@@ -44,13 +66,13 @@ class SeedStabilityView(BaseView):
             self.console.print("[yellow]No seed data available (config/seed or z_stderr)[/yellow]")
 
     def _render_multi_seed_format(self) -> None:
-        """Render for new multi-seed format where z_stderr is already computed."""
         stderr_col = "summary/z_stderr" if "summary/z_stderr" in self.df.columns else "z_stderr"
 
         self.console.print("[bold cyan]Multi-Seed Format Detected[/bold cyan]")
-        self.console.print("Each run aggregates 5 seeds internally. Showing z_stderr as seed variance.\n")
+        self.console.print(
+            "Each run aggregates 5 seeds internally. Showing z_stderr as seed variance.\n"
+        )
 
-        # create summary table of runs with highest seed variance
         table = Table(
             title="Runs by Seed Variance (z_stderr)",
             border_style="cyan",
@@ -62,8 +84,9 @@ class SeedStabilityView(BaseView):
         table.add_column("z_stderr", justify="right", width=10)
         table.add_column("Variance Bar", width=15)
 
-        # get top 10 by z_stderr
-        df_sorted = self.df.dropna(subset=[stderr_col]).sort_values(stderr_col, ascending=False).head(10)
+        df_sorted = (
+            self.df.dropna(subset=[stderr_col]).sort_values(stderr_col, ascending=False).head(10)
+        )
         max_stderr = df_sorted[stderr_col].max() if len(df_sorted) > 0 else 1
 
         for _, row in df_sorted.iterrows():
@@ -81,7 +104,6 @@ class SeedStabilityView(BaseView):
         self.console.print(table)
 
     def _render_per_seed_stats(self) -> None:
-        """Show mean z_mean, std, and count for each seed."""
         seed_stats = self.df.groupby("config/seed")[self.metric].agg(["mean", "std", "count"])
         seed_stats = seed_stats.sort_values("mean")
         seed_stats = seed_stats.reset_index()
@@ -113,7 +135,6 @@ class SeedStabilityView(BaseView):
 
             z_str = colored_z(mean)
 
-            # difficulty bar (higher mean = harder dataset instance)
             if range_mean > 0:
                 norm_difficulty = (mean - min_mean) / range_mean
                 bar = horizontal_bar(norm_difficulty, 1.0, width=10)
@@ -130,30 +151,25 @@ class SeedStabilityView(BaseView):
 
         self.console.print(table)
 
-        # summary
         global_std = self.df[self.metric].std()
         within_seed_std = seed_stats["std"].mean()
         between_seed_std = seed_stats["mean"].std()
 
         self.console.print(f"\n[cyan]Global Std Dev:[/cyan] {global_std:.3f}")
-        self.console.print(f"[cyan]Between-Seed Std:[/cyan] {between_seed_std:.3f} (dataset difficulty variance)")
-        self.console.print(f"[cyan]Within-Seed Avg Std:[/cyan] {within_seed_std:.3f} (hyperparameter effects)")
+        self.console.print(
+            f"[cyan]Between-Seed Std:[/cyan] {between_seed_std:.3f} (dataset difficulty variance)"
+        )
+        self.console.print(
+            f"[cyan]Within-Seed Avg Std:[/cyan] {within_seed_std:.3f} (hyperparameter effects)"
+        )
 
     def _render_per_config_variance(self) -> None:
-        """Show configs with highest variance across seeds (unstable combinations)."""
-        # identify config columns (exclude seed and noise)
-        noise_patterns = ["results", "ppl/", "ppl.", "hydra", "filename", "system_prompt", "wandb", "_", "seed"]
-        config_cols = [
-            c for c in self.df.columns
-            if c.startswith("config/")
-            and not any(noise in c.lower() for noise in noise_patterns)
-        ]
+        config_cols = self._hashable_config_cols(self.df)
 
         if not config_cols:
             self.console.print("[yellow]No config columns found for variance analysis[/yellow]")
             return
 
-        # group by config combination, calculate variance across seeds
         variance_data = []
         for config_combo, group in self.df.groupby(config_cols):
             if len(group) < 2:  # need at least 2 seeds
@@ -168,19 +184,26 @@ class SeedStabilityView(BaseView):
             std = z_values.std()
             count = len(z_values)
 
-            # create config dict
-            config_dict = dict(zip(config_cols, config_combo if isinstance(config_combo, tuple) else [config_combo]))
+            config_dict = dict(
+                zip(
+                    config_cols, config_combo if isinstance(config_combo, tuple) else [config_combo]
+                )
+            )
 
-            variance_data.append({
-                "config": config_dict,
-                "variance": variance,
-                "std": std,
-                "mean": mean,
-                "count": count,
-            })
+            variance_data.append(
+                {
+                    "config": config_dict,
+                    "variance": variance,
+                    "std": std,
+                    "mean": mean,
+                    "count": count,
+                }
+            )
 
         if not variance_data:
-            self.console.print("[yellow]Not enough multi-seed configs for variance analysis[/yellow]")
+            self.console.print(
+                "[yellow]Not enough multi-seed configs for variance analysis[/yellow]"
+            )
             return
 
         variance_df = pd.DataFrame(variance_data)
@@ -205,12 +228,13 @@ class SeedStabilityView(BaseView):
             std = row["std"]
             count = int(row["count"])
 
-            # compact config representation (key params only)
-            config_str = ", ".join([
-                f"{k.replace('config/', '')[:15]}={str(v)[:10]}"
-                for k, v in config.items()
-                if k in ["config/llms", "config/envs", "config/exp"]
-            ])
+            config_str = ", ".join(
+                [
+                    f"{k.replace('config/', '')[:15]}={str(v)[:10]}"
+                    for k, v in config.items()
+                    if k in ["config/llms", "config/envs", "config/exp"]
+                ]
+            )
 
             bar = horizontal_bar(variance, max_var, width=10)
 
@@ -225,30 +249,60 @@ class SeedStabilityView(BaseView):
         self.console.print(table)
 
         self.console.print("\n[dim]Interpretation:[/dim]")
-        self.console.print("[dim]  High variance = config performance heavily depends on seed/dataset[/dim]")
+        self.console.print(
+            "[dim]  High variance = config performance heavily depends on seed/dataset[/dim]"
+        )
         self.console.print("[dim]  Low variance = config performs consistently across seeds[/dim]")
 
-    def get_data(self) -> Dict[str, Any]:
-        """Return structured data for machine-readable output."""
-        if self.metric not in self.df.columns or "config/seed" not in self.df.columns:
-            return {"error": "Missing required columns"}
+    def get_data(self) -> dict[str, Any]:
+        if self.metric not in self.df.columns:
+            return {"error": "Missing metric column"}
 
-        # per-seed statistics
+        stderr_col = (
+            "summary/z_stderr"
+            if "summary/z_stderr" in self.df.columns
+            else "z_stderr"
+            if "z_stderr" in self.df.columns
+            else None
+        )
+        if "config/seed" not in self.df.columns:
+            if not stderr_col:
+                return {"error": "Missing required columns"}
+            df_sorted = (
+                self.df.dropna(subset=[stderr_col])
+                .sort_values(stderr_col, ascending=False)
+                .head(10)
+            )
+            runs = []
+            for _, row in df_sorted.iterrows():
+                runs.append(
+                    {
+                        "environment": row.get("config/envs", row.get("env")),
+                        "model": row.get("config/llms", row.get("model")),
+                        "z_mean": row.get(self.metric),
+                        "z_stderr": row.get(stderr_col),
+                    }
+                )
+            stderr_mean = (
+                float(self.df[stderr_col].dropna().mean())
+                if self.df[stderr_col].notna().any()
+                else 0.0
+            )
+            return {
+                "format": "multi_seed",
+                "stderr_column": stderr_col,
+                "mean_z_stderr": stderr_mean,
+                "top_runs_by_stderr": runs,
+            }
+
         seed_stats = self.df.groupby("config/seed")[self.metric].agg(["mean", "std", "count"])
         seed_stats = seed_stats.sort_values("mean").reset_index()
 
-        # global variance breakdown
         global_std = float(self.df[self.metric].std())
         between_seed_std = float(seed_stats["mean"].std())
         within_seed_std = float(seed_stats["std"].mean())
 
-        # per-config variance data
-        noise_patterns = ["results", "ppl/", "ppl.", "hydra", "filename", "system_prompt", "wandb", "_", "seed"]
-        config_cols = [
-            c for c in self.df.columns
-            if c.startswith("config/")
-            and not any(noise in c.lower() for noise in noise_patterns)
-        ]
+        config_cols = self._hashable_config_cols(self.df)
 
         variance_data = []
         if config_cols:
@@ -256,15 +310,21 @@ class SeedStabilityView(BaseView):
                 if len(group) >= 2:
                     z_values = group[self.metric].dropna()
                     if len(z_values) >= 2:
-                        config_dict = dict(zip(config_cols,
-                                             config_combo if isinstance(config_combo, tuple) else [config_combo]))
-                        variance_data.append({
-                            "config": config_dict,
-                            "variance": float(z_values.var()),
-                            "std": float(z_values.std()),
-                            "mean": float(z_values.mean()),
-                            "count": int(len(z_values)),
-                        })
+                        config_dict = dict(
+                            zip(
+                                config_cols,
+                                config_combo if isinstance(config_combo, tuple) else [config_combo],
+                            )
+                        )
+                        variance_data.append(
+                            {
+                                "config": config_dict,
+                                "variance": float(z_values.var()),
+                                "std": float(z_values.std()),
+                                "mean": float(z_values.mean()),
+                                "count": int(len(z_values)),
+                            }
+                        )
 
         variance_data.sort(key=lambda x: x["variance"], reverse=True)
 
@@ -277,3 +337,109 @@ class SeedStabilityView(BaseView):
             },
             "unstable_configs": variance_data[:10],  # top 10 most unstable
         }
+
+    def get_csv_rows(self) -> list:
+        data = self.get_data()
+        rows = []
+
+        if data.get("format") == "multi_seed":
+            rows.append(["# Multi-Seed Summary"])
+            rows.append(["stderr_column", data.get("stderr_column", "")])
+            rows.append(["mean_z_stderr", data.get("mean_z_stderr", "")])
+
+            top_runs = data.get("top_runs_by_stderr", [])
+            if top_runs:
+                rows.append([])
+                rows.append(["# Top Runs by z_stderr"])
+                rows.append(["environment", "model", "z_mean", "z_stderr"])
+                for r in top_runs:
+                    rows.append(
+                        [
+                            r.get("environment", ""),
+                            r.get("model", ""),
+                            r.get("z_mean", ""),
+                            r.get("z_stderr", ""),
+                        ]
+                    )
+            return rows
+
+        per_seed = data.get("per_seed_stats", [])
+        if per_seed:
+            rows.append(["# Per-Seed Performance"])
+            rows.append(["seed", "mean", "std", "count"])
+            for s in per_seed:
+                rows.append(
+                    [
+                        s.get("config/seed", ""),
+                        s.get("mean", ""),
+                        s.get("std", ""),
+                        s.get("count", ""),
+                    ]
+                )
+
+        variance_decomp = data.get("variance_decomposition", {})
+        if variance_decomp:
+            rows.append([])
+            rows.append(["# Variance Decomposition"])
+            rows.append(["metric", "value"])
+            rows.append(["global_std", variance_decomp.get("global_std", "")])
+            rows.append(["between_seed_std", variance_decomp.get("between_seed_std", "")])
+            rows.append(["within_seed_std", variance_decomp.get("within_seed_std", "")])
+
+        unstable = data.get("unstable_configs", [])
+        if unstable:
+            rows.append([])
+            rows.append(["# Most Unstable Configs"])
+            rows.append(["config", "variance", "std", "mean", "count"])
+            for u in unstable:
+                rows.append(
+                    [
+                        str(u.get("config", {})),
+                        u.get("variance", ""),
+                        u.get("std", ""),
+                        u.get("mean", ""),
+                        u.get("count", ""),
+                    ]
+                )
+
+        return rows
+
+    def to_plotly(self) -> Optional["plotly.graph_objects.Figure"]:  # noqa: F821
+        """Return Plotly box plot showing z_mean distribution per seed."""
+        try:
+            import plotly.graph_objects as go
+        except ImportError:
+            return None
+
+        if self.metric not in self.df.columns:
+            return None
+
+        if "config/seed" not in self.df.columns:
+            return None
+
+        fig = go.Figure()
+
+        seeds = sorted(self.df["config/seed"].dropna().unique())
+        for seed in seeds:
+            seed_data = self.df[self.df["config/seed"] == seed][self.metric].dropna()
+            fig.add_trace(
+                go.Box(
+                    y=seed_data,
+                    name=f"Seed {int(seed)}",
+                    boxmean=True,
+                    hovertemplate=f"Seed {int(seed)}<br>z_mean: %{{y:.3f}}<extra></extra>",
+                )
+            )
+
+        fig.update_layout(
+            title="z_mean Distribution by Seed (lower is better)",
+            yaxis_title="z_mean",
+            xaxis_title="Seed",
+            height=500,
+            width=800,
+            showlegend=False,
+        )
+
+        fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+
+        return fig

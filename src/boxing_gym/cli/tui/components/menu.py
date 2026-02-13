@@ -1,7 +1,5 @@
 """Menu rendering utilities for TUI."""
 
-from typing import List, Tuple
-
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -11,7 +9,7 @@ def render_menu(
     console: Console,
     title: str,
     subtitle: str,
-    options: List[Tuple[str, str]],
+    options: list[tuple[str, str]],
 ) -> None:
     """Render a numbered menu with options.
 

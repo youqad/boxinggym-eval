@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+
 from rich.console import Console
 from rich.panel import Panel
 
@@ -56,6 +57,7 @@ def _show_status():
         return
 
     import pandas as pd
+
     df = pd.read_parquet(CACHE_FILE)
 
     # calculate flagged outliers if column exists
@@ -65,20 +67,23 @@ def _show_status():
         n_valid = len(df) - n_flagged
         flagged_line = f"[bold]Valid runs:[/bold] {n_valid:,} ({n_flagged:,} flagged as outliers)\n"
 
-    console.print(Panel.fit(
-        f"[bold]Cached runs:[/bold] {len(df):,}\n"
-        f"{flagged_line}"
-        f"[bold]Models:[/bold] {df['model'].nunique()}\n"
-        f"[bold]Environments:[/bold] {df['env'].nunique()}\n"
-        f"[bold]Cache file:[/bold] {CACHE_FILE}\n"
-        f"[bold]Size:[/bold] {CACHE_FILE.stat().st_size / 1024:.1f} KB",
-        title="Cache Status",
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold]Cached runs:[/bold] {len(df):,}\n"
+            f"{flagged_line}"
+            f"[bold]Models:[/bold] {df['model'].nunique()}\n"
+            f"[bold]Environments:[/bold] {df['env'].nunique()}\n"
+            f"[bold]Cache file:[/bold] {CACHE_FILE}\n"
+            f"[bold]Size:[/bold] {CACHE_FILE.stat().st_size / 1024:.1f} KB",
+            title="Cache Status",
+        )
+    )
 
 
 def _sync_local(local_dir: Path, refresh: bool):
     """Sync from local JSON results directory."""
     import sys
+
     # add src to path for imports
     src_path = Path(__file__).parent.parent.parent.parent
     if str(src_path) not in sys.path:
@@ -95,28 +100,31 @@ def _sync_local(local_dir: Path, refresh: bool):
         return
 
     # convert to dataframe
-    import pandas as pd
     from datetime import datetime
+
+    import pandas as pd
 
     rows = []
     for r in results:
-        rows.append({
-            "run_id": r.path or "unknown",
-            "sweep_id": "local",
-            "model": r.model,
-            "env": r.env,
-            "seed": r.seed,
-            "budget": r.budget,
-            "z_mean": r.z_mean,
-            "z_std": r.z_std,
-            "raw_mean": r.raw_mean,
-            "raw_std": r.raw_std,
-            "experiment_type": r.experiment_type,
-            "use_ppl": r.use_ppl,
-            "include_prior": r.include_prior,
-            "goal": r.goal,
-            "synced_at": datetime.now().isoformat(),
-        })
+        rows.append(
+            {
+                "run_id": r.path or "unknown",
+                "sweep_id": "local",
+                "model": r.model,
+                "env": r.env,
+                "seed": r.seed,
+                "budget": r.budget,
+                "z_mean": r.z_mean,
+                "z_std": r.z_std,
+                "raw_mean": r.raw_mean,
+                "raw_std": r.raw_std,
+                "experiment_type": r.experiment_type,
+                "use_ppl": r.use_ppl,
+                "include_prior": r.include_prior,
+                "goal": r.goal,
+                "synced_at": datetime.now().isoformat(),
+            }
+        )
 
     df = pd.DataFrame(rows)
 
@@ -136,7 +144,9 @@ def _sync_local(local_dir: Path, refresh: bool):
 
     console.print(f"[green]Cached {len(df):,} runs to {CACHE_FILE}[/green]")
     if n_numeric > 0 or n_nan > 0:
-        console.print(f"[dim]Flagged {n_numeric:,} numeric outliers (|z| > {Z_OUTLIER_THRESHOLD}), {n_nan:,} NaNs[/dim]")
+        console.print(
+            f"[dim]Flagged {n_numeric:,} numeric outliers (|z| > {Z_OUTLIER_THRESHOLD}), {n_nan:,} NaNs[/dim]"
+        )
 
 
 def _sync_wandb(sweep_ids: list[str], refresh: bool):
