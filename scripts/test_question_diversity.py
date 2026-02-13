@@ -5,10 +5,10 @@ Test question diversity for BoxingGym environments.
 Generates N questions and reports uniqueness statistics.
 """
 
-import sys
 import hashlib
-from pathlib import Path
+import sys
 from collections import Counter
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from boxing_gym.envs.registry import get_environment_registry
@@ -62,20 +62,20 @@ def test_diversity(env_name: str, n_samples: int = 100, goal_name: str = "direct
     unique_hashes = set(hashes)
     hash_counts = Counter(hashes)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("DIVERSITY REPORT")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Total questions generated: {n_samples}")
     print(f"Unique questions: {len(unique_hashes)}")
     print(f"Uniqueness rate: {len(unique_hashes) / n_samples * 100:.1f}%")
-    print(f"\nDuplicate statistics:")
+    print("\nDuplicate statistics:")
     print(f"  Questions appearing once: {sum(1 for c in hash_counts.values() if c == 1)}")
     print(f"  Questions appearing 2+ times: {sum(1 for c in hash_counts.values() if c > 1)}")
     print(f"  Max repetitions: {max(hash_counts.values())}")
 
     # Show most repeated questions
     most_common = hash_counts.most_common(5)
-    print(f"\nMost repeated question hashes:")
+    print("\nMost repeated question hashes:")
     for hash_val, count in most_common:
         print(f"  {hash_val}: {count} times")
         # Find one example question with this hash
@@ -86,9 +86,9 @@ def test_diversity(env_name: str, n_samples: int = 100, goal_name: str = "direct
                 break
 
     # Assessment
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("ASSESSMENT")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     uniqueness_pct = len(unique_hashes) / n_samples * 100
 
@@ -101,8 +101,8 @@ def test_diversity(env_name: str, n_samples: int = 100, goal_name: str = "direct
     else:
         print("🚨 CRITICAL: Severe repetition, generator collapsed")
 
-    print(f"\nFor 30-batch training (batch_size=32):")
-    print(f"  Total questions needed: 960")
+    print("\nFor 30-batch training (batch_size=32):")
+    print("  Total questions needed: 960")
     print(f"  With {uniqueness_pct:.0f}% uniqueness: ~{int(960 * uniqueness_pct / 100)} unique")
     print(f"  Average repetitions per question: {960 / len(unique_hashes):.1f}x")
 
@@ -114,7 +114,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Test question diversity")
     parser.add_argument("--env", default="lotka_volterra", help="Environment name")
-    parser.add_argument("--n-samples", type=int, default=100, help="Number of questions to generate")
+    parser.add_argument(
+        "--n-samples", type=int, default=100, help="Number of questions to generate"
+    )
     parser.add_argument("--goal", default="direct", help="Goal type")
 
     args = parser.parse_args()

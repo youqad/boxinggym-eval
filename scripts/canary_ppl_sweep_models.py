@@ -32,7 +32,6 @@ from typing import Any
 
 import yaml
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -184,7 +183,10 @@ def _validate_results_json(
         return False, f"Could not parse budgets list from {budgets!r}"
 
     if not isinstance(results, list) or len(results) != len(budget_list):
-        return False, f"Expected {len(budget_list)} result entries, got {len(results) if isinstance(results, list) else type(results).__name__}"
+        return (
+            False,
+            f"Expected {len(budget_list)} result entries, got {len(results) if isinstance(results, list) else type(results).__name__}",
+        )
 
     # Each element is [eval_score, questions]. eval_score should NOT be fallback dict.
     for i, r in enumerate(results):
@@ -195,7 +197,10 @@ def _validate_results_json(
             return False, f"Budget {budget_list[i]} evaluation_failed: {score.get('error_message')}"
 
     if not isinstance(programs, list) or len(programs) < len(budget_list):
-        return False, f"Expected >= {len(budget_list)} PPL programs, got {len(programs) if isinstance(programs, list) else type(programs).__name__}"
+        return (
+            False,
+            f"Expected >= {len(budget_list)} PPL programs, got {len(programs) if isinstance(programs, list) else type(programs).__name__}",
+        )
 
     # If we run any non-zero budget, we should have at least one successful observation.
     if budget_list and max(budget_list) > 0:
@@ -396,7 +401,9 @@ def main() -> int:
     models = _load_sweep_models(sweep_path)
     include_prior = not bool(args.no_prior)
 
-    print(f"Canary: envs={args.env} budgets={args.budgets} seed={args.seed} num_evals={args.num_evals}")
+    print(
+        f"Canary: envs={args.env} budgets={args.budgets} seed={args.seed} num_evals={args.num_evals}"
+    )
     if args.box_loop_llm:
         print(f"Canary: BOX_LOOP_LLM={args.box_loop_llm}")
     print(f"Models ({len(models)}): {models}")

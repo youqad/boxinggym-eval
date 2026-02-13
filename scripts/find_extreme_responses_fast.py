@@ -3,12 +3,13 @@
 Fast targeted search for extreme z-score runs using direct API queries.
 """
 
+import os
+
 import wandb
-import json
-from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+
 
 def main():
     """Fast targeted investigation."""
@@ -47,16 +48,18 @@ def main():
                     print(f"    {run.name}: z={z_mean:.1f}, env={env}, llm={llm}")
 
                     if z_mean > 1000:
-                        print(f"      ⚠️  EXTREME Z-SCORE!")
-                        extreme_found.append({
-                            "sweep_id": sweep_id,
-                            "run_id": run.id,
-                            "run_name": run.name,
-                            "url": run.url,
-                            "z_mean": z_mean,
-                            "env": env,
-                            "llm": llm,
-                        })
+                        print("      ⚠️  EXTREME Z-SCORE!")
+                        extreme_found.append(
+                            {
+                                "sweep_id": sweep_id,
+                                "run_id": run.id,
+                                "run_name": run.name,
+                                "url": run.url,
+                                "z_mean": z_mean,
+                                "env": env,
+                                "llm": llm,
+                            }
+                        )
 
             if extreme_found:
                 print(f"\n  ✅ Found {len(extreme_found)} extreme runs in this sweep")
@@ -78,10 +81,10 @@ def main():
             filters={
                 "$and": [
                     {"config.envs": "peregrines_direct"},
-                    {"summary_metrics.metric/eval/z_mean": {"$gt": 1000}}
+                    {"summary_metrics.metric/eval/z_mean": {"$gt": 1000}},
                 ]
             },
-            per_page=50
+            per_page=50,
         )
 
         run_list = list(runs)

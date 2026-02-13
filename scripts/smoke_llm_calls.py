@@ -34,11 +34,13 @@ def run_smoke(model: str) -> int:
         model_name=config["model_name"],
         temperature=0.0,
         api_base=config["api_base"],
-        api_key=config["api_key"]
+        api_key=config["api_key"],
     )
 
     # Optional system message
-    agent.set_system_message("You are a careful scientist. Always follow the requested XML tag format.")
+    agent.set_system_message(
+        "You are a careful scientist. Always follow the requested XML tag format."
+    )
 
     # Simple format-check prompt
     prompt = "Respond exactly with <answer>42</answer>"
@@ -59,11 +61,12 @@ def run_smoke(model: str) -> int:
 
 def main():
     parser = argparse.ArgumentParser(description="LLM integration smoke test")
-    parser.add_argument("--model", required=True, help="Model name (e.g., gpt-5-mini, deepseek/deepseek-chat)")
+    parser.add_argument(
+        "--model", required=True, help="Model name (e.g., gpt-5-mini, deepseek/deepseek-chat)"
+    )
     args = parser.parse_args()
     sys.exit(run_smoke(args.model))
 
 
 if __name__ == "__main__":
     main()
-

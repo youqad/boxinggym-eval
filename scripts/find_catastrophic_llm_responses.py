@@ -87,7 +87,7 @@ def get_llm_calls(
     Returns:
         List of call data dictionaries
     """
-    print(f"📡 Retrieving LLM calls from Weave...")
+    print("📡 Retrieving LLM calls from Weave...")
 
     # Get all calls (we'll filter for LLM calls)
     calls = client.get_calls(
@@ -156,23 +156,19 @@ def analyze_responses(calls):
         model = call.get("model", "unknown")
         models[model] = models.get(model, 0) + 1
 
-    print(f"\n🤖 Models used:")
+    print("\n🤖 Models used:")
     for model, count in sorted(models.items(), key=lambda x: -x[1]):
         print(f"  - {model}: {count} calls")
 
     # Show time range
-    timestamps = [
-        datetime.fromisoformat(c["started_at"])
-        for c in calls
-        if c.get("started_at")
-    ]
+    timestamps = [datetime.fromisoformat(c["started_at"]) for c in calls if c.get("started_at")]
     if timestamps:
-        print(f"\n📅 Time range:")
+        print("\n📅 Time range:")
         print(f"  - First call: {min(timestamps)}")
         print(f"  - Last call: {max(timestamps)}")
 
     # Analyze response patterns
-    print(f"\n🔍 Response patterns:")
+    print("\n🔍 Response patterns:")
 
     # Check for common issues
     issues = {
@@ -204,7 +200,7 @@ def analyze_responses(calls):
 
     for issue, count in issues.items():
         if count > 0:
-            print(f"  - {issue}: {count} ({count/len(calls)*100:.1f}%)")
+            print(f"  - {issue}: {count} ({count / len(calls) * 100:.1f}%)")
 
 
 def show_sample_responses(calls, n=3):
@@ -221,7 +217,7 @@ def show_sample_responses(calls, n=3):
         # Show prompt
         prompt = call.get("prompt", "")
         if prompt:
-            print(f"\n--- PROMPT ---")
+            print("\n--- PROMPT ---")
             print(prompt[:500])
             if len(prompt) > 500:
                 print(f"... ({len(prompt) - 500} more chars)")
@@ -229,7 +225,7 @@ def show_sample_responses(calls, n=3):
         # Show response
         response = call.get("response", "")
         if response:
-            print(f"\n--- RESPONSE ---")
+            print("\n--- RESPONSE ---")
             print(response[:1000])
             if len(response) > 1000:
                 print(f"... ({len(response) - 1000} more chars)")
@@ -237,7 +233,7 @@ def show_sample_responses(calls, n=3):
         # Show usage
         usage = call.get("usage", {})
         if usage:
-            print(f"\n--- USAGE ---")
+            print("\n--- USAGE ---")
             print(f"Tokens: {usage.get('total_tokens', 'unknown')}")
 
 

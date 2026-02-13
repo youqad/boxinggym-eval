@@ -205,7 +205,7 @@ def main():
     print(f"   MSE threshold: {args.mse_threshold}")
 
     # Get sweep runs
-    print(f"\n📊 Loading sweep runs...")
+    print("\n📊 Loading sweep runs...")
     df = get_sweep_runs(args.sweep_id, args.entity, args.project)
 
     # Filter by environment if specified
@@ -222,24 +222,24 @@ def main():
         print(catastrophic_runs[["name", "model", "env", "mse_final", "z_mean_final"]].to_string())
 
         # Show statistics
-        print(f"\n📈 Catastrophic run statistics:")
+        print("\n📈 Catastrophic run statistics:")
         print(f"   Mean MSE: {catastrophic_runs['mse_final'].mean():.2e}")
         print(f"   Max MSE: {catastrophic_runs['mse_final'].max():.2e}")
 
         # Group by model
         by_model = catastrophic_runs.groupby("model").size().sort_values(ascending=False)
-        print(f"\n🤖 Catastrophic runs by model:")
+        print("\n🤖 Catastrophic runs by model:")
         for model, count in by_model.items():
             print(f"   - {model}: {count}")
 
         # Group by environment
         by_env = catastrophic_runs.groupby("env").size().sort_values(ascending=False)
-        print(f"\n🌍 Catastrophic runs by environment:")
+        print("\n🌍 Catastrophic runs by environment:")
         for env, count in by_env.items():
             print(f"   - {env}: {count}")
 
     # Initialize Weave to get LLM traces
-    print(f"\n🔗 Connecting to Weave for LLM traces...")
+    print("\n🔗 Connecting to Weave for LLM traces...")
     weave_client = weave.init(f"{args.entity}/{args.project}")
 
     # Analyze LLM traces for catastrophic runs (sample)
@@ -253,20 +253,22 @@ def main():
 
         if traces:
             pattern_analysis = analyze_llm_patterns(traces)
-            detailed_analysis.append({
-                "run_id": run["id"],
-                "run_name": run["name"],
-                "model": run["model"],
-                "env": run["env"],
-                "mse_final": float(run["mse_final"]),
-                "llm_traces": len(traces),
-                "patterns": pattern_analysis.get("patterns", {}),
-                "sample_responses": traces[:3],  # Include first 3 responses
-            })
+            detailed_analysis.append(
+                {
+                    "run_id": run["id"],
+                    "run_name": run["name"],
+                    "model": run["model"],
+                    "env": run["env"],
+                    "mse_final": float(run["mse_final"]),
+                    "llm_traces": len(traces),
+                    "patterns": pattern_analysis.get("patterns", {}),
+                    "sample_responses": traces[:3],  # Include first 3 responses
+                }
+            )
 
             print(f"   Found {len(traces)} LLM traces")
             if pattern_analysis.get("patterns"):
-                print(f"   Patterns detected:")
+                print("   Patterns detected:")
                 for pattern, info in pattern_analysis["patterns"].items():
                     print(f"     - {pattern}: {info['count']} ({info['percentage']:.1f}%)")
 
@@ -296,7 +298,7 @@ def main():
     # Finish
     weave_client.finish()
 
-    print(f"\n✅ Analysis complete!")
+    print("\n✅ Analysis complete!")
 
 
 if __name__ == "__main__":

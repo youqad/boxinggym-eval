@@ -6,18 +6,20 @@ Investigates the catastrophic predictions (z-score > 1000) to understand
 whether they came from properly formatted answers or emergency extraction.
 """
 
-import wandb
 import json
 import os
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
+
 import pandas as pd
+import wandb
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-def find_extreme_runs(entity: str = None, project: str = "boxing-gym") -> List[Dict[str, Any]]:
+
+def find_extreme_runs(entity: str = None, project: str = "boxing-gym") -> list[dict[str, Any]]:
     """Find runs with extreme z-scores."""
     entity = entity or os.environ.get("WANDB_ENTITY", "")
     api = wandb.Api()
@@ -42,16 +44,18 @@ def find_extreme_runs(entity: str = None, project: str = "boxing-gym") -> List[D
         if z_mean is not None:
             print(f"    Run {run.name}: z_mean = {z_mean}")
             if z_mean > 1000:
-                extreme_runs.append({
-                    "id": run.id,
-                    "name": run.name,
-                    "z_mean": z_mean,
-                    "state": run.state,
-                    "created_at": run.created_at,
-                    "config": run.config,
-                    "summary": run.summary,
-                    "url": run.url,
-                })
+                extreme_runs.append(
+                    {
+                        "id": run.id,
+                        "name": run.name,
+                        "z_mean": z_mean,
+                        "state": run.state,
+                        "created_at": run.created_at,
+                        "config": run.config,
+                        "summary": run.summary,
+                        "url": run.url,
+                    }
+                )
 
     print(f"  Checked {checked_count} runs with filters")
 
@@ -67,16 +71,18 @@ def find_extreme_runs(entity: str = None, project: str = "boxing-gym") -> List[D
             z_mean = run.summary.get("metric/eval/z_mean")
             if z_mean is not None and z_mean > 1000:
                 print(f"    Found extreme run: {run.name} (z_mean={z_mean})")
-                extreme_runs.append({
-                    "id": run.id,
-                    "name": run.name,
-                    "z_mean": z_mean,
-                    "state": run.state,
-                    "created_at": run.created_at,
-                    "config": run.config,
-                    "summary": run.summary,
-                    "url": run.url,
-                })
+                extreme_runs.append(
+                    {
+                        "id": run.id,
+                        "name": run.name,
+                        "z_mean": z_mean,
+                        "state": run.state,
+                        "created_at": run.created_at,
+                        "config": run.config,
+                        "summary": run.summary,
+                        "url": run.url,
+                    }
+                )
 
         print(f"  Checked {checked_count} runs with broader filter")
 
@@ -98,22 +104,26 @@ def find_extreme_runs(entity: str = None, project: str = "boxing-gym") -> List[D
                 print(f"    Found high z-score: {run.name} (z_mean={z_mean}, env={env}, llm={llm})")
 
                 if z_mean > 1000:
-                    extreme_runs.append({
-                        "id": run.id,
-                        "name": run.name,
-                        "z_mean": z_mean,
-                        "state": run.state,
-                        "created_at": run.created_at,
-                        "config": run.config,
-                        "summary": run.summary,
-                        "url": run.url,
-                    })
+                    extreme_runs.append(
+                        {
+                            "id": run.id,
+                            "name": run.name,
+                            "z_mean": z_mean,
+                            "state": run.state,
+                            "created_at": run.created_at,
+                            "config": run.config,
+                            "summary": run.summary,
+                            "url": run.url,
+                        }
+                    )
 
     print(f"\n✅ Found {len(extreme_runs)} runs with extreme z-scores (>1000)")
     return extreme_runs
 
 
-def extract_run_artifacts(run_id: str, entity: str = None, project: str = "boxing-gym") -> Dict[str, Any]:
+def extract_run_artifacts(
+    run_id: str, entity: str = None, project: str = "boxing-gym"
+) -> dict[str, Any]:
     """Extract all artifacts and logs from a specific run."""
     entity = entity or os.environ.get("WANDB_ENTITY", "")
     api = wandb.Api()
@@ -134,11 +144,13 @@ def extract_run_artifacts(run_id: str, entity: str = None, project: str = "boxin
     try:
         artifacts = run.logged_artifacts()
         for artifact in artifacts:
-            result["artifacts"].append({
-                "name": artifact.name,
-                "type": artifact.type,
-                "description": artifact.description,
-            })
+            result["artifacts"].append(
+                {
+                    "name": artifact.name,
+                    "type": artifact.type,
+                    "description": artifact.description,
+                }
+            )
             print(f"  - Artifact: {artifact.name} ({artifact.type})")
     except Exception as e:
         print(f"  ⚠️  Error fetching artifacts: {e}")
@@ -147,22 +159,24 @@ def extract_run_artifacts(run_id: str, entity: str = None, project: str = "boxin
     try:
         files = run.files()
         for file in files:
-            result["files"].append({
-                "name": file.name,
-                "size": file.size,
-                "url": file.url,
-            })
+            result["files"].append(
+                {
+                    "name": file.name,
+                    "size": file.size,
+                    "url": file.url,
+                }
+            )
             print(f"  - File: {file.name} ({file.size} bytes)")
 
             # Download and check specific files
-            if file.name.endswith(('.log', '.json', '.txt', '.yaml')):
+            if file.name.endswith((".log", ".json", ".txt", ".yaml")):
                 try:
                     download_path = f"/tmp/wandb_{run_id}_{file.name}"
                     file.download(root="/tmp", replace=True)
 
                     # Read content
                     if os.path.exists(download_path):
-                        with open(download_path, 'r') as f:
+                        with open(download_path) as f:
                             content = f.read()
                             result["files"][-1]["content_preview"] = content[:1000]
                 except Exception as e:
@@ -175,13 +189,18 @@ def extract_run_artifacts(run_id: str, entity: str = None, project: str = "boxin
         history = run.history()
         if not history.empty:
             # Look for any columns with "response" or "answer" in the name
-            response_cols = [col for col in history.columns if any(
-                keyword in col.lower() for keyword in ['response', 'answer', 'prediction', 'output']
-            )]
+            response_cols = [
+                col
+                for col in history.columns
+                if any(
+                    keyword in col.lower()
+                    for keyword in ["response", "answer", "prediction", "output"]
+                )
+            ]
 
             if response_cols:
                 print(f"  📊 Found response columns: {response_cols}")
-                result["history"] = history[response_cols].to_dict('records')
+                result["history"] = history[response_cols].to_dict("records")
     except Exception as e:
         print(f"  ⚠️  Error fetching history: {e}")
 
@@ -197,7 +216,9 @@ def extract_run_artifacts(run_id: str, entity: str = None, project: str = "boxin
     return result
 
 
-def check_sweep_runs(sweep_ids: List[str], entity: str = None, project: str = "boxing-gym") -> List[Dict[str, Any]]:
+def check_sweep_runs(
+    sweep_ids: list[str], entity: str = None, project: str = "boxing-gym"
+) -> list[dict[str, Any]]:
     """Check specific sweeps for extreme runs."""
     entity = entity or os.environ.get("WANDB_ENTITY", "")
     api = wandb.Api()
@@ -214,20 +235,24 @@ def check_sweep_runs(sweep_ids: List[str], entity: str = None, project: str = "b
                 z_mean = run.summary.get("metric/eval/z_mean")
                 if z_mean and z_mean > 1000:
                     print(f"  ⚠️  Found extreme run: {run.name} (z_mean={z_mean})")
-                    all_extreme_runs.append({
-                        "sweep_id": sweep_id,
-                        "run_id": run.id,
-                        "run_name": run.name,
-                        "z_mean": z_mean,
-                        "url": run.url,
-                    })
+                    all_extreme_runs.append(
+                        {
+                            "sweep_id": sweep_id,
+                            "run_id": run.id,
+                            "run_name": run.name,
+                            "z_mean": z_mean,
+                            "url": run.url,
+                        }
+                    )
         except Exception as e:
             print(f"  ⚠️  Error checking sweep {sweep_id}: {e}")
 
     return all_extreme_runs
 
 
-def search_for_specific_value(value: int = 67219139, entity: str = None, project: str = "boxing-gym") -> List[Dict[str, Any]]:
+def search_for_specific_value(
+    value: int = 67219139, entity: str = None, project: str = "boxing-gym"
+) -> list[dict[str, Any]]:
     """Search for runs that contain a specific prediction value."""
     entity = entity or os.environ.get("WANDB_ENTITY", "")
     api = wandb.Api()
@@ -235,9 +260,12 @@ def search_for_specific_value(value: int = 67219139, entity: str = None, project
     print(f"\n🎯 Searching for runs with prediction value: {value:,}...")
 
     # Get all peregrines_direct runs
-    runs = api.runs(f"{entity}/{project}", filters={
-        "config.envs": "peregrines_direct",
-    })
+    runs = api.runs(
+        f"{entity}/{project}",
+        filters={
+            "config.envs": "peregrines_direct",
+        },
+    )
 
     matching_runs = []
     for run in runs:
@@ -247,16 +275,18 @@ def search_for_specific_value(value: int = 67219139, entity: str = None, project
             if not history.empty:
                 # Look through all numeric columns
                 for col in history.columns:
-                    if history[col].dtype in ['int64', 'float64']:
+                    if history[col].dtype in ["int64", "float64"]:
                         if (history[col] == value).any():
                             print(f"  ✅ Found value in run {run.name}, column {col}")
-                            matching_runs.append({
-                                "run_id": run.id,
-                                "run_name": run.name,
-                                "column": col,
-                                "url": run.url,
-                            })
-        except Exception as e:
+                            matching_runs.append(
+                                {
+                                    "run_id": run.id,
+                                    "run_name": run.name,
+                                    "column": col,
+                                    "url": run.url,
+                                }
+                            )
+        except Exception:
             pass  # Skip runs with issues
 
     return matching_runs
@@ -281,7 +311,9 @@ def analyze_response_extraction(run_id: str, entity: str = None, project: str = 
     summary = run.summary
     print("\n📊 Summary metrics:")
     for key, value in summary.items():
-        if any(keyword in key.lower() for keyword in ['z_', 'pred', 'answer', 'response', 'extract']):
+        if any(
+            keyword in key.lower() for keyword in ["z_", "pred", "answer", "response", "extract"]
+        ):
             print(f"  - {key}: {value}")
 
 
@@ -311,14 +343,20 @@ def main():
 
     if not all_extreme_runs:
         print("\n❌ No extreme runs found in either search or sweeps")
-        print("\n💡 Tip: The runs might have been deleted or the metrics might be stored differently")
+        print(
+            "\n💡 Tip: The runs might have been deleted or the metrics might be stored differently"
+        )
         return
 
     # Display summary
     print("\n📊 Summary of extreme runs:")
     df = pd.DataFrame(all_extreme_runs)
-    if 'z_mean' in df.columns:
-        print(df[['run_name' if 'run_name' in df.columns else 'name', 'z_mean']].to_string(index=False))
+    if "z_mean" in df.columns:
+        print(
+            df[["run_name" if "run_name" in df.columns else "name", "z_mean"]].to_string(
+                index=False
+            )
+        )
     else:
         print(df.to_string(index=False))
 
@@ -333,8 +371,8 @@ def main():
     # Step 4: Extract detailed artifacts from first extreme run
     if all_extreme_runs:
         first_run = all_extreme_runs[0]
-        run_name = first_run.get('run_name') or first_run.get('name')
-        run_id = first_run.get('run_id') or first_run.get('id')
+        run_name = first_run.get("run_name") or first_run.get("name")
+        run_id = first_run.get("run_id") or first_run.get("id")
 
         print("\n" + "=" * 80)
         print(f"📦 Detailed artifact extraction for: {run_name}")
@@ -347,13 +385,18 @@ def main():
         output_path = Path(__file__).parent.parent / "data" / "extreme_run_investigation.json"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(output_path, 'w') as f:
-            json.dump({
-                "extreme_runs": extreme_runs,
-                "sweep_runs": sweep_runs,
-                "specific_matches": specific_matches,
-                "detailed_artifacts": artifacts,
-            }, f, indent=2, default=str)
+        with open(output_path, "w") as f:
+            json.dump(
+                {
+                    "extreme_runs": extreme_runs,
+                    "sweep_runs": sweep_runs,
+                    "specific_matches": specific_matches,
+                    "detailed_artifacts": artifacts,
+                },
+                f,
+                indent=2,
+                default=str,
+            )
 
         print(f"\n💾 Results saved to: {output_path}")
 
@@ -368,7 +411,7 @@ def main():
     print("4. Run the code locally with same seed to reproduce")
     print("\nURLs to investigate:")
     for run in all_extreme_runs[:5]:  # Top 5
-        url = run.get('url')
+        url = run.get("url")
         if url:
             print(f"  - {url}")
 

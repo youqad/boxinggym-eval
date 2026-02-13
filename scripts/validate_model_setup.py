@@ -14,37 +14,89 @@ Usage:
     uv run python scripts/validate_model_setup.py --all  # Check all known models
 """
 
+import argparse
 import os
 import sys
-import argparse
 from pathlib import Path
-from typing import Dict, Tuple
 
 # Load .env file if present
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass
 
 # Model provider mapping (matches conf/llms/*.yaml)
 MODEL_PROVIDERS = {
-    "gpt-4o": {"provider": "openai", "env_key": "OPENAI_API_KEY", "config": "conf/llms/gpt-4o.yaml"},
-    "gpt-5.1": {"provider": "openai", "env_key": "OPENAI_API_KEY", "config": "conf/llms/gpt-5.1.yaml"},
-    "gpt-5.1-mini": {"provider": "openai", "env_key": "OPENAI_API_KEY", "config": "conf/llms/gpt-5.1-mini.yaml"},
-    "gpt-5.1-codex-mini": {"provider": "openai", "env_key": "OPENAI_API_KEY", "config": "conf/llms/gpt-5.1-codex-mini.yaml"},
-    "deepseek-chat": {"provider": "deepseek", "env_key": "DEEPSEEK_API_KEY", "config": "conf/llms/deepseek-chat.yaml"},
-    "deepseek-reasoner": {"provider": "deepseek", "env_key": "DEEPSEEK_API_KEY", "config": "conf/llms/deepseek-reasoner.yaml"},
-    "deepseek-v3.2": {"provider": "deepseek", "env_key": "DEEPSEEK_API_KEY", "config": "conf/llms/deepseek-v3.2.yaml"},
-    "glm-4.7": {"provider": "zhipu", "env_key": "ZHIPUAI_API_KEY", "config": "conf/llms/glm-4.7.yaml"},
-    "minimax-m2.1": {"provider": "minimax", "env_key": "MINIMAX_API_KEY", "config": "conf/llms/minimax-m2.1.yaml"},
-    "kimi-k2": {"provider": "moonshot", "env_key": "MOONSHOT_API_KEY", "config": "conf/llms/kimi-k2.yaml"},
+    "gpt-4o": {
+        "provider": "openai",
+        "env_key": "OPENAI_API_KEY",
+        "config": "conf/llms/gpt-4o.yaml",
+    },
+    "gpt-5.1": {
+        "provider": "openai",
+        "env_key": "OPENAI_API_KEY",
+        "config": "conf/llms/gpt-5.1.yaml",
+    },
+    "gpt-5.1-mini": {
+        "provider": "openai",
+        "env_key": "OPENAI_API_KEY",
+        "config": "conf/llms/gpt-5.1-mini.yaml",
+    },
+    "gpt-5.1-codex-mini": {
+        "provider": "openai",
+        "env_key": "OPENAI_API_KEY",
+        "config": "conf/llms/gpt-5.1-codex-mini.yaml",
+    },
+    "deepseek-chat": {
+        "provider": "deepseek",
+        "env_key": "DEEPSEEK_API_KEY",
+        "config": "conf/llms/deepseek-chat.yaml",
+    },
+    "deepseek-reasoner": {
+        "provider": "deepseek",
+        "env_key": "DEEPSEEK_API_KEY",
+        "config": "conf/llms/deepseek-reasoner.yaml",
+    },
+    "deepseek-v3.2": {
+        "provider": "deepseek",
+        "env_key": "DEEPSEEK_API_KEY",
+        "config": "conf/llms/deepseek-v3.2.yaml",
+    },
+    "glm-4.7": {
+        "provider": "zhipu",
+        "env_key": "ZHIPUAI_API_KEY",
+        "config": "conf/llms/glm-4.7.yaml",
+    },
+    "minimax-m2.1": {
+        "provider": "minimax",
+        "env_key": "MINIMAX_API_KEY",
+        "config": "conf/llms/minimax-m2.1.yaml",
+    },
+    "kimi-k2": {
+        "provider": "moonshot",
+        "env_key": "MOONSHOT_API_KEY",
+        "config": "conf/llms/kimi-k2.yaml",
+    },
     "claude_3_5_sonnet": {"provider": "anthropic", "env_key": "ANTHROPIC_API_KEY"},
     # Together.AI models
-    "rnj-1-instruct": {"provider": "together_ai", "env_key": "TOGETHER_API_KEY", "config": "conf/llms/rnj-1-instruct.yaml"},
-    "qwen3-4b": {"provider": "together_ai", "env_key": "TOGETHER_API_KEY", "config": "conf/llms/qwen3-4b.yaml"},
+    "rnj-1-instruct": {
+        "provider": "together_ai",
+        "env_key": "TOGETHER_API_KEY",
+        "config": "conf/llms/rnj-1-instruct.yaml",
+    },
+    "qwen3-4b": {
+        "provider": "together_ai",
+        "env_key": "TOGETHER_API_KEY",
+        "config": "conf/llms/qwen3-4b.yaml",
+    },
     # Mistral models
-    "ministral-3b": {"provider": "mistral", "env_key": "MISTRAL_API_KEY", "config": "conf/llms/ministral-3b.yaml"},
+    "ministral-3b": {
+        "provider": "mistral",
+        "env_key": "MISTRAL_API_KEY",
+        "config": "conf/llms/ministral-3b.yaml",
+    },
 }
 
 COLORS = {
@@ -63,7 +115,7 @@ def colored(text: str, color: str) -> str:
     return f"{COLORS.get(color, '')}{text}{COLORS['reset']}"
 
 
-def check_env_var(env_key: str) -> Tuple[bool, str]:
+def check_env_var(env_key: str) -> tuple[bool, str]:
     """Check if environment variable is set."""
     value = os.environ.get(env_key)
     if not value:
@@ -73,7 +125,7 @@ def check_env_var(env_key: str) -> Tuple[bool, str]:
     return True, "✓ Set (non-standard format, assuming valid)"
 
 
-def check_config_file(config_path: str) -> Tuple[bool, str]:
+def check_config_file(config_path: str) -> tuple[bool, str]:
     """Check if configuration file exists."""
     path = Path(config_path)
     if path.exists():
@@ -81,10 +133,11 @@ def check_config_file(config_path: str) -> Tuple[bool, str]:
     return False, f"Missing (expected at {config_path})"
 
 
-def check_litellm_version() -> Tuple[bool, str]:
+def check_litellm_version() -> tuple[bool, str]:
     """Check LiteLLM availability and version."""
     try:
         import litellm
+
         version = litellm.__version__ if hasattr(litellm, "__version__") else "unknown"
         # Current required version from requirements.txt
         if version >= "1.78.7" or version == "unknown":
@@ -94,7 +147,7 @@ def check_litellm_version() -> Tuple[bool, str]:
         return False, "Not installed. Run: pip install litellm"
 
 
-def check_provider_module(provider: str) -> Tuple[bool, str]:
+def check_provider_module(provider: str) -> tuple[bool, str]:
     """Check if provider SDK is available."""
     providers_to_check = {
         "openai": ("openai", "OpenAI SDK"),
@@ -118,7 +171,7 @@ def check_provider_module(provider: str) -> Tuple[bool, str]:
         return False, f"{display_name} not found. Run: pip install {module_name}"
 
 
-def validate_model(model_key: str) -> Dict[str, any]:
+def validate_model(model_key: str) -> dict[str, any]:
     """Validate a single model's setup."""
     if model_key not in MODEL_PROVIDERS:
         return {
@@ -179,7 +232,7 @@ def validate_model(model_key: str) -> Dict[str, any]:
     }
 
 
-def print_validation_result(result: Dict) -> None:
+def print_validation_result(result: dict) -> None:
     """Print validation result in human-readable format."""
     model = result["model"]
     provider = result.get("provider", "unknown")
@@ -208,9 +261,7 @@ def print_validation_result(result: Dict) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Validate BoxingGym multi-model setup"
-    )
+    parser = argparse.ArgumentParser(description="Validate BoxingGym multi-model setup")
     parser.add_argument(
         "--model",
         type=str,
@@ -241,8 +292,7 @@ def main():
         models_to_check = list(MODEL_PROVIDERS.keys())
     elif args.provider:
         models_to_check = [
-            m for m, info in MODEL_PROVIDERS.items()
-            if info.get("provider") == args.provider
+            m for m, info in MODEL_PROVIDERS.items() if info.get("provider") == args.provider
         ]
     elif args.model:
         models_to_check = [args.model]
@@ -253,7 +303,7 @@ def main():
             "deepseek-chat",
             "gpt-5.1-codex-mini",
             "glm-4.7",
-            "minimax-m2.1"
+            "minimax-m2.1",
         ]
 
     # Validate each model

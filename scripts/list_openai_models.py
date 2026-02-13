@@ -4,12 +4,12 @@
 import argparse
 import json
 import sys
-from typing import Dict, Iterable, List, Optional
+from collections.abc import Iterable
 
 from openai import OpenAI
 
 
-def _to_dict(model) -> Dict:
+def _to_dict(model) -> dict:
     """Convert an OpenAI model object into a serialisable dict."""
     if hasattr(model, "model_dump"):
         return model.model_dump()
@@ -21,7 +21,7 @@ def _to_dict(model) -> Dict:
     return {attr: getattr(model, attr) for attr in dir(model) if not attr.startswith("_")}
 
 
-def _iter_models(client: OpenAI, limit: Optional[int]) -> Iterable[Dict]:
+def _iter_models(client: OpenAI, limit: int | None) -> Iterable[dict]:
     """Yield model dicts from the OpenAI SDK, respecting an optional limit."""
     seen = 0
     page = client.models.list()
@@ -32,7 +32,7 @@ def _iter_models(client: OpenAI, limit: Optional[int]) -> Iterable[Dict]:
             return
 
 
-def _format_rows(models: List[Dict], contains: Optional[str]) -> List[Dict]:
+def _format_rows(models: list[dict], contains: str | None) -> list[dict]:
     filtered = []
     for m in models:
         model_id = m.get("id", "<unknown>")
@@ -49,7 +49,7 @@ def _format_rows(models: List[Dict], contains: Optional[str]) -> List[Dict]:
     return filtered
 
 
-def _print_table(rows: List[Dict]) -> None:
+def _print_table(rows: list[dict]) -> None:
     if not rows:
         print("No models matched your filters.")
         return
@@ -62,7 +62,7 @@ def _print_table(rows: List[Dict]) -> None:
             text = "" if value is None else str(value)
             col_widths[header] = max(col_widths[header], len(text))
 
-    def fmt(row: Dict) -> str:
+    def fmt(row: dict) -> str:
         cells = []
         for header in headers:
             value = row.get(header)
@@ -77,7 +77,7 @@ def _print_table(rows: List[Dict]) -> None:
         print(fmt(row))
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "List the OpenAI models that are currently available to your API key.\n"
@@ -108,7 +108,7 @@ def main(argv: List[str]) -> int:
     )
     args = parser.parse_args(argv)
 
-    client_kwargs: Dict[str, Optional[str]] = {}
+    client_kwargs: dict[str, str | None] = {}
     if args.base_url:
         client_kwargs["base_url"] = args.base_url
     if args.project:

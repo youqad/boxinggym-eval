@@ -29,7 +29,9 @@ def run_model(model: str, *, fake: bool, fake_hint: str):
     run_dir = f"outputs/smoke_dugongs/{model}/${{now:%Y-%m-%d_%H-%M-%S}}"
 
     cmd = [
-        "uv", "run", "python",
+        "uv",
+        "run",
+        "python",
         "run_experiment.py",
         "envs=dugongs_direct_naive",
         f"llms={model}",
@@ -56,9 +58,17 @@ def main():
 
     parser = argparse.ArgumentParser(description="Minimal dugongs smoke test per LLM config.")
     parser.add_argument("--all", action="store_true", help="Test all LLM configs")
-    parser.add_argument("--model", action="append", help="Specific LLM config name (stem of conf/llms/*.yaml). Can be passed multiple times.")
-    parser.add_argument("--fake", action="store_true", help="Enable offline fake LLM mode (no API calls)")
-    parser.add_argument("--fake-hint", default="dugongs", help="Hint for fake mode content (default: dugongs)")
+    parser.add_argument(
+        "--model",
+        action="append",
+        help="Specific LLM config name (stem of conf/llms/*.yaml). Can be passed multiple times.",
+    )
+    parser.add_argument(
+        "--fake", action="store_true", help="Enable offline fake LLM mode (no API calls)"
+    )
+    parser.add_argument(
+        "--fake-hint", default="dugongs", help="Hint for fake mode content (default: dugongs)"
+    )
     args = parser.parse_args()
 
     if args.all:

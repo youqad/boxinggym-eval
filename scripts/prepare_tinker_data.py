@@ -33,12 +33,12 @@ Best models per environment (from 1,546 valid runs):
     emotion: GPT-4o (z=+0.781)
 """
 
-import json
 import argparse
+import json
 import re
-from pathlib import Path
-from typing import List, Dict, Any, Optional
 from collections import defaultdict
+from pathlib import Path
+from typing import Any
 
 # Best models per environment from sweep analysis (budget≥10, |z|<100)
 BEST_MODELS_PER_ENV = {
@@ -55,19 +55,19 @@ BEST_MODELS_PER_ENV = {
 }
 
 
-def model_matches(model_name: str, patterns: List[str]) -> bool:
+def model_matches(model_name: str, patterns: list[str]) -> bool:
     """Check if model name matches any of the patterns (case-insensitive)."""
     model_lower = model_name.lower()
     return any(p.lower() in model_lower for p in patterns)
 
 
-def extract_env_from_filename(filename: str) -> Optional[str]:
+def extract_env_from_filename(filename: str) -> str | None:
     """Extract environment name from result filename."""
     match = re.search(r"env=([a-z_]+)", filename)
     return match.group(1) if match else None
 
 
-def extract_model_from_config(config: Dict[str, Any]) -> str:
+def extract_model_from_config(config: dict[str, Any]) -> str:
     """Extract model name from config."""
     llms = config.get("llms", {})
     if isinstance(llms, dict):
@@ -75,7 +75,7 @@ def extract_model_from_config(config: Dict[str, Any]) -> str:
     return str(llms)
 
 
-def parse_scientist_messages(messages: List[str]) -> List[Dict[str, str]]:
+def parse_scientist_messages(messages: list[str]) -> list[dict[str, str]]:
     """Parse scientist_messages strings into role/content dicts."""
     parsed = []
     for msg in messages:
@@ -89,9 +89,9 @@ def parse_scientist_messages(messages: List[str]) -> List[Dict[str, str]]:
 
 
 def extract_conversations_from_result(
-    result_data: Dict[str, Any],
+    result_data: dict[str, Any],
     env_name: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Extract training conversations from a BoxingGym result JSON.
 
@@ -160,11 +160,11 @@ def extract_conversations_from_result(
 
 def process_results_directory(
     results_dir: Path,
-    model_filter: Optional[str] = None,
-    env_filter: Optional[str] = None,
+    model_filter: str | None = None,
+    env_filter: str | None = None,
     use_best_per_env: bool = True,
-    limit: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
     """
     Process all JSON files in the results directory.
 
@@ -187,7 +187,7 @@ def process_results_directory(
 
     for json_file in json_files:
         try:
-            with open(json_file, "r") as f:
+            with open(json_file) as f:
                 result_data = json.load(f)
 
             # Extract metadata
@@ -236,7 +236,7 @@ def process_results_directory(
     return all_conversations
 
 
-def write_jsonl(conversations: List[Dict[str, Any]], output_path: Path):
+def write_jsonl(conversations: list[dict[str, Any]], output_path: Path):
     """Write conversations to JSONL file (Tinker format)."""
     # Remove env field before writing (used only for stats)
     clean_conversations = [{"messages": c["messages"]} for c in conversations]

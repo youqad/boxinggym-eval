@@ -70,16 +70,16 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 # Rich imports for beautiful CLI output
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
-from rich.progress import Progress, BarColumn, TextColumn, SpinnerColumn
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
+from rich.table import Table
 
 console = Console(width=120)
 
@@ -92,10 +92,13 @@ except ImportError:
 try:
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.preprocessing import LabelEncoder
+
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
-    console.print("[yellow]Warning: sklearn not available. Parameter importance will be skipped.[/yellow]")
+    console.print(
+        "[yellow]Warning: sklearn not available. Parameter importance will be skipped.[/yellow]"
+    )
 
 
 def fetch_sweep_runs(sweep_id: str, entity: str = "", project: str = "") -> pd.DataFrame:
@@ -158,7 +161,7 @@ def fetch_sweep_runs(sweep_id: str, entity: str = "", project: str = "") -> pd.D
 def compute_parameter_importance(
     df: pd.DataFrame,
     target_metric: str = "metric/eval/z_mean",
-    config_cols: Optional[list] = None,
+    config_cols: list | None = None,
 ) -> pd.DataFrame:
     """Compute parameter importance using Random Forest (like WandB does)."""
     if not SKLEARN_AVAILABLE:
@@ -170,11 +173,20 @@ def compute_parameter_importance(
 
     if config_cols is None:
         # Filter to meaningful hyperparameters only (exclude noise)
-        noise_patterns = ["results", "ppl/", "ppl.", "hydra", "filename", "system_prompt", "wandb", "_"]
+        noise_patterns = [
+            "results",
+            "ppl/",
+            "ppl.",
+            "hydra",
+            "filename",
+            "system_prompt",
+            "wandb",
+            "_",
+        ]
         config_cols = [
-            c for c in df.columns
-            if c.startswith("config/")
-            and not any(noise in c.lower() for noise in noise_patterns)
+            c
+            for c in df.columns
+            if c.startswith("config/") and not any(noise in c.lower() for noise in noise_patterns)
         ]
 
     X_data = df[config_cols].copy()
@@ -192,7 +204,7 @@ def compute_parameter_importance(
     X_encoded = pd.DataFrame()
 
     for col in X_data.columns:
-        if X_data[col].dtype == object or X_data[col].dtype.name == 'category':
+        if X_data[col].dtype == object or X_data[col].dtype.name == "category":
             le = LabelEncoder()
             values = X_data[col].fillna("__NULL__").astype(str)
             X_encoded[col] = le.fit_transform(values)
@@ -203,10 +215,12 @@ def compute_parameter_importance(
     rf = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
     rf.fit(X_encoded, y)
 
-    importance = pd.DataFrame({
-        "parameter": config_cols,
-        "importance": rf.feature_importances_,
-    }).sort_values("importance", ascending=False)
+    importance = pd.DataFrame(
+        {
+            "parameter": config_cols,
+            "importance": rf.feature_importances_,
+        }
+    ).sort_values("importance", ascending=False)
 
     correlations = []
     for col in config_cols:
@@ -228,7 +242,7 @@ def compute_parameter_importance(
 def find_best_configurations(
     df: pd.DataFrame,
     target_metric: str = "metric/eval/z_mean",
-    group_by: Optional[list] = None,
+    group_by: list | None = None,
     minimize: bool = True,
 ) -> pd.DataFrame:
     """Find the best configurations, optionally grouped by environment/other factors."""
@@ -292,13 +306,15 @@ def print_analysis_report_rich(df: pd.DataFrame, sweep_id: str):
     title_panel = Panel(
         f"[bold cyan]Sweep Analysis: {sweep_id}[/bold cyan]\n[dim]{len(df)} finished runs[/dim]",
         border_style="cyan",
-        expand=True
+        expand=True,
     )
     console.print(title_panel)
 
     if target not in df.columns:
         console.print(f"[red]Warning: Target metric '{target}' not found[/red]")
-        console.print(f"[dim]Available metrics: {[c for c in df.columns if c.startswith('metric/')]}[/dim]")
+        console.print(
+            f"[dim]Available metrics: {[c for c in df.columns if c.startswith('metric/')]}[/dim]"
+        )
         return
 
     # 1. Parameter Importance
@@ -315,18 +331,16 @@ def print_analysis_report_rich(df: pd.DataFrame, sweep_id: str):
             imp = row["importance"]
             corr = row["correlation"]
             corr_style = "green" if corr > 0.2 else "red" if corr < -0.2 else "yellow"
-            imp_table.add_row(
-                param,
-                f"{imp:.3f}",
-                f"[{corr_style}]{corr:+.3f}[/{corr_style}]"
-            )
+            imp_table.add_row(param, f"{imp:.3f}", f"[{corr_style}]{corr:+.3f}[/{corr_style}]")
         console.print(imp_table)
 
     # 2. Best Configurations
     console.print("\n[bold cyan]Top 10 Configurations (lowest z_mean)[/bold cyan]")
     best = find_best_configurations(df, target, minimize=True)
     if not best.empty:
-        best_table = Table(border_style="cyan", show_header=True, header_style="magenta", row_styles=["", "dim"])
+        best_table = Table(
+            border_style="cyan", show_header=True, header_style="magenta", row_styles=["", "dim"]
+        )
         best_table.add_column("#", justify="right", width=3)
         best_table.add_column("Model", width=20)
         best_table.add_column("Environment", width=25)
@@ -346,7 +360,7 @@ def print_analysis_report_rich(df: pd.DataFrame, sweep_id: str):
                 str(row.get("config/envs", "?"))[:25],
                 prior,
                 ppl,
-                f"[{z_style}]{z_val:+.3f}[/{z_style}]"
+                f"[{z_style}]{z_val:+.3f}[/{z_style}]",
             )
         console.print(best_table)
 
@@ -365,18 +379,20 @@ def print_analysis_report_rich(df: pd.DataFrame, sweep_id: str):
         param_name = param.replace("config/", "").upper()
         console.print(f"\n  [yellow]{param_name}[/yellow]")
 
-        param_table = Table(show_header=True, header_style="dim cyan", border_style="blue", padding=(0, 1))
+        param_table = Table(
+            show_header=True, header_style="dim cyan", border_style="blue", padding=(0, 1)
+        )
         param_table.add_column("Value", style="green", width=25)
         param_table.add_column("z_mean", justify="right", width=20)
         param_table.add_column("n", justify="right", width=6)
 
         for idx, row in agg.iterrows():
-            mean_val = row['mean']
+            mean_val = row["mean"]
             z_style = _z_style(mean_val)
             param_table.add_row(
                 str(idx)[:25],
                 f"[{z_style}]{mean_val:+.3f} +/- {row['sem']:.3f}[/{z_style}]",
-                f"{int(row['count'])}"
+                f"{int(row['count'])}",
             )
         console.print(param_table)
 
@@ -415,9 +431,9 @@ def print_analysis_report_rich(df: pd.DataFrame, sweep_id: str):
 
 def prepare_analysis_payload(
     combined_df: pd.DataFrame,
-    sweep_ids: List[str],
+    sweep_ids: list[str],
     target_metric: str = "metric/eval/z_mean",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Prepare data payload for web dashboard."""
     importance = compute_parameter_importance(combined_df, target_metric)
     best_configs = find_best_configurations(combined_df, target_metric, minimize=True)
@@ -442,12 +458,24 @@ def prepare_analysis_payload(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Analyze WandB sweep results or local JSON results")
-    parser.add_argument("--sweep-id", nargs="+", help="Sweep ID(s) to analyze (required unless --local)")
-    parser.add_argument("--local", action="store_true", help="Analyze local results from results/ directory")
-    parser.add_argument("--results-dir", default="results", help="Directory containing local JSON results (default: results)")
+    parser = argparse.ArgumentParser(
+        description="Analyze WandB sweep results or local JSON results"
+    )
+    parser.add_argument(
+        "--sweep-id", nargs="+", help="Sweep ID(s) to analyze (required unless --local)"
+    )
+    parser.add_argument(
+        "--local", action="store_true", help="Analyze local results from results/ directory"
+    )
+    parser.add_argument(
+        "--results-dir",
+        default="results",
+        help="Directory containing local JSON results (default: results)",
+    )
     parser.add_argument("--entity", default=os.environ.get("WANDB_ENTITY", ""), help="WandB entity")
-    parser.add_argument("--project", default=os.environ.get("WANDB_PROJECT", ""), help="WandB project")
+    parser.add_argument(
+        "--project", default=os.environ.get("WANDB_PROJECT", ""), help="WandB project"
+    )
     parser.add_argument("--output", help="Output CSV file path")
     parser.add_argument("--metric", default="metric/eval/z_mean", help="Target metric to analyze")
     parser.add_argument("--web", action="store_true", help="Launch interactive web dashboard")
@@ -457,31 +485,31 @@ def main():
         nargs="*",
         metavar="VIEW",
         help="Non-interactive mode: render specific view(s) without prompts. "
-             "Views: parameter-importance, model-rankings, heatmap, best-configs, "
-             "budget-progression, all. Use alone for 'all'.",
+        "Views: parameter-importance, model-rankings, heatmap, best-configs, "
+        "budget-progression, all. Use alone for 'all'.",
     )
     parser.add_argument(
         "--format",
         choices=["rich", "json", "csv"],
         default="rich",
         help="Output format for --view mode (default: rich). "
-             "Use 'json' for JSON output or 'csv' for CSV tables."
+        "Use 'json' for JSON output or 'csv' for CSV tables.",
     )
     parser.add_argument("--port", type=int, default=5003, help="Port for web dashboard")
     parser.add_argument(
         "--include-seed",
         action="store_true",
         help="[DEPRECATED for multi-seed runs] Include seed in RF parameter importance. "
-             "With the new multi-seed format, seeds are handled internally per run and "
-             "this flag has no effect. For legacy per-seed runs, seed is excluded by default "
-             "because it causes RF to overfit to instance-specific patterns (test-set leakage).",
+        "With the new multi-seed format, seeds are handled internally per run and "
+        "this flag has no effect. For legacy per-seed runs, seed is excluded by default "
+        "because it causes RF to overfit to instance-specific patterns (test-set leakage).",
     )
     parser.add_argument(
         "--z-threshold",
         type=float,
         default=100.0,
         help="Filter out runs with |z_mean| > threshold (default: 100). "
-             "Catastrophic failures (e.g., peregrines z=6500) corrupt aggregations.",
+        "Catastrophic failures (e.g., peregrines z=6500) corrupt aggregations.",
     )
     parser.add_argument(
         "--exclude-envs",
@@ -494,7 +522,7 @@ def main():
         type=str,
         default=None,
         help="Analyze only this environment. Useful for per-env parameter importance. "
-             "Example: --filter-env hyperbolic_direct",
+        "Example: --filter-env hyperbolic_direct",
     )
     parser.add_argument(
         "--no-filter",
@@ -506,8 +534,8 @@ def main():
         type=int,
         default=10,
         help="Minimum final budget reached (default: 10). "
-             "Ensures fair comparison - z-scores at different budgets aren't comparable. "
-             "Set to 0 to include incomplete runs.",
+        "Ensures fair comparison - z-scores at different budgets aren't comparable. "
+        "Set to 0 to include incomplete runs.",
     )
     parser.add_argument(
         "--min-wall-time",
@@ -569,7 +597,9 @@ def main():
             combined_df = combined_df[combined_df[z_col].abs() <= args.z_threshold]
             filtered = before - len(combined_df)
             if filtered > 0:
-                console.print(f"  [yellow]Filtered {filtered} runs with |z| > {args.z_threshold}[/yellow]")
+                console.print(
+                    f"  [yellow]Filtered {filtered} runs with |z| > {args.z_threshold}[/yellow]"
+                )
 
         # Filter excluded environments
         if env_col and args.exclude_envs:
@@ -577,7 +607,9 @@ def main():
             combined_df = combined_df[~combined_df[env_col].isin(args.exclude_envs)]
             filtered = before - len(combined_df)
             if filtered > 0:
-                console.print(f"  [yellow]Excluded {filtered} runs from: {', '.join(args.exclude_envs)}[/yellow]")
+                console.print(
+                    f"  [yellow]Excluded {filtered} runs from: {', '.join(args.exclude_envs)}[/yellow]"
+                )
 
         # Filter to single environment (for per-env analysis)
         if env_col and args.filter_env:
@@ -589,7 +621,9 @@ def main():
                 # Try partial match (e.g., "hyperbolic" matches "hyperbolic_direct")
                 mask = df_before[env_col].str.contains(args.filter_env, case=False, na=False)
                 combined_df = df_before[mask]
-            console.print(f"  [cyan]Filtered to env '{args.filter_env}': {len(combined_df)} runs (was {before})[/cyan]")
+            console.print(
+                f"  [cyan]Filtered to env '{args.filter_env}': {len(combined_df)} runs (was {before})[/cyan]"
+            )
 
         if len(combined_df) < original_count:
             console.print(f"  [green]After filtering: {len(combined_df)} runs[/green]")
@@ -637,20 +671,32 @@ def main():
 
         total_excluded = original_strict - len(combined_df)
         if total_excluded > 0:
-            console.print("\n[bold cyan]╭─ Quality Filtering ─────────────────────────╮[/bold cyan]")
+            console.print(
+                "\n[bold cyan]╭─ Quality Filtering ─────────────────────────╮[/bold cyan]"
+            )
             console.print(f"[cyan]│[/cyan] Total before:           {original_strict:>6}")
             if strict_stats["missing_z"] > 0:
-                console.print(f"[cyan]│[/cyan] [yellow]Missing z-score:        {strict_stats['missing_z']:>6}[/yellow]")
+                console.print(
+                    f"[cyan]│[/cyan] [yellow]Missing z-score:        {strict_stats['missing_z']:>6}[/yellow]"
+                )
             if strict_stats["short_runs"] > 0:
-                console.print(f"[cyan]│[/cyan] [yellow]Too short (<{args.min_wall_time}s):      {strict_stats['short_runs']:>6}[/yellow]")
+                console.print(
+                    f"[cyan]│[/cyan] [yellow]Too short (<{args.min_wall_time}s):      {strict_stats['short_runs']:>6}[/yellow]"
+                )
             if strict_stats["incomplete"] > 0:
-                console.print(f"[cyan]│[/cyan] [yellow]Incomplete (budget < {args.min_budget}): {strict_stats['incomplete']:>6}[/yellow]")
-            console.print(f"[cyan]│[/cyan] [green]✓ Valid for analysis:   {len(combined_df):>6}[/green]")
-            console.print("[bold cyan]╰─────────────────────────────────────────────╯[/bold cyan]\n")
+                console.print(
+                    f"[cyan]│[/cyan] [yellow]Incomplete (budget < {args.min_budget}): {strict_stats['incomplete']:>6}[/yellow]"
+                )
+            console.print(
+                f"[cyan]│[/cyan] [green]✓ Valid for analysis:   {len(combined_df):>6}[/green]"
+            )
+            console.print(
+                "[bold cyan]╰─────────────────────────────────────────────╯[/bold cyan]\n"
+            )
 
     # non-interactive TUI mode (--view)
     if args.view is not None:
-        from boxing_gym.cli.tui.app import SweepTUI, AVAILABLE_VIEWS
+        from boxing_gym.cli.tui.app import AVAILABLE_VIEWS, SweepTUI
 
         # --view with no args means "all"
         view_names = args.view if args.view else ["all"]
@@ -662,19 +708,26 @@ def main():
             console.print(f"[dim]Available: {', '.join(AVAILABLE_VIEWS)}[/dim]")
             sys.exit(1)
 
-        tui = SweepTUI(combined_df, sweep_ids, args.metric, include_seed=args.include_seed, is_local=is_local)
+        tui = SweepTUI(
+            combined_df, sweep_ids, args.metric, include_seed=args.include_seed, is_local=is_local
+        )
         tui.run_non_interactive(view_names, output_format=args.format)
         sys.exit(0)
 
     if args.tui:
         from boxing_gym.cli.tui.app import SweepTUI
-        tui = SweepTUI(combined_df, sweep_ids, args.metric, include_seed=args.include_seed, is_local=is_local)
+
+        tui = SweepTUI(
+            combined_df, sweep_ids, args.metric, include_seed=args.include_seed, is_local=is_local
+        )
         tui.run()
         sys.exit(0)
 
     if args.web:
         if is_local:
-            console.print("[yellow]Warning: --web mode not yet supported for local results. Use --tui instead.[/yellow]")
+            console.print(
+                "[yellow]Warning: --web mode not yet supported for local results. Use --tui instead.[/yellow]"
+            )
             sys.exit(1)
 
         # Launch Streamlit web dashboard
@@ -698,10 +751,15 @@ def main():
         # Launch Streamlit
         subprocess.run(
             [
-                sys.executable, "-m", "streamlit", "run",
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
                 str(app_path),
-                "--server.port", str(args.port),
-                "--server.headless", "true",
+                "--server.port",
+                str(args.port),
+                "--server.headless",
+                "true",
             ],
             env=env,
         )
