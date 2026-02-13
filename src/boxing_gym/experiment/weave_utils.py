@@ -27,10 +27,12 @@ Avoid @weave_op on (due to serialization issues):
 """
 
 import os
-from typing import Callable, Optional, TypeVar, Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 try:
     import weave
+
     WEAVE_AVAILABLE = True
 except ImportError:
     weave = None
@@ -51,10 +53,11 @@ def _is_weave_enabled() -> bool:
 
 
 def weave_op(
-    name: Optional[str] = None,
-    call_display_name: Optional[str] = None,
+    name: str | None = None,
+    call_display_name: str | None = None,
 ) -> Callable[[F], F]:
     """Conditional weave.op decorator."""
+
     def decorator(fn: F) -> F:
         if not _is_weave_enabled():
             return fn
@@ -75,7 +78,7 @@ def weave_op(
 
 
 def weave_op_method(
-    name: Optional[str] = None,
+    name: str | None = None,
 ) -> Callable[[F], F]:
     """Conditional weave.op decorator for methods."""
     return weave_op(name=name)

@@ -13,9 +13,9 @@ Usage:
     )
 """
 
-import os
 import logging
-from typing import Dict, Any, Optional, Tuple
+import os
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +31,13 @@ logger = logging.getLogger(__name__)
 #   "mode": str,                     # "chat" | "completion"
 # }
 
-MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
+MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     # =========================================================================
     # OpenAI Models
     # =========================================================================
     "gpt-4": {
-        "input_cost_per_token": 3e-05,      # $30/1M tokens
-        "output_cost_per_token": 6e-05,     # $60/1M tokens
+        "input_cost_per_token": 3e-05,  # $30/1M tokens
+        "output_cost_per_token": 6e-05,  # $60/1M tokens
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -45,8 +45,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-4o": {
-        "input_cost_per_token": 2.5e-06,    # $2.50/1M tokens
-        "output_cost_per_token": 1e-05,     # $10/1M tokens
+        "input_cost_per_token": 2.5e-06,  # $2.50/1M tokens
+        "output_cost_per_token": 1e-05,  # $10/1M tokens
         "max_tokens": 16384,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -54,8 +54,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-4o-mini": {
-        "input_cost_per_token": 1.5e-07,    # $0.15/1M tokens
-        "output_cost_per_token": 6e-07,     # $0.60/1M tokens
+        "input_cost_per_token": 1.5e-07,  # $0.15/1M tokens
+        "output_cost_per_token": 6e-07,  # $0.60/1M tokens
         "max_tokens": 16384,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -81,8 +81,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-4-turbo": {
-        "input_cost_per_token": 1e-05,      # $10/1M tokens
-        "output_cost_per_token": 3e-05,     # $30/1M tokens
+        "input_cost_per_token": 1e-05,  # $10/1M tokens
+        "output_cost_per_token": 3e-05,  # $30/1M tokens
         "max_tokens": 4096,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -126,8 +126,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-4.1": {
-        "input_cost_per_token": 2e-06,      # $2/1M tokens
-        "output_cost_per_token": 8e-06,     # $8/1M tokens
+        "input_cost_per_token": 2e-06,  # $2/1M tokens
+        "output_cost_per_token": 8e-06,  # $8/1M tokens
         "max_tokens": 32768,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -135,8 +135,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-3.5-turbo": {
-        "input_cost_per_token": 5e-07,      # $0.50/1M tokens
-        "output_cost_per_token": 1.5e-06,   # $1.50/1M tokens
+        "input_cost_per_token": 5e-07,  # $0.50/1M tokens
+        "output_cost_per_token": 1.5e-06,  # $1.50/1M tokens
         "max_tokens": 4096,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -153,8 +153,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-5": {
-        "input_cost_per_token": 1.25e-06,   # $1.25/1M tokens
-        "output_cost_per_token": 1e-05,     # $10/1M tokens
+        "input_cost_per_token": 1.25e-06,  # $1.25/1M tokens
+        "output_cost_per_token": 1e-05,  # $10/1M tokens
         "max_tokens": 131072,  # reasoning model needs headroom
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -162,8 +162,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-5-mini": {
-        "input_cost_per_token": 2.5e-07,    # $0.25/1M tokens
-        "output_cost_per_token": 2e-06,     # $2/1M tokens
+        "input_cost_per_token": 2.5e-07,  # $0.25/1M tokens
+        "output_cost_per_token": 2e-06,  # $2/1M tokens
         "max_tokens": 32768,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -171,8 +171,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-5-nano": {
-        "input_cost_per_token": 5e-08,      # $0.05/1M tokens
-        "output_cost_per_token": 4e-07,     # $0.40/1M tokens
+        "input_cost_per_token": 5e-08,  # $0.05/1M tokens
+        "output_cost_per_token": 4e-07,  # $0.40/1M tokens
         "max_tokens": 16384,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -180,8 +180,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-5.1": {
-        "input_cost_per_token": 1.25e-06,   # $1.25/1M tokens
-        "output_cost_per_token": 1e-05,     # $10/1M tokens
+        "input_cost_per_token": 1.25e-06,  # $1.25/1M tokens
+        "output_cost_per_token": 1e-05,  # $10/1M tokens
         "max_tokens": 32768,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -189,8 +189,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-5.1-mini": {
-        "input_cost_per_token": 2.5e-07,    # $0.25/1M tokens
-        "output_cost_per_token": 2e-06,     # $2/1M tokens
+        "input_cost_per_token": 2.5e-07,  # $0.25/1M tokens
+        "output_cost_per_token": 2e-06,  # $2/1M tokens
         "max_tokens": 32768,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -198,8 +198,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-5.1-codex-mini": {
-        "input_cost_per_token": 5e-07,      # $0.50/1M tokens
-        "output_cost_per_token": 2e-06,     # $2/1M tokens
+        "input_cost_per_token": 5e-07,  # $0.50/1M tokens
+        "output_cost_per_token": 2e-06,  # $2/1M tokens
         "max_tokens": 32768,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -207,8 +207,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gpt-5.2": {
-        "input_cost_per_token": 1.75e-06,   # $1.75/1M tokens
-        "output_cost_per_token": 1.4e-05,   # $14/1M tokens
+        "input_cost_per_token": 1.75e-06,  # $1.75/1M tokens
+        "output_cost_per_token": 1.4e-05,  # $14/1M tokens
         "max_tokens": 32768,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -225,8 +225,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "o1": {
-        "input_cost_per_token": 1.5e-05,    # $15/1M tokens
-        "output_cost_per_token": 6e-05,     # $60/1M tokens
+        "input_cost_per_token": 1.5e-05,  # $15/1M tokens
+        "output_cost_per_token": 6e-05,  # $60/1M tokens
         "max_tokens": 32768,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -234,8 +234,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "o1-mini": {
-        "input_cost_per_token": 3e-06,      # $3/1M tokens
-        "output_cost_per_token": 1.2e-05,   # $12/1M tokens
+        "input_cost_per_token": 3e-06,  # $3/1M tokens
+        "output_cost_per_token": 1.2e-05,  # $12/1M tokens
         "max_tokens": 65536,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -243,8 +243,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "o3": {
-        "input_cost_per_token": 1.5e-05,    # $15/1M tokens (estimated)
-        "output_cost_per_token": 6e-05,     # $60/1M tokens (estimated)
+        "input_cost_per_token": 1.5e-05,  # $15/1M tokens (estimated)
+        "output_cost_per_token": 6e-05,  # $60/1M tokens (estimated)
         "max_tokens": 65536,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
@@ -252,23 +252,22 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "o3-mini": {
-        "input_cost_per_token": 1.1e-06,    # $1.10/1M tokens
-        "output_cost_per_token": 4.4e-06,   # $4.40/1M tokens
+        "input_cost_per_token": 1.1e-06,  # $1.10/1M tokens
+        "output_cost_per_token": 4.4e-06,  # $4.40/1M tokens
         "max_tokens": 65536,
         "api_base": None,
         "api_key_var": "OPENAI_API_KEY",
         "litellm_provider": "openai",
         "mode": "chat",
     },
-
     # =========================================================================
     # DeepSeek Models
     # =========================================================================
     "deepseek/deepseek-chat": {
-        "input_cost_per_token": 2.8e-07,    # $0.28/1M tokens (cache miss)
-        "output_cost_per_token": 4.2e-07,   # $0.42/1M tokens
-        "max_tokens": 8192,                 # API output limit
-        "context_window": 128000,           # Full context window
+        "input_cost_per_token": 2.8e-07,  # $0.28/1M tokens (cache miss)
+        "output_cost_per_token": 4.2e-07,  # $0.42/1M tokens
+        "max_tokens": 8192,  # API output limit
+        "context_window": 128000,  # Full context window
         "api_base": "https://api.deepseek.com/v1",
         "api_key_var": "DEEPSEEK_API_KEY",
         "litellm_provider": "deepseek",
@@ -285,7 +284,7 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "deepseek/deepseek-reasoner": {
-        "input_cost_per_token": 5.5e-07,    # $0.55/1M tokens
+        "input_cost_per_token": 5.5e-07,  # $0.55/1M tokens
         "output_cost_per_token": 2.19e-06,  # $2.19/1M tokens
         "max_tokens": 32768,  # reasoning model needs headroom
         "context_window": 128000,
@@ -304,13 +303,12 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "litellm_provider": "deepseek",
         "mode": "chat",
     },
-
     # =========================================================================
     # Kimi/Moonshot Models
     # =========================================================================
     "moonshot/kimi-k2": {
-        "input_cost_per_token": 6e-07,      # $0.60/1M tokens
-        "output_cost_per_token": 2.5e-06,   # $2.50/1M tokens
+        "input_cost_per_token": 6e-07,  # $0.60/1M tokens
+        "output_cost_per_token": 2.5e-06,  # $2.50/1M tokens
         "max_tokens": 32768,
         "api_base": "https://api.kimi.com/coding/",
         "api_key_var": "MOONSHOT_API_KEY",
@@ -336,8 +334,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "kimi-for-coding": {
-        "input_cost_per_token": 1.5e-07,    # $0.15/1M tokens (estimate)
-        "output_cost_per_token": 6e-07,     # $0.60/1M tokens (estimate)
+        "input_cost_per_token": 1.5e-07,  # $0.15/1M tokens (estimate)
+        "output_cost_per_token": 6e-07,  # $0.60/1M tokens (estimate)
         "max_tokens": 32768,
         "api_base": "https://api.kimi.com/coding/",
         "api_key_var": "MOONSHOT_API_KEY",
@@ -354,7 +352,7 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "openrouter/moonshotai/kimi-k2": {
-        "input_cost_per_token": 4.56e-07,   # $0.456/1M tokens (OpenRouter)
+        "input_cost_per_token": 4.56e-07,  # $0.456/1M tokens (OpenRouter)
         "output_cost_per_token": 2.5e-06,
         "max_tokens": 32768,
         "api_base": None,
@@ -371,13 +369,12 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "litellm_provider": "openrouter",
         "mode": "chat",
     },
-
     # =========================================================================
     # MiniMax Models
     # =========================================================================
     "openai/MiniMax-M2.1": {
-        "input_cost_per_token": 1.2e-07,    # $0.12/1M tokens
-        "output_cost_per_token": 3e-07,     # $0.30/1M tokens
+        "input_cost_per_token": 1.2e-07,  # $0.12/1M tokens
+        "output_cost_per_token": 3e-07,  # $0.30/1M tokens
         "max_tokens": 204800,
         "api_base": "https://api.minimax.io/v1",
         "api_key_var": "MINIMAX_API_KEY",
@@ -411,13 +408,12 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "litellm_provider": "anthropic",
         "mode": "chat",
     },
-
     # =========================================================================
     # GLM/ZhipuAI Models
     # =========================================================================
     "anthropic/glm-4.7": {
-        "input_cost_per_token": 4.5e-07,    # $0.45/1M tokens
-        "output_cost_per_token": 1.9e-06,   # $1.90/1M tokens
+        "input_cost_per_token": 4.5e-07,  # $0.45/1M tokens
+        "output_cost_per_token": 1.9e-06,  # $1.90/1M tokens
         "max_tokens": 200000,
         "api_base": "https://api.z.ai/api/anthropic",
         "api_key_var": "ZHIPUAI_API_KEY",
@@ -434,7 +430,7 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "zai/glm-4.7": {
-        "input_cost_per_token": 4e-07,      # $0.40/1M tokens
+        "input_cost_per_token": 4e-07,  # $0.40/1M tokens
         "output_cost_per_token": 1.75e-06,  # $1.75/1M tokens
         "max_tokens": 200000,
         "api_base": "https://api.z.ai/api/anthropic",
@@ -442,13 +438,12 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "litellm_provider": "zai",
         "mode": "chat",
     },
-
     # =========================================================================
     # Anthropic Claude Models
     # =========================================================================
     "claude-3-5-sonnet": {
-        "input_cost_per_token": 3e-06,      # $3/1M tokens
-        "output_cost_per_token": 1.5e-05,   # $15/1M tokens
+        "input_cost_per_token": 3e-06,  # $3/1M tokens
+        "output_cost_per_token": 1.5e-05,  # $15/1M tokens
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "ANTHROPIC_API_KEY",
@@ -465,8 +460,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "claude-3-opus": {
-        "input_cost_per_token": 1.5e-05,    # $15/1M tokens
-        "output_cost_per_token": 7.5e-05,   # $75/1M tokens
+        "input_cost_per_token": 1.5e-05,  # $15/1M tokens
+        "output_cost_per_token": 7.5e-05,  # $75/1M tokens
         "max_tokens": 4096,
         "api_base": None,
         "api_key_var": "ANTHROPIC_API_KEY",
@@ -474,7 +469,7 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "claude-3-haiku": {
-        "input_cost_per_token": 2.5e-07,    # $0.25/1M tokens
+        "input_cost_per_token": 2.5e-07,  # $0.25/1M tokens
         "output_cost_per_token": 1.25e-06,  # $1.25/1M tokens
         "max_tokens": 4096,
         "api_base": None,
@@ -483,8 +478,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "claude-3-5-haiku": {
-        "input_cost_per_token": 8e-07,      # $0.80/1M tokens
-        "output_cost_per_token": 4e-06,     # $4/1M tokens
+        "input_cost_per_token": 8e-07,  # $0.80/1M tokens
+        "output_cost_per_token": 4e-06,  # $4/1M tokens
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "ANTHROPIC_API_KEY",
@@ -501,8 +496,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "claude-haiku-4-5": {
-        "input_cost_per_token": 1e-06,      # $1/1M tokens
-        "output_cost_per_token": 5e-06,     # $5/1M tokens
+        "input_cost_per_token": 1e-06,  # $1/1M tokens
+        "output_cost_per_token": 5e-06,  # $5/1M tokens
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "ANTHROPIC_API_KEY",
@@ -510,8 +505,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "claude-sonnet-4": {
-        "input_cost_per_token": 3e-06,      # $3/1M tokens
-        "output_cost_per_token": 1.5e-05,   # $15/1M tokens
+        "input_cost_per_token": 3e-06,  # $3/1M tokens
+        "output_cost_per_token": 1.5e-05,  # $15/1M tokens
         "max_tokens": 16384,
         "api_base": None,
         "api_key_var": "ANTHROPIC_API_KEY",
@@ -519,8 +514,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "claude-opus-4": {
-        "input_cost_per_token": 1.5e-05,    # $15/1M tokens
-        "output_cost_per_token": 7.5e-05,   # $75/1M tokens
+        "input_cost_per_token": 1.5e-05,  # $15/1M tokens
+        "output_cost_per_token": 7.5e-05,  # $75/1M tokens
         "max_tokens": 16384,
         "api_base": None,
         "api_key_var": "ANTHROPIC_API_KEY",
@@ -528,8 +523,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "claude-opus-4-5": {
-        "input_cost_per_token": 1.5e-05,    # $15/1M tokens
-        "output_cost_per_token": 7.5e-05,   # $75/1M tokens
+        "input_cost_per_token": 1.5e-05,  # $15/1M tokens
+        "output_cost_per_token": 7.5e-05,  # $75/1M tokens
         "max_tokens": 16384,
         "api_base": None,
         "api_key_var": "ANTHROPIC_API_KEY",
@@ -554,13 +549,12 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "litellm_provider": "anthropic",
         "mode": "chat",
     },
-
     # =========================================================================
     # Google Gemini Models
     # =========================================================================
     "gemini-2.0-flash": {
-        "input_cost_per_token": 1e-07,      # $0.10/1M tokens
-        "output_cost_per_token": 4e-07,     # $0.40/1M tokens
+        "input_cost_per_token": 1e-07,  # $0.10/1M tokens
+        "output_cost_per_token": 4e-07,  # $0.40/1M tokens
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "GOOGLE_API_KEY",
@@ -568,8 +562,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gemini-2.0-flash-lite": {
-        "input_cost_per_token": 7.5e-08,    # $0.075/1M tokens
-        "output_cost_per_token": 3e-07,     # $0.30/1M tokens
+        "input_cost_per_token": 7.5e-08,  # $0.075/1M tokens
+        "output_cost_per_token": 3e-07,  # $0.30/1M tokens
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "GOOGLE_API_KEY",
@@ -577,8 +571,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gemini-2.5-pro": {
-        "input_cost_per_token": 1.25e-06,   # $1.25/1M tokens
-        "output_cost_per_token": 1e-05,     # $10/1M tokens
+        "input_cost_per_token": 1.25e-06,  # $1.25/1M tokens
+        "output_cost_per_token": 1e-05,  # $10/1M tokens
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "GOOGLE_API_KEY",
@@ -586,8 +580,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gemini-2.5-flash": {
-        "input_cost_per_token": 1.5e-07,    # $0.15/1M tokens
-        "output_cost_per_token": 6e-07,     # $0.60/1M tokens
+        "input_cost_per_token": 1.5e-07,  # $0.15/1M tokens
+        "output_cost_per_token": 6e-07,  # $0.60/1M tokens
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "GOOGLE_API_KEY",
@@ -595,21 +589,20 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "gemini-3.0-pro": {
-        "input_cost_per_token": 1.25e-06,   # $1.25/1M tokens (estimated)
-        "output_cost_per_token": 1e-05,     # $10/1M tokens (estimated)
+        "input_cost_per_token": 1.25e-06,  # $1.25/1M tokens (estimated)
+        "output_cost_per_token": 1e-05,  # $10/1M tokens (estimated)
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "GOOGLE_API_KEY",
         "litellm_provider": "google",
         "mode": "chat",
     },
-
     # =========================================================================
     # Qwen Cloud API Models
     # =========================================================================
     "qwen-max": {
-        "input_cost_per_token": 1.6e-06,    # $1.60/1M tokens
-        "output_cost_per_token": 6.4e-06,   # $6.40/1M tokens
+        "input_cost_per_token": 1.6e-06,  # $1.60/1M tokens
+        "output_cost_per_token": 6.4e-06,  # $6.40/1M tokens
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "DASHSCOPE_API_KEY",
@@ -626,7 +619,7 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "qwen-plus": {
-        "input_cost_per_token": 4.2e-07,    # $0.42/1M tokens
+        "input_cost_per_token": 4.2e-07,  # $0.42/1M tokens
         "output_cost_per_token": 1.26e-06,  # $1.26/1M tokens
         "max_tokens": 8192,
         "api_base": None,
@@ -635,8 +628,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "mode": "chat",
     },
     "qwen-turbo": {
-        "input_cost_per_token": 5.25e-08,   # $0.0525/1M tokens
-        "output_cost_per_token": 2.1e-07,   # $0.21/1M tokens
+        "input_cost_per_token": 5.25e-08,  # $0.0525/1M tokens
+        "output_cost_per_token": 2.1e-07,  # $0.21/1M tokens
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "DASHSCOPE_API_KEY",
@@ -645,14 +638,13 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
     "qwen3-235b-a22b": {
         "input_cost_per_token": 2.415e-07,  # $0.2415/1M tokens
-        "output_cost_per_token": 2.415e-06, # $2.415/1M tokens
+        "output_cost_per_token": 2.415e-06,  # $2.415/1M tokens
         "max_tokens": 8192,
         "api_base": None,
         "api_key_var": "DASHSCOPE_API_KEY",
         "litellm_provider": "dashscope",
         "mode": "chat",
     },
-
     # =========================================================================
     # Local/Ollama Models (free)
     # =========================================================================
@@ -690,7 +682,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
 # Helper Functions
 # ============================================================================
 
-def get_model_pricing(model_name: str) -> Optional[Dict[str, Any]]:
+
+def get_model_pricing(model_name: str) -> dict[str, Any] | None:
     """Get full pricing and config for a model.
 
     Args:
@@ -750,7 +743,7 @@ def get_max_tokens(model_name: str, default: int = 4096) -> int:
     return default
 
 
-def get_api_config(model_name: str) -> Dict[str, Any]:
+def get_api_config(model_name: str) -> dict[str, Any]:
     """Get API configuration for a model.
 
     Args:
@@ -775,11 +768,7 @@ def get_api_config(model_name: str) -> Dict[str, Any]:
     }
 
 
-def calculate_cost(
-    model_name: str,
-    prompt_tokens: int,
-    completion_tokens: int
-) -> float:
+def calculate_cost(model_name: str, prompt_tokens: int, completion_tokens: int) -> float:
     """Calculate total cost for a request.
 
     Args:
@@ -795,7 +784,7 @@ def calculate_cost(
     return input_cost + output_cost
 
 
-def get_litellm_pricing_dict() -> Dict[str, Dict[str, Any]]:
+def get_litellm_pricing_dict() -> dict[str, dict[str, Any]]:
     """Get pricing dict in LiteLLM format for registration.
 
     Returns:

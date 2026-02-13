@@ -1,18 +1,18 @@
 """Async wrapper for LiteLLM supporting multiple model providers."""
 
-from typing import List, Dict, Any, Optional
+import logging
 import os
 import time
 import uuid
+from typing import Any
+
 import litellm
 
-import logging
-
 from boxing_gym.agents.litellm_utils import (
-    is_responses_api_model,
-    extract_text,
-    messages_to_input_text,
     MIN_SAFE_MAX_TOKENS,
+    extract_text,
+    is_responses_api_model,
+    messages_to_input_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,13 +20,13 @@ from boxing_gym.agents.call_recorder import CallRecorder
 from boxing_gym.agents.usage_tracker import extract_token_usage
 
 try:
-    from boxing_gym.agents.agent import _model_profile, _extract_usage_dict
+    from boxing_gym.agents.agent import _extract_usage_dict, _model_profile
 except ImportError:
     _model_profile = None  # fallback if circular import
     _extract_usage_dict = None  # fallback if circular import
 
 
-def _default_usage() -> Dict[str, int]:
+def _default_usage() -> dict[str, int]:
     return {
         "prompt_tokens": 0,
         "completion_tokens": 0,
@@ -48,7 +48,7 @@ class AsyncLiteLLM:
         num_retries: int = 3,
         timeout: int = 180,
         is_reasoning: bool | None = None,
-        **litellm_kwargs
+        **litellm_kwargs,
     ):
         self.model_name = model_name
 
@@ -99,7 +99,11 @@ class AsyncLiteLLM:
             # last resort: pattern match on model name
             model_lower = (model_name or "").lower()
             inflated = int(max_tokens)
-            if "speciale" in model_lower or "deepseek-reasoner" in model_lower or "deepseek-r1" in model_lower:
+            if (
+                "speciale" in model_lower
+                or "deepseek-reasoner" in model_lower
+                or "deepseek-r1" in model_lower
+            ):
                 inflated = max(inflated, 65536)
             elif "gpt-5" in model_lower:
                 inflated = max(inflated, 131072)
@@ -126,9 +130,9 @@ class AsyncLiteLLM:
         self._weave = weave
 
         # disk-backed call recorder for crash-resilient logging
-        self._call_recorder: Optional[CallRecorder] = None
+        self._call_recorder: CallRecorder | None = None
         self._agent_name: str = "ppl"  # default for async PPL calls
-        self._step_idx: Optional[int] = None
+        self._step_idx: int | None = None
 
     @staticmethod
     def _estimate_model_cap(model_name: str) -> int:
@@ -191,10 +195,7 @@ class AsyncLiteLLM:
         return wrapped
 
     def set_call_recorder(
-        self,
-        recorder: CallRecorder,
-        agent_name: str = "ppl",
-        step_idx: Optional[int] = None
+        self, recorder: CallRecorder, agent_name: str = "ppl", step_idx: int | None = None
     ) -> None:
         """Attach a disk-backed call recorder for crash-resilient logging."""
         self._call_recorder = recorder
@@ -226,8 +227,9 @@ class AsyncLiteLLM:
         flag = os.getenv("BOXINGGYM_FAKE_LLM", "")
         return bool(flag) and flag.lower() not in ("0", "false", "no")
 
-    def _make_fake_response(self, messages: List[Dict[str, Any]]) -> Any:
+    def _make_fake_response(self, messages: list[dict[str, Any]]) -> Any:
         """Create fake response for smoke tests and record it."""
+
         class _FakeMsg:
             def __init__(self, content: str):
                 self.content = content
@@ -246,29 +248,27 @@ class AsyncLiteLLM:
         fake_content = "mock response"
         if self._call_recorder is not None:
             prompt_text = messages_to_input_text(messages)
-            self._call_recorder.record_dict({
-                "agent": self._agent_name,
-                "model": self.model_name,
-                "prompt": prompt_text[:50000] if prompt_text else "",
-                "response": fake_content,
-                "latency_ms": 0.0,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "reasoning_tokens": 0,
-                "cost_usd": 0.0,
-                "has_reasoning": False,
-                "step_idx": self._step_idx,
-                "call_type": "fake",
-                "call_uuid": uuid.uuid4().hex,
-                "error": None,
-            })
+            self._call_recorder.record_dict(
+                {
+                    "agent": self._agent_name,
+                    "model": self.model_name,
+                    "prompt": prompt_text[:50000] if prompt_text else "",
+                    "response": fake_content,
+                    "latency_ms": 0.0,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "reasoning_tokens": 0,
+                    "cost_usd": 0.0,
+                    "has_reasoning": False,
+                    "step_idx": self._step_idx,
+                    "call_type": "fake",
+                    "call_uuid": uuid.uuid4().hex,
+                    "error": None,
+                }
+            )
         return _FakeResp(self.model_name, fake_content)
 
-    async def _execute_responses_api_call(
-        self,
-        messages: List[Dict[str, Any]],
-        **kwargs
-    ) -> Any:
+    async def _execute_responses_api_call(self, messages: list[dict[str, Any]], **kwargs) -> Any:
         """Execute call via Responses API (GPT-5 series)."""
         # convert chat messages into single text prompt
         prompt_lines = []
@@ -302,11 +302,7 @@ class AsyncLiteLLM:
 
         return await self._maybe_weave_op(_call)()
 
-    async def _execute_completion_call(
-        self,
-        messages: List[Dict[str, Any]],
-        **kwargs
-    ) -> Any:
+    async def _execute_completion_call(self, messages: list[dict[str, Any]], **kwargs) -> Any:
         """Execute call via standard Chat Completions API."""
         call_params = {
             "model": self.model_name,
@@ -315,7 +311,7 @@ class AsyncLiteLLM:
             "num_retries": self.num_retries,
             "timeout": self.timeout,
             **self.litellm_kwargs,
-            **kwargs
+            **kwargs,
         }
 
         async def _call():
@@ -324,11 +320,7 @@ class AsyncLiteLLM:
         return await self._maybe_weave_op(_call)()
 
     def _record_call(
-        self,
-        response: Any,
-        prompt_text: str,
-        call_start: float,
-        error_msg: Optional[str] = None
+        self, response: Any, prompt_text: str, call_start: float, error_msg: str | None = None
     ) -> None:
         """Record API call to disk. Safe even if response is None."""
         if self._call_recorder is None:
@@ -349,29 +341,27 @@ class AsyncLiteLLM:
                 usage = response.get("usage")
             tokens = extract_token_usage(usage)
 
-        self._call_recorder.record_dict({
-            "agent": self._agent_name,
-            "model": self.model_name,
-            "prompt": prompt_text,
-            "response": response_text,
-            "latency_ms": round(latency_ms, 1),
-            "prompt_tokens": tokens["prompt_tokens"],
-            "completion_tokens": tokens["completion_tokens"],
-            "reasoning_tokens": tokens["reasoning_tokens"],
-            "cost_usd": 0.0,
-            "has_reasoning": tokens["reasoning_tokens"] > 0,
-            "step_idx": self._step_idx,
-            "call_type": "ppl",
-            "call_uuid": uuid.uuid4().hex,
-            "timestamp": call_end,
-            "error": error_msg,
-        })
+        self._call_recorder.record_dict(
+            {
+                "agent": self._agent_name,
+                "model": self.model_name,
+                "prompt": prompt_text,
+                "response": response_text,
+                "latency_ms": round(latency_ms, 1),
+                "prompt_tokens": tokens["prompt_tokens"],
+                "completion_tokens": tokens["completion_tokens"],
+                "reasoning_tokens": tokens["reasoning_tokens"],
+                "cost_usd": 0.0,
+                "has_reasoning": tokens["reasoning_tokens"] > 0,
+                "step_idx": self._step_idx,
+                "call_type": "ppl",
+                "call_uuid": uuid.uuid4().hex,
+                "timestamp": call_end,
+                "error": error_msg,
+            }
+        )
 
-    async def __call__(
-        self,
-        messages: List[Dict[str, Any]],
-        **kwargs
-    ) -> Any:
+    async def __call__(self, messages: list[dict[str, Any]], **kwargs) -> Any:
         """Make async completion call via LiteLLM.
 
         Automatically routes to correct endpoint:

@@ -3,7 +3,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 from omegaconf import OmegaConf
@@ -26,9 +26,9 @@ def _wandb_unseeded_random():
 @dataclass
 class WandbContext:
     run: Any = None
-    meta: Dict[str, Any] = field(default_factory=dict)
-    artifacts_logged: List[Dict[str, Any]] = field(default_factory=list)
-    artifacts_failed: List[Dict[str, Any]] = field(default_factory=list)
+    meta: dict[str, Any] = field(default_factory=dict)
+    artifacts_logged: list[dict[str, Any]] = field(default_factory=list)
+    artifacts_failed: list[dict[str, Any]] = field(default_factory=list)
     start_time: float = 0.0
 
 
@@ -184,7 +184,11 @@ def _define_wandb_metrics(wandb_module):
 
 
 def _init_weave(weave_module, wandb_project):
-    if weave_module is None or os.environ.get("WEAVE_DISABLED", "0").lower() in ("1", "true", "yes"):
+    if weave_module is None or os.environ.get("WEAVE_DISABLED", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
         return
     try:
         weave_project = os.environ.get("WEAVE_PROJECT") or wandb_project
@@ -345,10 +349,14 @@ def _log_eval_series(wandb_module, all_data, z_results, num_experiments):
     }
     for i, result_entry in enumerate(all_data[0]):
         try:
-            budget_i = int(num_experiments[i]) if i < len(num_experiments) else int(num_experiments[-1])
+            budget_i = (
+                int(num_experiments[i]) if i < len(num_experiments) else int(num_experiments[-1])
+            )
         except Exception:
             budget_i = i
-        payload = _build_eval_payload(result_entry, budget_i, z_by_budget, raw_by_budget=raw_by_budget)
+        payload = _build_eval_payload(
+            result_entry, budget_i, z_by_budget, raw_by_budget=raw_by_budget
+        )
         if payload is None:
             continue
         wandb_module.log(payload)
@@ -380,7 +388,9 @@ def _build_summary_data(
     start_time,
 ):
     successes = all_data[3] or []
-    success_rate = float(sum(bool(s) for s in successes)) / float(len(successes)) if successes else 0.0
+    success_rate = (
+        float(sum(bool(s) for s in successes)) / float(len(successes)) if successes else 0.0
+    )
     summary_data = {
         "run/success_rate": success_rate,
         "run/num_queries": len(all_data[1] or []),
@@ -393,9 +403,15 @@ def _build_summary_data(
     summary_data.update(naive_stats)
     if naive_stats:
         try:
-            summary_data["llm_total/total_tokens"] = summary_data.get("llm/total_tokens", 0) + summary_data.get("naive_llm/total_tokens", 0)
-            summary_data["llm_total/total_cost_usd"] = summary_data.get("llm/total_cost_usd", 0.0) + summary_data.get("naive_llm/total_cost_usd", 0.0)
-            summary_data["llm_total/call_count"] = summary_data.get("llm/call_count", 0) + summary_data.get("naive_llm/call_count", 0)
+            summary_data["llm_total/total_tokens"] = summary_data.get(
+                "llm/total_tokens", 0
+            ) + summary_data.get("naive_llm/total_tokens", 0)
+            summary_data["llm_total/total_cost_usd"] = summary_data.get(
+                "llm/total_cost_usd", 0.0
+            ) + summary_data.get("naive_llm/total_cost_usd", 0.0)
+            summary_data["llm_total/call_count"] = summary_data.get(
+                "llm/call_count", 0
+            ) + summary_data.get("naive_llm/call_count", 0)
         except Exception:
             pass
 
@@ -412,8 +428,12 @@ def _build_summary_data(
             final_score = final_entry[0]
             final_mean, final_std = None, None
             if isinstance(final_score, dict):
-                final_mean = final_score.get("mse", final_score.get("accuracy", final_score.get("score")))
-                final_std = final_score.get("std_mse", final_score.get("std", final_score.get("std_accuracy")))
+                final_mean = final_score.get(
+                    "mse", final_score.get("accuracy", final_score.get("score"))
+                )
+                final_std = final_score.get(
+                    "std_mse", final_score.get("std", final_score.get("std_accuracy"))
+                )
             else:
                 try:
                     final_mean, final_std = final_score
@@ -541,8 +561,14 @@ def _log_ppl_program_table(wandb_module, wandb_run, all_programs, detailed_entri
 
 
 def _log_ppl_summary(wandb_run, all_programs, programs, ppl_data_len):
-    loo_scores = [p.get("loo") for p in all_programs if isinstance(p, dict) and p.get("loo") not in ("", None)]
-    waic_scores = [p.get("waic") for p in all_programs if isinstance(p, dict) and p.get("waic") not in ("", None)]
+    loo_scores = [
+        p.get("loo") for p in all_programs if isinstance(p, dict) and p.get("loo") not in ("", None)
+    ]
+    waic_scores = [
+        p.get("waic")
+        for p in all_programs
+        if isinstance(p, dict) and p.get("waic") not in ("", None)
+    ]
 
     ppl_summary = {
         "ppl/num_programs": len(all_programs),
@@ -732,7 +758,9 @@ def _select_program_code(prog, detailed_entries):
     return llm_text
 
 
-def _log_ppl_best_program_artifact(ctx, wandb_run, wandb_module, all_programs, detailed_entries, wandb_meta):
+def _log_ppl_best_program_artifact(
+    ctx, wandb_run, wandb_module, all_programs, detailed_entries, wandb_meta
+):
     valid_programs = [
         (p, float(p.get("loo")))
         for p in all_programs
@@ -790,7 +818,9 @@ def _log_ppl_best_program_artifact(ctx, wandb_run, wandb_module, all_programs, d
         logger.warning(f"PPL best program artifact logging failed: {e}")
 
 
-def _log_ppl_llm_responses_artifact(ctx, wandb_run, wandb_module, ppl_artifacts, detailed_entries, wandb_meta):
+def _log_ppl_llm_responses_artifact(
+    ctx, wandb_run, wandb_module, ppl_artifacts, detailed_entries, wandb_meta
+):
     if not hasattr(wandb_module, "Artifact") or not hasattr(wandb_run, "log_artifact"):
         return
     if not detailed_entries and not ppl_artifacts.programs_all_text:
@@ -802,7 +832,9 @@ def _log_ppl_llm_responses_artifact(ctx, wandb_run, wandb_module, ppl_artifacts,
     with open(tmp_path, "w") as tmp:
         if detailed_entries:
             for entry in detailed_entries:
-                tmp.write(f"=== round {entry.get('round')} program {entry.get('program_idx')} ===\n")
+                tmp.write(
+                    f"=== round {entry.get('round')} program {entry.get('program_idx')} ===\n"
+                )
                 tmp.write(f"loo: {entry.get('loo')}\n")
                 tmp.write(f"waic: {entry.get('waic')}\n")
                 tmp.write(f"n_divergences: {entry.get('n_divergences')}\n")
@@ -899,7 +931,9 @@ def _log_ppl_trace_plots(wandb_module, wandb_run, ppl_artifacts, goal):
                 try:
                     df = getattr(goal.env, "df", None)
                     if df is not None and hasattr(df, "columns"):
-                        if hasattr(goal.env, "get_ordered_column_names") and hasattr(goal.env, "get_ordered_features"):
+                        if hasattr(goal.env, "get_ordered_column_names") and hasattr(
+                            goal.env, "get_ordered_features"
+                        ):
                             cols = list(goal.env.get_ordered_column_names())
                             feats = list(goal.env.get_ordered_features())
                             outs = [c for c in cols if c not in feats]
@@ -928,7 +962,13 @@ def _log_ppl_trace_plots(wandb_module, wandb_run, ppl_artifacts, goal):
                     axes[1].hist(residuals, bins=20, edgecolor="black")
                     axes[1].axvline(0, color="r", linestyle="--")
                     axes[1].set_title("Residuals")
-                    wandb_run.log({f"ppl/posterior_predictive_round_{round_idx}_prog_{prog_idx}": wandb_module.Image(fig)})
+                    wandb_run.log(
+                        {
+                            f"ppl/posterior_predictive_round_{round_idx}_prog_{prog_idx}": wandb_module.Image(
+                                fig
+                            )
+                        }
+                    )
                     plt.close(fig)
     except Exception as e:
         logger.warning(f"PPL posterior predictive logging failed: {e}")
@@ -956,7 +996,9 @@ def _log_ppl_round_stats_table(wandb_module, wandb_run, ppl_artifacts):
                 continue
             if isinstance(val, np.generic):
                 val = val.item()
-            if isinstance(val, (int, float)) and not (isinstance(val, float) and not np.isfinite(val)):
+            if isinstance(val, (int, float)) and not (
+                isinstance(val, float) and not np.isfinite(val)
+            ):
                 has_num = True
             else:
                 has_str = True
@@ -983,10 +1025,13 @@ def _log_ppl_round_stats_table(wandb_module, wandb_run, ppl_artifacts):
             wandb_run.log({"ppl/round_stats": round_table})
 
 
-def _log_ppl_results(ctx, wandb_run, wandb_module, programs, use_ppl, ppl_artifacts, goal, wandb_meta):
+def _log_ppl_results(
+    ctx, wandb_run, wandb_module, programs, use_ppl, ppl_artifacts, goal, wandb_meta
+):
     if not programs or not use_ppl:
         return
     if ppl_artifacts is None:
+
         class _PPLStub:
             program_entries = []
             programs_all_text = []
@@ -997,7 +1042,9 @@ def _log_ppl_results(ctx, wandb_run, wandb_module, programs, use_ppl, ppl_artifa
     all_programs = _flatten_programs(programs)
     detailed_entries = ppl_artifacts.program_entries if ppl_artifacts else []
     try:
-        ppl_data_len = _log_ppl_program_table(wandb_module, wandb_run, all_programs, detailed_entries)
+        ppl_data_len = _log_ppl_program_table(
+            wandb_module, wandb_run, all_programs, detailed_entries
+        )
     except Exception as e:
         logger.warning(f"PPL program table logging failed: {e}")
         ppl_data_len = 0
@@ -1018,12 +1065,16 @@ def _log_ppl_results(ctx, wandb_run, wandb_module, programs, use_ppl, ppl_artifa
         logger.warning(f"PPL LOO progression plot failed: {e}")
 
     try:
-        _log_ppl_best_program_artifact(ctx, wandb_run, wandb_module, all_programs, detailed_entries, wandb_meta)
+        _log_ppl_best_program_artifact(
+            ctx, wandb_run, wandb_module, all_programs, detailed_entries, wandb_meta
+        )
     except (ValueError, TypeError) as e:
         logger.warning(f"PPL best program selection failed: {e}")
 
     try:
-        _log_ppl_llm_responses_artifact(ctx, wandb_run, wandb_module, ppl_artifacts, detailed_entries, wandb_meta)
+        _log_ppl_llm_responses_artifact(
+            ctx, wandb_run, wandb_module, ppl_artifacts, detailed_entries, wandb_meta
+        )
     except Exception as e:
         ctx.artifacts_failed.append(
             {
@@ -1072,31 +1123,37 @@ def _log_llm_calls_table(wandb_module, wandb_run, scientist_agent, naive_agent):
             continue
         call_history = agent.get_call_history()
         for call in call_history:
-            rows.append([
-                agent_name,
-                _safe_number(call.get("call_idx")),
-                call.get("model", ""),
-                _preview_text(call.get("prompt"), 2000),
-                _preview_text(call.get("response"), 2000),
-                _safe_number(call.get("latency_ms")),
-                _safe_number(call.get("prompt_tokens")),
-                _safe_number(call.get("completion_tokens")),
-                _safe_number(call.get("reasoning_tokens")),
-                _safe_number(call.get("cost_usd")),
-                1 if call.get("has_reasoning") else 0,
-            ])
+            rows.append(
+                [
+                    agent_name,
+                    _safe_number(call.get("call_idx")),
+                    call.get("model", ""),
+                    _preview_text(call.get("prompt"), 2000),
+                    _preview_text(call.get("response"), 2000),
+                    _safe_number(call.get("latency_ms")),
+                    _safe_number(call.get("prompt_tokens")),
+                    _safe_number(call.get("completion_tokens")),
+                    _safe_number(call.get("reasoning_tokens")),
+                    _safe_number(call.get("cost_usd")),
+                    1 if call.get("has_reasoning") else 0,
+                ]
+            )
 
     if rows:
         with _wandb_unseeded_random():
             llm_calls_table = wandb_module.Table(columns=columns, data=rows)
             wandb_run.log({"llm/calls": llm_calls_table})
-        wandb_run.summary.update({
-            "llm/total_calls_logged": len(rows),
-        })
+        wandb_run.summary.update(
+            {
+                "llm/total_calls_logged": len(rows),
+            }
+        )
     return len(rows)
 
 
-def _log_conversation_history_artifact(ctx, wandb_run, wandb_module, scientist_agent, naive_agent, wandb_meta):
+def _log_conversation_history_artifact(
+    ctx, wandb_run, wandb_module, scientist_agent, naive_agent, wandb_meta
+):
     """Log full conversation history as a WandB artifact (independent of Weave)."""
     if not hasattr(wandb_module, "Artifact") or not hasattr(wandb_run, "log_artifact"):
         return
@@ -1112,7 +1169,11 @@ def _log_conversation_history_artifact(ctx, wandb_run, wandb_module, scientist_a
         if not messages:
             continue
 
-        filename = f"conversation_{agent_name}_{run_id}.txt" if run_id else f"conversation_{agent_name}.txt"
+        filename = (
+            f"conversation_{agent_name}_{run_id}.txt"
+            if run_id
+            else f"conversation_{agent_name}.txt"
+        )
         tmp_path = os.path.join(base_dir, filename)
 
         try:
@@ -1122,7 +1183,9 @@ def _log_conversation_history_artifact(ctx, wandb_run, wandb_module, scientist_a
                     f.write(str(msg))
                     f.write("\n\n")
 
-            artifact_name = f"conversation_{agent_name}_{run_id}" if run_id else f"conversation_{agent_name}"
+            artifact_name = (
+                f"conversation_{agent_name}_{run_id}" if run_id else f"conversation_{agent_name}"
+            )
             with _wandb_unseeded_random():
                 artifact = wandb_module.Artifact(artifact_name, type="conversation")
                 artifact.add_file(tmp_path, name=f"conversation_{agent_name}.txt")
@@ -1131,16 +1194,20 @@ def _log_conversation_history_artifact(ctx, wandb_run, wandb_module, scientist_a
                     artifact_result.wait()
                 except Exception:
                     pass
-            ctx.artifacts_logged.append({
-                "name": artifact.name,
-                "type": artifact.type,
-            })
+            ctx.artifacts_logged.append(
+                {
+                    "name": artifact.name,
+                    "type": artifact.type,
+                }
+            )
         except Exception as e:
-            ctx.artifacts_failed.append({
-                "name": f"conversation_{agent_name}",
-                "type": "conversation",
-                "error": str(e),
-            })
+            ctx.artifacts_failed.append(
+                {
+                    "name": f"conversation_{agent_name}",
+                    "type": "conversation",
+                    "error": str(e),
+                }
+            )
             logger.warning(f"Conversation artifact logging failed for {agent_name}: {e}")
 
 
@@ -1162,20 +1229,24 @@ def _log_observations_table(wandb_module, wandb_run, all_data):
         obs = observations[i] if observations and i < len(observations) else None
         success = successes[i] if successes and i < len(successes) else None
 
-        rows.append([
-            i,
-            _preview_text(query, 5000),
-            _preview_text(obs, 5000),
-            1 if success else 0,
-        ])
+        rows.append(
+            [
+                i,
+                _preview_text(query, 5000),
+                _preview_text(obs, 5000),
+                1 if success else 0,
+            ]
+        )
 
     if rows:
         with _wandb_unseeded_random():
             obs_table = wandb_module.Table(columns=columns, data=rows)
             wandb_run.log({"experiment/observations": obs_table})
-        wandb_run.summary.update({
-            "experiment/total_observations_logged": len(rows),
-        })
+        wandb_run.summary.update(
+            {
+                "experiment/total_observations_logged": len(rows),
+            }
+        )
     return len(rows)
 
 
@@ -1198,16 +1269,20 @@ def _log_results_artifact(ctx, wandb_run, wandb_module, output_filename, wandb_m
                 artifact_result.wait()
             except Exception:
                 pass
-        ctx.artifacts_logged.append({
-            "name": artifact.name,
-            "type": artifact.type,
-        })
+        ctx.artifacts_logged.append(
+            {
+                "name": artifact.name,
+                "type": artifact.type,
+            }
+        )
     except Exception as e:
-        ctx.artifacts_failed.append({
-            "name": "results",
-            "type": "results",
-            "error": str(e),
-        })
+        ctx.artifacts_failed.append(
+            {
+                "name": "results",
+                "type": "results",
+                "error": str(e),
+            }
+        )
         logger.warning(f"Results artifact logging failed: {e}")
 
 
@@ -1234,19 +1309,23 @@ def _log_call_recorder_artifact(ctx, wandb_run, wandb_module, call_recorder_path
                 artifact_result.wait()
             except Exception:
                 pass
-        ctx.artifacts_logged.append({
-            "name": artifact.name,
-            "type": artifact.type,
-            "format": "jsonl",
-            "source": "call_recorder",
-        })
+        ctx.artifacts_logged.append(
+            {
+                "name": artifact.name,
+                "type": artifact.type,
+                "format": "jsonl",
+                "source": "call_recorder",
+            }
+        )
         logger.info(f"Uploaded call recorder JSONL: {call_recorder_path}")
     except Exception as e:
-        ctx.artifacts_failed.append({
-            "name": "llm_calls_jsonl",
-            "type": "llm_calls",
-            "error": str(e),
-        })
+        ctx.artifacts_failed.append(
+            {
+                "name": "llm_calls_jsonl",
+                "type": "llm_calls",
+                "error": str(e),
+            }
+        )
         logger.warning(f"Call recorder artifact logging failed: {e}")
 
 
@@ -1288,16 +1367,20 @@ def _log_llm_calls_artifact(ctx, wandb_run, wandb_module, scientist_agent, naive
                 artifact_result.wait()
             except Exception:
                 pass
-        ctx.artifacts_logged.append({
-            "name": artifact.name,
-            "type": artifact.type,
-        })
+        ctx.artifacts_logged.append(
+            {
+                "name": artifact.name,
+                "type": artifact.type,
+            }
+        )
     except Exception as e:
-        ctx.artifacts_failed.append({
-            "name": "llm_calls",
-            "type": "llm-calls",
-            "error": str(e),
-        })
+        ctx.artifacts_failed.append(
+            {
+                "name": "llm_calls",
+                "type": "llm-calls",
+                "error": str(e),
+            }
+        )
         logger.warning(f"LLM calls artifact logging failed: {e}")
 
 
@@ -1306,7 +1389,7 @@ def log_wandb_results(
     wandb_module,
     output_filename: str,
     all_data,
-    z_results: List[Dict[str, Any]],
+    z_results: list[dict[str, Any]],
     num_experiments,
     env_name: str,
     goal_name: str,
@@ -1319,7 +1402,7 @@ def log_wandb_results(
     naive_agent,
     ppl_artifacts,
     goal,
-    call_recorder_path: Optional[str] = None,
+    call_recorder_path: str | None = None,
 ):
     if ctx.run is None or wandb_module is None:
         return
@@ -1394,19 +1477,25 @@ def log_wandb_results(
         logger.warning(f"Observations table logging failed: {e}")
 
     try:
-        _log_conversation_history_artifact(ctx, wandb_run, wandb_module, scientist_agent, naive_agent, wandb_meta)
+        _log_conversation_history_artifact(
+            ctx, wandb_run, wandb_module, scientist_agent, naive_agent, wandb_meta
+        )
     except Exception as e:
         logger.warning(f"Conversation history artifact logging failed: {e}")
 
     try:
-        _log_llm_calls_artifact(ctx, wandb_run, wandb_module, scientist_agent, naive_agent, wandb_meta)
+        _log_llm_calls_artifact(
+            ctx, wandb_run, wandb_module, scientist_agent, naive_agent, wandb_meta
+        )
     except Exception as e:
         logger.warning(f"LLM calls artifact logging failed: {e}")
 
     # upload crash-resilient JSONL call log (primary source of truth)
     if call_recorder_path:
         try:
-            _log_call_recorder_artifact(ctx, wandb_run, wandb_module, call_recorder_path, wandb_meta)
+            _log_call_recorder_artifact(
+                ctx, wandb_run, wandb_module, call_recorder_path, wandb_meta
+            )
         except Exception as e:
             logger.warning(f"Call recorder JSONL artifact logging failed: {e}")
 

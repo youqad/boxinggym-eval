@@ -15,13 +15,13 @@ Usage:
 """
 
 import os
-from typing import Dict, Any
+from typing import Any
 
 # import from single source of truth
-from boxing_gym.agents.pricing import MODEL_REGISTRY, get_api_config
+from boxing_gym.agents.pricing import MODEL_REGISTRY
 
 
-def get_model_config(model_name: str) -> Dict[str, Any]:
+def get_model_config(model_name: str) -> dict[str, Any]:
     """Get API configuration for a model.
 
     First checks MODEL_REGISTRY for exact match, then falls back to
@@ -143,5 +143,5 @@ def create_experimenter(model_name: str, temperature: float = 0.0, **kwargs):
         temperature=temperature,
         api_base=config["api_base"],
         api_key=config["api_key"],
-        **kwargs
+        **kwargs,
     )

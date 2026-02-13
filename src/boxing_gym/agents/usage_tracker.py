@@ -4,10 +4,10 @@ Tracks token usage, costs, latencies, and error counts for W&B logging.
 Extracted from LMExperimenter to reduce class complexity.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 
-def extract_token_usage(usage: Any) -> Dict[str, int]:
+def extract_token_usage(usage: Any) -> dict[str, int]:
     """Extract token counts from various API response formats.
 
     Handles both OpenAI-style (prompt_tokens/completion_tokens) and
@@ -67,7 +67,7 @@ class UsageTrackerMixin:
 
     def _init_usage_tracking(self) -> None:
         """Initialize usage tracking state. Call in subclass __init__."""
-        self._usage_stats: Dict = {
+        self._usage_stats: dict = {
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "reasoning_tokens": 0,
@@ -116,7 +116,7 @@ class UsageTrackerMixin:
         """Record an error (after max retries exhausted)."""
         self._usage_stats["error_count"] += 1
 
-    def get_usage_stats(self) -> Dict:
+    def get_usage_stats(self) -> dict:
         """Return accumulated usage stats for W&B logging.
 
         Returns dict with:
@@ -134,7 +134,9 @@ class UsageTrackerMixin:
             n = len(latencies_sorted)
             stats["latency_mean_ms"] = sum(latencies) / n
             stats["latency_p50_ms"] = latencies_sorted[n // 2]
-            stats["latency_p95_ms"] = latencies_sorted[int(n * 0.95)] if n >= 20 else latencies_sorted[-1]
+            stats["latency_p95_ms"] = (
+                latencies_sorted[int(n * 0.95)] if n >= 20 else latencies_sorted[-1]
+            )
             stats["latency_min_ms"] = latencies_sorted[0]
             stats["latency_max_ms"] = latencies_sorted[-1]
         else:
@@ -146,7 +148,7 @@ class UsageTrackerMixin:
 
         return stats
 
-    def get_latencies_ms(self) -> List[float]:
+    def get_latencies_ms(self) -> list[float]:
         """Return list of per-call latencies in milliseconds.
 
         Used by loop.py to calculate per-step latency.

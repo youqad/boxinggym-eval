@@ -18,14 +18,16 @@ WARNING - ARCHITECTURAL NOTE (2026-01):
     Future work (deferred Phase 3.2): Unify model definitions into a single
     source of truth, likely by moving prediction logic into goal classes.
 """
-import os
-import tempfile
-import uuid
+
 import importlib
 import importlib.util
-import re
 import logging
+import os
+import re
+import tempfile
+import uuid
 import warnings
+
 import numpy as np
 import pymc as pm
 
@@ -33,18 +35,29 @@ from boxing_gym.agents.box_loop_helper import construct_features
 from boxing_gym.experiment.utils import (
     _baseline_prediction_for_goal,
     _format_emotion_prediction,
-    _make_dummy_eval_input_for_env
+    _make_dummy_eval_input_for_env,
 )
 
 logger = logging.getLogger(__name__)
 
+
 def _suppress_ppl_warnings() -> None:
     warnings.filterwarnings("ignore", category=FutureWarning, module=r"pymc(\..*)?$")
-    warnings.filterwarnings("ignore", message=r".*MutableData is deprecated.*", category=FutureWarning)
-    warnings.filterwarnings("ignore", message=r".*Estimated shape parameter of Pareto distribution.*", category=UserWarning)
+    warnings.filterwarnings(
+        "ignore", message=r".*MutableData is deprecated.*", category=FutureWarning
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*Estimated shape parameter of Pareto distribution.*",
+        category=UserWarning,
+    )
     warnings.filterwarnings("ignore", message=r".*point-wise LOO.*", category=UserWarning)
     warnings.filterwarnings("ignore", message=r".*point-wise WAIC.*", category=UserWarning)
-    warnings.filterwarnings("ignore", message=r".*posterior variance of the log predictive densities exceeds.*", category=UserWarning)
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*posterior variance of the log predictive densities exceeds.*",
+        category=UserWarning,
+    )
 
 
 def _quiet_ppl_loggers() -> None:
@@ -142,6 +155,7 @@ def _preflight_check_observed_data_columns(gen_code: str, available_columns) -> 
             f"Available columns: {sorted(cols)}"
         )
 
+
 def _trace_posterior_var_names(trace):
     if trace is None:
         return []
@@ -156,7 +170,6 @@ def _trace_posterior_var_names(trace):
         except Exception:
             return []
     return []
-
 
 
 def _goal_full_name(goal) -> str:
@@ -185,7 +198,9 @@ def _alias_map_for_goal(goal_full: str) -> dict:
             "Delayed_Reward": ["dr", "dR", "delayed_reward"],
             "Delay_Days": ["days", "D", "delay_days"],
         }
-    if goal_full.endswith("emotion.DirectEmotionPrediction") or goal_full.endswith("emotion.DirectEmotionNaive"):
+    if goal_full.endswith("emotion.DirectEmotionPrediction") or goal_full.endswith(
+        "emotion.DirectEmotionNaive"
+    ):
         return {
             "Prize_1": ["prize_1", "prize1"],
             "Prize_2": ["prize_2", "prize2"],
@@ -483,14 +498,20 @@ def _predict_param_goal_prior(goal_full, env, prior_predictive, goal):
                 return str(mean_v.tolist())
         return _baseline_prediction_for_goal(goal)
 
-    if goal_full.endswith("irt.BestStudent") or goal_full.endswith("irt.DifficultQuestion") or goal_full.endswith("irt.DiscriminatingQuestion"):
+    if (
+        goal_full.endswith("irt.BestStudent")
+        or goal_full.endswith("irt.DifficultQuestion")
+        or goal_full.endswith("irt.DiscriminatingQuestion")
+    ):
         return _baseline_prediction_for_goal(goal)
 
     return None
 
 
 def _predict_direct_prior(goal_full, prior_predictive, goal):
-    if goal_full.endswith("moral_machines.DirectPrediction") or goal_full.endswith("moral_machines.DirectPredictionNaive"):
+    if goal_full.endswith("moral_machines.DirectPrediction") or goal_full.endswith(
+        "moral_machines.DirectPredictionNaive"
+    ):
         if "y_obs" in prior_predictive:
             pp = prior_predictive["y_obs"]
         elif "choice" in prior_predictive:
@@ -514,7 +535,9 @@ def _predict_direct_prior(goal_full, prior_predictive, goal):
         if not np.isfinite(p1):
             return _baseline_prediction_for_goal(goal)
         return str(1 if p1 >= 0.5 else 0)
-    if goal_full.endswith("survival_analysis.DirectGoal") or goal_full.endswith("survival_analysis.DirectGoalNaive"):
+    if goal_full.endswith("survival_analysis.DirectGoal") or goal_full.endswith(
+        "survival_analysis.DirectGoalNaive"
+    ):
         if "y_obs" not in prior_predictive:
             return _baseline_prediction_for_goal(goal)
         arr = np.asarray(prior_predictive["y_obs"])
@@ -522,7 +545,9 @@ def _predict_direct_prior(goal_full, prior_predictive, goal):
         if not np.isfinite(p1):
             return _baseline_prediction_for_goal(goal)
         return str(1 if p1 >= 0.5 else 0)
-    if goal_full.endswith("irt.DirectCorrectness") or goal_full.endswith("irt.DirectCorrectnessNaive"):
+    if goal_full.endswith("irt.DirectCorrectness") or goal_full.endswith(
+        "irt.DirectCorrectnessNaive"
+    ):
         if "y_obs" not in prior_predictive:
             return _baseline_prediction_for_goal(goal)
         arr = np.asarray(prior_predictive["y_obs"])
@@ -530,7 +555,9 @@ def _predict_direct_prior(goal_full, prior_predictive, goal):
         if not np.isfinite(p1):
             return _baseline_prediction_for_goal(goal)
         return str(1 if p1 >= 0.5 else 0)
-    if goal_full.endswith("lotka_volterra.DirectGoal") or goal_full.endswith("lotka_volterra.DirectGoalNaive"):
+    if goal_full.endswith("lotka_volterra.DirectGoal") or goal_full.endswith(
+        "lotka_volterra.DirectGoalNaive"
+    ):
         if "prey" in prior_predictive and "predator" in prior_predictive:
             prey_mu = float(np.asarray(prior_predictive["prey"]).mean())
             pred_mu = float(np.asarray(prior_predictive["predator"]).mean())
@@ -539,16 +566,31 @@ def _predict_direct_prior(goal_full, prior_predictive, goal):
             return str([prey_mu, pred_mu])
         if "y_obs" in prior_predictive:
             arr = np.asarray(prior_predictive["y_obs"])
-            mean = arr.mean(axis=tuple(range(arr.ndim - 1))).squeeze() if arr.ndim >= 2 else float(arr.mean())
+            mean = (
+                arr.mean(axis=tuple(range(arr.ndim - 1))).squeeze()
+                if arr.ndim >= 2
+                else float(arr.mean())
+            )
             vec = np.asarray(mean).reshape(-1)
             if vec.size >= 2:
                 a, b = float(vec[0]), float(vec[1])
                 if np.isfinite(a) and np.isfinite(b):
                     return str([a, b])
         return _baseline_prediction_for_goal(goal)
-    if goal_full.endswith("emotion.DirectEmotionPrediction") or goal_full.endswith("emotion.DirectEmotionNaive"):
+    if goal_full.endswith("emotion.DirectEmotionPrediction") or goal_full.endswith(
+        "emotion.DirectEmotionNaive"
+    ):
         vals = []
-        for k in ["happiness", "sadness", "anger", "surprise", "fear", "disgust", "contentment", "disappointment"]:
+        for k in [
+            "happiness",
+            "sadness",
+            "anger",
+            "surprise",
+            "fear",
+            "disgust",
+            "contentment",
+            "disappointment",
+        ]:
             kk = k if k in prior_predictive else f"{k}i" if f"{k}i" in prior_predictive else None
             if kk is None:
                 vals.append(5.0)
@@ -558,7 +600,11 @@ def _predict_direct_prior(goal_full, prior_predictive, goal):
             return _format_emotion_prediction(vals)
         if "y_obs" in prior_predictive:
             arr = np.asarray(prior_predictive["y_obs"])
-            mean = arr.mean(axis=tuple(range(arr.ndim - 1))).squeeze() if arr.ndim >= 2 else float(arr.mean())
+            mean = (
+                arr.mean(axis=tuple(range(arr.ndim - 1))).squeeze()
+                if arr.ndim >= 2
+                else float(arr.mean())
+            )
             vec = np.asarray(mean).reshape(-1)
             if vec.size >= 8:
                 return _format_emotion_prediction(vec[:8])
@@ -566,7 +612,11 @@ def _predict_direct_prior(goal_full, prior_predictive, goal):
 
     if "y_obs" in prior_predictive:
         arr = np.asarray(prior_predictive["y_obs"])
-        mu = arr.mean(axis=tuple(range(arr.ndim - 1))).squeeze() if arr.ndim >= 2 else float(arr.mean())
+        mu = (
+            arr.mean(axis=tuple(range(arr.ndim - 1))).squeeze()
+            if arr.ndim >= 2
+            else float(arr.mean())
+        )
         val = float(np.asarray(mu).squeeze())
         if np.isfinite(val):
             return str(val)
@@ -588,14 +638,18 @@ def _run_posterior_predictive(goal_full, model, trace, eval_input, env):
         with model:
             pm.set_data(mapped)
             obs_vars = _infer_observed_var_names(trace, model=model)
-            return pm.sample_posterior_predictive(trace, var_names=obs_vars, return_inferencedata=False)
+            return pm.sample_posterior_predictive(
+                trace, var_names=obs_vars, return_inferencedata=False
+            )
 
 
 def _predict_direct_posterior(goal_full, post_pred, goal):
     if post_pred is None or not isinstance(post_pred, dict):
         return None
 
-    if goal_full.endswith("moral_machines.DirectPrediction") or goal_full.endswith("moral_machines.DirectPredictionNaive"):
+    if goal_full.endswith("moral_machines.DirectPrediction") or goal_full.endswith(
+        "moral_machines.DirectPredictionNaive"
+    ):
         key = "y_obs" if "y_obs" in post_pred else list(post_pred.keys())[0]
         p1 = float(np.asarray(_pp_mean(post_pred[key])).squeeze())
         if not np.isfinite(p1):
@@ -613,21 +667,27 @@ def _predict_direct_posterior(goal_full, post_pred, goal):
             return _baseline_prediction_for_goal(goal)
         return str(1 if p1 >= 0.5 else 0)
 
-    if goal_full.endswith("survival_analysis.DirectGoal") or goal_full.endswith("survival_analysis.DirectGoalNaive"):
+    if goal_full.endswith("survival_analysis.DirectGoal") or goal_full.endswith(
+        "survival_analysis.DirectGoalNaive"
+    ):
         key = "y_obs" if "y_obs" in post_pred else list(post_pred.keys())[0]
         p1 = float(np.asarray(_pp_mean(post_pred[key])).squeeze())
         if not np.isfinite(p1):
             return _baseline_prediction_for_goal(goal)
         return str(1 if p1 >= 0.5 else 0)
 
-    if goal_full.endswith("irt.DirectCorrectness") or goal_full.endswith("irt.DirectCorrectnessNaive"):
+    if goal_full.endswith("irt.DirectCorrectness") or goal_full.endswith(
+        "irt.DirectCorrectnessNaive"
+    ):
         key = "y_obs" if "y_obs" in post_pred else list(post_pred.keys())[0]
         p1 = float(np.asarray(_pp_mean(post_pred[key])).squeeze())
         if not np.isfinite(p1):
             return _baseline_prediction_for_goal(goal)
         return str(1 if p1 >= 0.5 else 0)
 
-    if goal_full.endswith("lotka_volterra.DirectGoal") or goal_full.endswith("lotka_volterra.DirectGoalNaive"):
+    if goal_full.endswith("lotka_volterra.DirectGoal") or goal_full.endswith(
+        "lotka_volterra.DirectGoalNaive"
+    ):
         if "y_obs" in post_pred:
             vec = np.asarray(_pp_mean(post_pred["y_obs"])).reshape(-1)
             if vec.size >= 2:
@@ -649,13 +709,24 @@ def _predict_direct_posterior(goal_full, post_pred, goal):
                 return str([a, b])
         return _baseline_prediction_for_goal(goal)
 
-    if goal_full.endswith("emotion.DirectEmotionPrediction") or goal_full.endswith("emotion.DirectEmotionNaive"):
+    if goal_full.endswith("emotion.DirectEmotionPrediction") or goal_full.endswith(
+        "emotion.DirectEmotionNaive"
+    ):
         if "y_obs" in post_pred:
             vec = np.asarray(_pp_mean(post_pred["y_obs"])).reshape(-1)
             if vec.size >= 8:
                 return _format_emotion_prediction(vec[:8])
         vals = []
-        for k in ["happiness", "sadness", "anger", "surprise", "fear", "disgust", "contentment", "disappointment"]:
+        for k in [
+            "happiness",
+            "sadness",
+            "anger",
+            "surprise",
+            "fear",
+            "disgust",
+            "contentment",
+            "disappointment",
+        ]:
             kk = k if k in post_pred else f"{k}i" if f"{k}i" in post_pred else None
             if kk is None:
                 vals.append(5.0)
@@ -663,7 +734,9 @@ def _predict_direct_posterior(goal_full, post_pred, goal):
                 vals.append(float(np.asarray(_pp_mean(post_pred[kk])).squeeze()))
         return _format_emotion_prediction(vals)
 
-    if goal_full.endswith("death_process.DirectDeath") or goal_full.endswith("death_process.DirectDeathNaive"):
+    if goal_full.endswith("death_process.DirectDeath") or goal_full.endswith(
+        "death_process.DirectDeathNaive"
+    ):
         key = "y_obs" if "y_obs" in post_pred else list(post_pred.keys())[0]
         mu = float(np.asarray(_pp_mean(post_pred[key])).squeeze())
         if not np.isfinite(mu):
@@ -698,7 +771,11 @@ def _trace_get_samples(trace, var_name):
         arr = np.asarray(trace.posterior[var_name].values)
         # expected shape: (chain, draw, *event_shape) OR (draw, *event_shape)
         if arr.ndim >= 2:
-            flat = arr.reshape(-1, *arr.shape[2:]) if arr.ndim >= 3 else arr.reshape(-1, *arr.shape[1:])
+            flat = (
+                arr.reshape(-1, *arr.shape[2:])
+                if arr.ndim >= 3
+                else arr.reshape(-1, *arr.shape[1:])
+            )
             return flat
         return arr
 
@@ -795,13 +872,14 @@ def get_ppl_prediction(goal, program_dict, eval_input, prior_mode):
         return pred
     return _baseline_prediction_for_goal(goal)
 
-def augment_scientist_with_ppl(scientist,
-                               proposed_programs_all,
-                               critic_info_all, critic_mode=False):
+
+def augment_scientist_with_ppl(
+    scientist, proposed_programs_all, critic_info_all, critic_mode=False
+):
     assert len(proposed_programs_all[-1]) > 0
 
     program_dict = proposed_programs_all[-1][0]
-    str_prob_prog = program_dict['str_prob_prog']
+    str_prob_prog = program_dict["str_prob_prog"]
 
     prompt_msg = f"""
 To help guide your experimentation, your brilliant colleague has proposed the following program for the data.
@@ -811,8 +889,8 @@ Program: {str_prob_prog} \n
 """
     if critic_mode:
         assert len(critic_info_all[-1]) > 0
-        str_hypotheses = critic_info_all[-1][0]['str_hypotheses']
-        synthesis = critic_info_all[-1][0]['synthesis']
+        str_hypotheses = critic_info_all[-1][0]["str_hypotheses"]
+        synthesis = critic_info_all[-1][0]["synthesis"]
         prompt_msg += f"""
 Here is criticism of the previous model:
 {str_hypotheses} \n
@@ -822,4 +900,4 @@ Here is criticism of the previous model:
     system_message = scientist.system
     system_message += f"\n {prompt_msg}"
     print(f"system_message: {system_message}")
-    scientist.messages[0]['content'] = [{"type": "text", "text": system_message}]
+    scientist.messages[0]["content"] = [{"type": "text", "text": system_message}]

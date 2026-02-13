@@ -1,8 +1,9 @@
 import re
 
-import pandas as pd
 import arviz as az
 import numpy as np
+import pandas as pd
+
 
 def construct_dataframe(env):
     # Get the data from the environment
@@ -44,9 +45,7 @@ def construct_features(env, data):
             win_val = win
             try:
                 # If win looks like an index, convert to the realized prize value.
-                if isinstance(win, (int, np.integer)) and 0 <= int(win) < len(
-                    prizes_list
-                ):
+                if isinstance(win, (int, np.integer)) and 0 <= int(win) < len(prizes_list):
                     win_val = prizes_list[int(win)]
             except Exception:
                 pass
@@ -108,9 +107,7 @@ def pymc_evaluate(trace):
     # Handles mismatched observation dimension names (y_obs_dim_0 vs obs_id).
     try:
         ll_vars = (
-            list(trace.log_likelihood.data_vars.keys())
-            if hasattr(trace, "log_likelihood")
-            else []
+            list(trace.log_likelihood.data_vars.keys()) if hasattr(trace, "log_likelihood") else []
         )
     except Exception:
         ll_vars = []
@@ -133,9 +130,7 @@ def pymc_evaluate(trace):
             else:
                 # Prefer the conventional observation dimension name if present.
                 # This guards against cases where event dims appear before obs dims.
-                obs_dim = (
-                    "obs_id" if "obs_id" in non_sample_dims else non_sample_dims[0]
-                )
+                obs_dim = "obs_id" if "obs_id" in non_sample_dims else non_sample_dims[0]
                 event_dims = [d for d in non_sample_dims if d != obs_dim]
                 if event_dims:
                     da = da.sum(dim=event_dims)
@@ -192,9 +187,7 @@ def extract_python_code(code_string):
         if matches:
             return matches[-1].strip()
 
-    any_blocks = re.findall(
-        r"```(?:[a-zA-Z0-9_\-]+)?\s*\n(.*?)```", code_string, re.DOTALL
-    )
+    any_blocks = re.findall(r"```(?:[a-zA-Z0-9_\-]+)?\s*\n(.*?)```", code_string, re.DOTALL)
     candidates = []
     for block in any_blocks:
         b = block or ""

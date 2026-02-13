@@ -1,24 +1,23 @@
 def get_stan_system_prompt(
-  mode,
-  dataset_description,
-  df_str,
-  column_description,
-  expert_context,
-  vision_only=True,
-  prev_str_hypotheses=None,
-  prev_synthesis=None,
-  critic_strategy="",
+    mode,
+    dataset_description,
+    df_str,
+    column_description,
+    expert_context,
+    vision_only=True,
+    prev_str_hypotheses=None,
+    prev_synthesis=None,
+    critic_strategy="",
 ):
-
-  if vision_only:
-    dataset_text_representation= "" 
-  else:
-    dataset_text_representation = f"""
+    if vision_only:
+        dataset_text_representation = ""
+    else:
+        dataset_text_representation = f"""
 Here are some rows from the actual dataset \n 
 {df_str}
 """
-  if mode == "proposal":
-    system_str = f"""
+    if mode == "proposal":
+        system_str = f"""
 You are a brilliant statistician modeling a dataset.
 Your job is to come up with a generative model that explains the true data by writing a pymc probabilistic program.  \n
 Here is a description of the dataset
@@ -99,14 +98,18 @@ Here are previous hypotheses and syntheses. Revise accordingly
 Hypotheses: {prev_str_hypotheses} \n
 Synthesis: {prev_synthesis} \n
 """
-    print(system_str)
-    return system_str
+        print(system_str)
+        return system_str
 
-          # trace = pm.sample(1000, tune=500, target_accept=0.90, chains=3, cores=1, random_seed=rng1, idata_kwargs={{"log_likelihood": True}})
+        # trace = pm.sample(1000, tune=500, target_accept=0.90, chains=3, cores=1, random_seed=rng1, idata_kwargs={{"log_likelihood": True}})
 
-  if mode == "critic":
-    if prev_str_hypotheses is not None and prev_synthesis is not None and critic_strategy == "state_space":
-      hidden_state_str = f"""
+    if mode == "critic":
+        if (
+            prev_str_hypotheses is not None
+            and prev_synthesis is not None
+            and critic_strategy == "state_space"
+        ):
+            hidden_state_str = f"""
   Here are the hypotheses from the previous rounds:
   {prev_str_hypotheses}
   Here are the synthesis from the previous rounds:
@@ -115,11 +118,11 @@ Synthesis: {prev_synthesis} \n
   At each round, you may remove some if they remain relevant, delete some if they are irrelevant (based on the most programs you see), or add new ones. 
   Please briefly explain why you are removing or adding hypotheses and syntheses.
   """
-    else:
-      hidden_state_str = ""
+        else:
+            hidden_state_str = ""
 
-    if vision_only:
-      system_str = f"""
+        if vision_only:
+            system_str = f"""
 You are a brilliant statistician specializing in critiquing and proposing revisions of models!
 Your equally brilliant colleague has come up with a list of probabilistic programs in pymc that hypothesize generative models for the data.
 I have fit these models, plot their posterior predictive mean and variance, and LOO scores (higher is better) for each program.
@@ -159,8 +162,8 @@ Please stick to this format!
 
 {hidden_state_str}
 """
-    else:
-      system_str = f"""
+        else:
+            system_str = f"""
 You are a brilliant statistician specializing in critiquing and proposing revisions of models!
 Your equally brilliant colleague has come up with a list of probabilistic programs in pymc that hypothesize generative models for the data.
 I have fit these models and computed summary stats and LOO scores (higher is better) for each program.
@@ -201,13 +204,14 @@ Please stick to this format!
 If there are previous hypotheses, revise them based on the new information.
 {hidden_state_str}
 """
-  print(system_str)
-  return system_str
+    print(system_str)
+    return system_str
+
 
 def get_stan_user_prompt(mode, str_hypotheses, synthesis, vision_only=False):
-  if mode == "proposal":
-    if vision_only:
-      user_string = f"""
+    if mode == "proposal":
+        if vision_only:
+            user_string = f"""
   To help you with this, I will fit the current generative model to the data. 
 
   I will draw samples from the posterior predictive.
@@ -234,8 +238,8 @@ def get_stan_user_prompt(mode, str_hypotheses, synthesis, vision_only=False):
 
   """
 
-    else:
-      user_string = f"""
+        else:
+            user_string = f"""
   To help you with this, I will fit the current generative model to the data. 
   I will draw samples from the posterior predictive and compute statistics on the samples.
   To revise your model, look at the dataframe I provide with summary stats for samples from the hypothesized model.
@@ -261,31 +265,31 @@ def get_stan_user_prompt(mode, str_hypotheses, synthesis, vision_only=False):
   After the first round, I will also give you a history of the best programs. Use these programs as a starting point to propose better programs.
 
   """
-  if mode == "critic":
-    if vision_only:
-      user_string = f"""
+    if mode == "critic":
+        if vision_only:
+            user_string = """
 I will give you examples of programs, their scores, and plots of the posterior predictive below.
     """
-    else:
-      user_string = f"""
+        else:
+            user_string = """
 I will give you examples of programs and their scores below.
     """
-  return user_string
+    return user_string
 
 
 def get_stan_system_prompt_prior(
-  mode,
-  dataset_description,
-  df_str,
-  column_description,
-  expert_context,
-  vision_only=True,
-  prev_str_hypotheses=None,
-  prev_synthesis=None,
-  critic_strategy="",
+    mode,
+    dataset_description,
+    df_str,
+    column_description,
+    expert_context,
+    vision_only=True,
+    prev_str_hypotheses=None,
+    prev_synthesis=None,
+    critic_strategy="",
 ):
-  if mode == "proposal":
-    system_str = f"""
+    if mode == "proposal":
+        system_str = f"""
 You are a brilliant statistician modeling a dataset.
 Your job is to come up with a generative model that explains the true data by writing a pymc probabilistic program.  \n
 Here is a description of the dataset
@@ -364,8 +368,9 @@ Do not pass in dims for latent variables or parameters.
 Note, that I will not provide a column with the observations themselves only the input value.
 Please pass observed=None to the likelihood! If you forget this, the financial consequences will be dire!
 """
-    return system_str
+        return system_str
+
 
 def get_stan_user_prompt_prior(mode, str_hypotheses, synthesis, vision_only=False):
-  if mode == "proposal":
-    return ""
+    if mode == "proposal":
+        return ""

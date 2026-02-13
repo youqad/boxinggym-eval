@@ -29,12 +29,12 @@ import logging
 import os
 import re
 import tempfile
-import time
 import threading
+import time
 import uuid
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -48,12 +48,13 @@ MAX_LOG_LENGTH = 50000
 _LOCK = threading.Lock()
 
 # global singleton per run_id
-_RECORDERS: Dict[str, "CallRecorder"] = {}
+_RECORDERS: dict[str, "CallRecorder"] = {}
 
 
 @dataclass
 class CallRecord:
     """single LLM call record."""
+
     agent: str  # "scientist", "naive", "ppl", "box_loop"
     model: str
     prompt: str
@@ -64,12 +65,12 @@ class CallRecord:
     reasoning_tokens: int = 0
     cost_usd: float = 0.0
     has_reasoning: bool = False
-    step_idx: Optional[int] = None  # experiment step (if applicable)
+    step_idx: int | None = None  # experiment step (if applicable)
     call_type: str = "chat"  # "chat", "ppl", "box_loop"
-    timestamp: Optional[float] = None
-    call_idx: Optional[int] = None
+    timestamp: float | None = None
+    call_idx: int | None = None
     call_uuid: str = field(default_factory=lambda: uuid.uuid4().hex)  # stable ID for correlation
-    error: Optional[str] = None
+    error: str | None = None
 
     def __post_init__(self):
         if self.timestamp is None:
@@ -81,7 +82,7 @@ class CallRecorder:
 
     def __init__(self, run_id: str, output_dir: str = "results"):
         # sanitize run_id to prevent path traversal attacks
-        safe_run_id = re.sub(r'[^\w\-]', '_', run_id)
+        safe_run_id = re.sub(r"[^\w\-]", "_", run_id)
         self.run_id = safe_run_id
 
         # sanitize output_dir to prevent path traversal
@@ -90,7 +91,9 @@ class CallRecorder:
         # use is_relative_to to prevent prefix bypass (e.g., /project vs /project-evil)
         is_safe = any(output_path.is_relative_to(root) for root in allowed_roots)
         if not is_safe:
-            raise ValueError(f"output_dir must be within project root or temp directory: {output_dir}")
+            raise ValueError(
+                f"output_dir must be within project root or temp directory: {output_dir}"
+            )
 
         self.output_dir = output_path
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -100,7 +103,7 @@ class CallRecorder:
 
         # count existing lines if resuming
         if self.filepath.exists():
-            with open(self.filepath, "r") as f:
+            with open(self.filepath) as f:
                 self._call_count = sum(1 for _ in f)
 
         # keep file handle open for performance (line-buffered)
@@ -112,7 +115,7 @@ class CallRecorder:
     def _cleanup(self) -> None:
         """ensure file is flushed and closed on exit."""
         try:
-            if hasattr(self, '_file_handle') and self._file_handle and not self._file_handle.closed:
+            if hasattr(self, "_file_handle") and self._file_handle and not self._file_handle.closed:
                 self._file_handle.flush()
                 os.fsync(self._file_handle.fileno())
                 self._file_handle.close()
@@ -142,7 +145,7 @@ class CallRecorder:
 
             self._call_count = idx + 1
 
-    def record_dict(self, data: Dict[str, Any]) -> None:
+    def record_dict(self, data: dict[str, Any]) -> None:
         """convenience method for dict-based recording."""
         # extract known fields, pass rest as-is
         # use `or ""` to handle explicit None values
@@ -168,11 +171,11 @@ class CallRecorder:
         """return path to JSONL file."""
         return self.filepath
 
-    def get_all_calls(self) -> List[Dict]:
+    def get_all_calls(self) -> list[dict]:
         """read all calls from disk (for end-of-run processing)."""
         calls = []
         if self.filepath.exists():
-            with open(self.filepath, "r") as f:
+            with open(self.filepath) as f:
                 for line in f:
                     line = line.strip()
                     if line:
@@ -187,7 +190,7 @@ class CallRecorder:
         return self._call_count
 
 
-def get_call_recorder(run_id: Optional[str] = None, output_dir: str = "results") -> CallRecorder:
+def get_call_recorder(run_id: str | None = None, output_dir: str = "results") -> CallRecorder:
     """get or create a CallRecorder for the given run_id.
 
     if run_id is None, generates a timestamp-based ID (milliseconds for uniqueness).

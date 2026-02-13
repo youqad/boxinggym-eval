@@ -1,18 +1,16 @@
 import logging
 import traceback
+from typing import TYPE_CHECKING, Optional
+
 import tqdm
-from typing import Optional, TYPE_CHECKING, Tuple
+
 try:
     from omegaconf import ListConfig
 except Exception:
     ListConfig = ()
-from boxing_gym.experiment.utils import create_fallback_result
+from boxing_gym.experiment.evaluation import evaluate, evaluate_naive_explanation, ppl_evaluate
 from boxing_gym.experiment.ppl import augment_scientist_with_ppl
-from boxing_gym.experiment.evaluation import (
-    evaluate,
-    evaluate_naive_explanation,
-    ppl_evaluate
-)
+from boxing_gym.experiment.utils import create_fallback_result
 
 if TYPE_CHECKING:
     from boxing_gym.experiment.step_logger import StepLogger
@@ -40,7 +38,7 @@ def _normalize_budgets(num_experiments):
         return []
 
 
-def _get_step_latency_ms(scientist, prev_latency_count: int) -> Optional[float]:
+def _get_step_latency_ms(scientist, prev_latency_count: int) -> float | None:
     """Get total LLM latency for this step by summing new latencies since prev_latency_count."""
     try:
         if hasattr(scientist, "get_latencies_ms"):
@@ -65,9 +63,9 @@ def _get_latency_count(scientist) -> int:
 
 def _compute_z_stats(
     eval_score,
-    norm_mu: Optional[float],
-    norm_sigma: Optional[float],
-) -> Tuple[Optional[float], Optional[float]]:
+    norm_mu: float | None,
+    norm_sigma: float | None,
+) -> tuple[float | None, float | None]:
     if eval_score is None or norm_mu is None or norm_sigma is None or norm_sigma <= 0:
         return None, None
 
@@ -182,7 +180,9 @@ def _run_evaluation(
                     call_recorder=call_recorder,
                 )
                 if proposed_programs_all and proposed_programs_all[-1]:
-                    augment_scientist_with_ppl(scientist, proposed_programs_all, critic_info_all, critic_mode=critic_mode)
+                    augment_scientist_with_ppl(
+                        scientist, proposed_programs_all, critic_info_all, critic_mode=critic_mode
+                    )
                 else:
                     logger.warning("Skipping PPL augmentation: Box's loop returned no programs.")
             except Exception as e:
@@ -223,19 +223,19 @@ def _run_evaluation(
 # No @weave_op here; it receives Goal/Agent objects that Weave can't serialize.
 # LiteLLM calls are still traced via Weave auto-patching.
 def iterative_experiment(
-        goal,
-        scientist,
-        num_experiments,
-        num_evals,
-        include_prior,
-        naive_agent=None,
-        com_limit=None,
-        check_eig=False,
-        use_ppl=False,
-        step_logger: Optional["StepLogger"] = None,
-        norm_mu: Optional[float] = None,
-        norm_sigma: Optional[float] = None,
-        call_recorder=None,
+    goal,
+    scientist,
+    num_experiments,
+    num_evals,
+    include_prior,
+    naive_agent=None,
+    com_limit=None,
+    check_eig=False,
+    use_ppl=False,
+    step_logger: Optional["StepLogger"] = None,
+    norm_mu: float | None = None,
+    norm_sigma: float | None = None,
+    call_recorder=None,
 ):
     results = []
     queries = []
@@ -247,7 +247,7 @@ def iterative_experiment(
     critic_info_all = []
 
     # extract scientist's model name for Box's Loop
-    llm_model = getattr(scientist, 'model_name', None)
+    llm_model = getattr(scientist, "model_name", None)
 
     budgets = _normalize_budgets(num_experiments)
     budget_set = set(budgets)
@@ -279,13 +279,20 @@ def iterative_experiment(
             explanations.append(explanation)
 
         results.append(result)
-        
-        _log_budget_evaluation(step_logger, budget=0, result=result, norm_mu=norm_mu, norm_sigma=norm_sigma, is_prior_only=True)
-        
+
+        _log_budget_evaluation(
+            step_logger,
+            budget=0,
+            result=result,
+            norm_mu=norm_mu,
+            norm_sigma=norm_sigma,
+            is_prior_only=True,
+        )
+
     observation = None
     # use last budget entry as the loop cap
     max_iters = budgets[-1] if budgets else 0
-    
+
     for i in tqdm.tqdm(range(max_iters)):
         success = False
         # track latency: note count before step
@@ -335,7 +342,7 @@ def iterative_experiment(
                         optimal_eig = goal.get_optimal_eig()
                 except Exception:
                     pass  # optimal EIG not available for this environment
-        
+
         # log per-step metrics for live progress tracking
         if step_logger is not None:
             try:
@@ -378,23 +385,29 @@ def iterative_experiment(
                 critic_info_all=critic_info_all,
                 prior_mode=False,
                 critic_mode=True,
-                log_prefix=f"Evaluation (iteration {i+1})",
+                log_prefix=f"Evaluation (iteration {i + 1})",
                 call_recorder=call_recorder,
             )
             if explanation is not None:
                 explanations.append(explanation)
             results.append(result)
-            
-            _log_budget_evaluation(step_logger, budget=i + 1, result=result, norm_mu=norm_mu, norm_sigma=norm_sigma, is_prior_only=False)
 
+            _log_budget_evaluation(
+                step_logger,
+                budget=i + 1,
+                result=result,
+                norm_mu=norm_mu,
+                norm_sigma=norm_sigma,
+                is_prior_only=False,
+            )
 
     # log exit status (experiment completed successfully)
     if step_logger is not None:
         try:
             from boxing_gym.experiment.step_logger import ExitStatus
+
             step_logger.log_exit_status(
-                ExitStatus.COMPLETED,
-                reason=f"Completed {max_iters} experiments"
+                ExitStatus.COMPLETED, reason=f"Completed {max_iters} experiments"
             )
         except Exception as e:
             logger.debug(f"Step logger exit status log failed: {e}")

@@ -3,11 +3,12 @@ Tracks EIG regret, token growth, exit status, communication
 metrics, and latency statistics.
 """
 
-import time
 import logging
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -16,29 +17,31 @@ logger = logging.getLogger(__name__)
 
 class ExitStatus(Enum):
     """Categorization of why experiment runs terminate."""
-    COMPLETED = "completed"           # all experiments ran successfully
+
+    COMPLETED = "completed"  # all experiments ran successfully
     BUDGET_EXHAUSTED = "budget_exhausted"  # hit experiment budget limit
-    COST_LIMIT = "cost_limit"         # hit cost limit
-    MAX_RETRIES = "max_retries"       # too many failed experiments
-    TIMEOUT = "timeout"               # wall clock timeout
-    ERROR = "error"                   # unrecoverable error
+    COST_LIMIT = "cost_limit"  # hit cost limit
+    MAX_RETRIES = "max_retries"  # too many failed experiments
+    TIMEOUT = "timeout"  # wall clock timeout
+    ERROR = "error"  # unrecoverable error
 
 
 @dataclass
 class StepLogger:
     """Logger for per-step and cumulative metrics during experiment runs.
-    
+
     Args:
         wandb_module: The wandb module (or None if disabled)
         wandb_run: Active wandb run (or None if disabled)
         start_time: Experiment start time for wall clock tracking
         log_callback: Optional callback for custom logging (receives step_idx, metrics dict)
     """
+
     wandb_module: Any = None
     wandb_run: Any = None
     start_time: float = field(default_factory=time.time)
-    log_callback: Optional[Callable[[int, Dict], None]] = None
-    
+    log_callback: Callable[[int, dict], None] | None = None
+
     # cumulative tracking
     _total_queries: int = field(default=0)
     _total_observations: int = field(default=0)
@@ -46,46 +49,46 @@ class StepLogger:
     _total_retries: int = field(default=0)
     _total_eig: float = field(default=0.0)
     _eig_count: int = field(default=0)
-    _step_times: List[float] = field(default_factory=list)
+    _step_times: list[float] = field(default_factory=list)
     _last_step_time: float = field(default=0.0)
 
     # per-budget evaluation tracking (for cumulative eval metrics)
-    _eval_means: List[float] = field(default_factory=list)
-    _eval_z_means: List[float] = field(default_factory=list)
-    _eval_z_stds: List[float] = field(default_factory=list)
+    _eval_means: list[float] = field(default_factory=list)
+    _eval_z_means: list[float] = field(default_factory=list)
+    _eval_z_stds: list[float] = field(default_factory=list)
 
     # EIG regret tracking (gap from optimal)
     _total_eig_regret: float = field(default=0.0)
-    _eig_values: List[float] = field(default_factory=list)
-    _optimal_eig_values: List[float] = field(default_factory=list)
+    _eig_values: list[float] = field(default_factory=list)
+    _optimal_eig_values: list[float] = field(default_factory=list)
 
     # token growth tracking (cumulative by type)
     _cumulative_prompt_tokens: int = field(default=0)
     _cumulative_completion_tokens: int = field(default=0)
     _cumulative_reasoning_tokens: int = field(default=0)
-    _last_usage_totals: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    _last_usage_totals: dict[str, dict[str, float]] = field(default_factory=dict)
 
     # latency tracking (per-call timing)
-    _latencies_ms: List[float] = field(default_factory=list)
+    _latencies_ms: list[float] = field(default_factory=list)
 
     # exit status tracking
-    _exit_status: Optional[ExitStatus] = field(default=None)
-    _exit_reason: Optional[str] = field(default=None)
+    _exit_status: ExitStatus | None = field(default=None)
+    _exit_reason: str | None = field(default=None)
 
     # communication metrics (discovery mode)
-    _scientist_z_mean: Optional[float] = field(default=None)
-    _naive_z_mean: Optional[float] = field(default=None)
-    _explanation_lengths: List[int] = field(default_factory=list)
+    _scientist_z_mean: float | None = field(default=None)
+    _naive_z_mean: float | None = field(default=None)
+    _explanation_lengths: list[int] = field(default_factory=list)
 
     # evaluation metric direction (True if lower is better)
-    _eval_lower_is_better: Optional[bool] = field(default=None)
+    _eval_lower_is_better: bool | None = field(default=None)
 
     # last step index for aligning one-off logs
-    _last_step_idx: Optional[int] = field(default=None)
+    _last_step_idx: int | None = field(default=None)
 
     # step index offset for multi-seed or resumed runs
     _step_offset: int = field(default=0)
-    
+
     # track if metrics have been defined
     _metrics_defined: bool = field(default=False)
 
@@ -115,7 +118,7 @@ class StepLogger:
         except Exception as e:
             logger.debug(f"WandB define_metric failed: {e}")
 
-    def _log(self, metrics: Dict[str, Any], step: Optional[int] = None, commit: bool = True) -> None:
+    def _log(self, metrics: dict[str, Any], step: int | None = None, commit: bool = True) -> None:
         """Internal logging to wandb and optional callback."""
         if self.enabled:
             self._define_metrics()
@@ -126,7 +129,7 @@ class StepLogger:
                     self.wandb_module.log(metrics, commit=commit)
             except Exception as e:
                 logger.debug(f"WandB log failed: {e}")
-        
+
         if self.log_callback is not None:
             try:
                 self.log_callback(step, metrics)
@@ -147,17 +150,17 @@ class StepLogger:
             self._step_offset = 0
         if reset_timing:
             self._last_step_time = 0.0
-    
+
     def log_step(
         self,
         step_idx: int,
         success: bool,
         retry_count: int = 0,
-        eig: Optional[float] = None,
-        optimal_eig: Optional[float] = None,
-        observation: Optional[Any] = None,
-        query: Optional[str] = None,
-        latency_ms: Optional[float] = None,
+        eig: float | None = None,
+        optimal_eig: float | None = None,
+        observation: Any | None = None,
+        query: str | None = None,
+        latency_ms: float | None = None,
     ) -> None:
         """Log per-step metrics for live progress tracking.
         Args:
@@ -176,14 +179,14 @@ class StepLogger:
         step_duration = now - self._last_step_time if self._last_step_time > 0 else 0
         self._last_step_time = now
         self._step_times.append(step_duration)
-        
+
         # update cumulative counters
         self._total_queries += 1 + retry_count  # Original query + retries
         self._total_observations += 1 + retry_count
         if success:
             self._total_successes += 1
         self._total_retries += retry_count
-        
+
         if eig is not None:
             self._total_eig += eig
             self._eig_count += 1
@@ -198,14 +201,14 @@ class StepLogger:
         # latency tracking
         if latency_ms is not None:
             self._latencies_ms.append(latency_ms)
-        
+
         # calculate running stats
         # success rate: successes / steps attempted (excluding retries from denominator)
         total_steps = self._total_queries - self._total_retries
         cumulative_success_rate = self._total_successes / total_steps if total_steps > 0 else 0.0
         avg_retries = self._total_retries / (global_step_idx + 1) if global_step_idx >= 0 else 0.0
         wall_time = now - self.start_time
-        
+
         # build metrics payload
         # per-step (instantaneous) metrics
         metrics = {
@@ -215,7 +218,7 @@ class StepLogger:
             "step/duration_sec": step_duration,
             "step/wall_time_sec": wall_time,
         }
-        
+
         if eig is not None:
             metrics["step/eig"] = eig
             # EIG regret (gap from optimal)
@@ -232,17 +235,19 @@ class StepLogger:
             metrics["step/query_length"] = len(str(query))
         if observation is not None:
             metrics["step/observation_length"] = len(str(observation))
-        
+
         # cumulative (running) metrics
-        metrics.update({
-            "cumulative/success_rate": cumulative_success_rate,
-            "cumulative/total_queries": self._total_queries,
-            "cumulative/total_observations": self._total_observations,
-            "cumulative/total_successes": self._total_successes,
-            "cumulative/total_retries": self._total_retries,
-            "cumulative/avg_retries_per_step": avg_retries,
-        })
-        
+        metrics.update(
+            {
+                "cumulative/success_rate": cumulative_success_rate,
+                "cumulative/total_queries": self._total_queries,
+                "cumulative/total_observations": self._total_observations,
+                "cumulative/total_successes": self._total_successes,
+                "cumulative/total_retries": self._total_retries,
+                "cumulative/avg_retries_per_step": avg_retries,
+            }
+        )
+
         if self._eig_count > 0:
             metrics["cumulative/eig_mean"] = self._total_eig / self._eig_count
             metrics["cumulative/eig_sum"] = self._total_eig
@@ -250,7 +255,9 @@ class StepLogger:
             # EIG regret cumulative
             if self._optimal_eig_values:
                 metrics["cumulative/eig_regret_sum"] = self._total_eig_regret
-                metrics["cumulative/eig_regret_mean"] = self._total_eig_regret / len(self._optimal_eig_values)
+                metrics["cumulative/eig_regret_mean"] = self._total_eig_regret / len(
+                    self._optimal_eig_values
+                )
 
         # latency cumulative statistics
         if self._latencies_ms:
@@ -259,31 +266,33 @@ class StepLogger:
             metrics["cumulative/latency_ms_p50"] = float(np.percentile(latencies, 50))
             metrics["cumulative/latency_ms_p95"] = float(np.percentile(latencies, 95))
             metrics["cumulative/latency_ms_std"] = float(np.std(latencies))
-        
+
         # throughput metrics
         if wall_time > 0:
             metrics["cumulative/steps_per_minute"] = (global_step_idx + 1) / (wall_time / 60.0)
             metrics["cumulative/queries_per_minute"] = self._total_queries / (wall_time / 60.0)
-        
+
         # average step duration (excluding first step which may include setup)
         if len(self._step_times) > 1:
-            metrics["cumulative/avg_step_duration_sec"] = sum(self._step_times[1:]) / len(self._step_times[1:])
-        
+            metrics["cumulative/avg_step_duration_sec"] = sum(self._step_times[1:]) / len(
+                self._step_times[1:]
+            )
+
         self._log(metrics)  # Uses step/idx from payload as x-axis per define_metric
-    
+
     def log_evaluation(
         self,
         budget: int,
         eval_score: Any,
-        z_mean: Optional[float] = None,
-        z_std: Optional[float] = None,
+        z_mean: float | None = None,
+        z_std: float | None = None,
         is_prior_only: bool = False,
-        box_loop_stats: Optional[List[Dict]] = None,
+        box_loop_stats: list[dict] | None = None,
     ) -> None:
         """Log evaluation metrics at budget checkpoints.
-        
+
         Logs both per-budget metrics and cumulative evaluation statistics.
-        
+
         Args:
             budget: The experiment budget at this checkpoint
             eval_score: Evaluation score (dict with metrics or tuple (mean, std))
@@ -292,7 +301,7 @@ class StepLogger:
             box_loop_stats: Optional PPL/Box loop statistics
         """
         metrics = {"eval/budget": budget}
-        
+
         # parse evaluation score
         mean_val, std_val = None, None
         mean_key = None
@@ -309,23 +318,25 @@ class StepLogger:
             elif "score" in eval_score:
                 mean_key = "score"
                 mean_val = eval_score.get("score")
-            std_val = eval_score.get("std_mse", eval_score.get("std", eval_score.get("std_accuracy")))
+            std_val = eval_score.get(
+                "std_mse", eval_score.get("std", eval_score.get("std_accuracy"))
+            )
         elif isinstance(eval_score, (list, tuple)) and len(eval_score) >= 2:
             mean_val, std_val = eval_score[0], eval_score[1]
             metrics["eval/mse"] = float(mean_val) if mean_val is not None else None
             metrics["eval/std_mse"] = float(std_val) if std_val is not None else None
-        
+
         # generic names for sweep compatibility
         metrics["eval/mean"] = float(mean_val) if mean_val is not None else None
         metrics["eval/std"] = float(std_val) if std_val is not None else None
-        
+
         if z_mean is not None:
             metrics["eval/z_mean"] = z_mean
             self._eval_z_means.append(z_mean)
         if z_std is not None:
             metrics["eval/z_std"] = z_std
             self._eval_z_stds.append(z_std)
-        
+
         if mean_val is not None:
             self._eval_means.append(float(mean_val))
 
@@ -335,7 +346,7 @@ class StepLogger:
                 self._eval_lower_is_better = True
             elif key in {"accuracy", "acc", "score", "auc"}:
                 self._eval_lower_is_better = False
-        
+
         # cumulative evaluation metrics
         if self._eval_means:
             metrics["cumulative/eval_mean_avg"] = sum(self._eval_means) / len(self._eval_means)
@@ -349,17 +360,17 @@ class StepLogger:
                 metrics["cumulative/eval_mean_best"] = max(self._eval_means)
                 metrics["cumulative/eval_mean_worst"] = min(self._eval_means)
             metrics["cumulative/num_evaluations"] = len(self._eval_means)
-        
+
         if self._eval_z_means:
             metrics["cumulative/z_mean_avg"] = sum(self._eval_z_means) / len(self._eval_z_means)
             metrics["cumulative/z_mean_best"] = min(self._eval_z_means)
             metrics["cumulative/z_mean_latest"] = self._eval_z_means[-1]
         if self._eval_z_stds:
             metrics["cumulative/z_std_latest"] = self._eval_z_stds[-1]
-        
+
         metrics["eval/is_prior_only"] = 1 if is_prior_only else 0
         metrics["eval/wall_time_sec"] = time.time() - self.start_time
-        
+
         # PPL/Box loop stats
         if isinstance(box_loop_stats, list) and box_loop_stats:
             metrics["ppl/num_rounds"] = len(box_loop_stats)
@@ -374,19 +385,20 @@ class StepLogger:
                         numeric_keys.add(k)
             for k in numeric_keys:
                 vals = [
-                    float(s[k]) for s in box_loop_stats
+                    float(s[k])
+                    for s in box_loop_stats
                     if isinstance(s, dict) and isinstance(s.get(k), (int, float))
                 ]
                 if vals:
                     metrics[f"ppl/{k}_mean"] = sum(vals) / len(vals)
                     metrics[f"ppl/{k}_last"] = vals[-1]
-        
+
         self._log(metrics)  # uses eval/budget from payload as x-axis per define_metric
-    
+
     def log_llm_usage_step(
         self,
         step_idx: int,
-        usage_stats: Dict[str, Any],
+        usage_stats: dict[str, Any],
         agent_prefix: str = "llm",
     ) -> None:
         """Log per-step LLM usage for live cost/token tracking.
@@ -482,8 +494,8 @@ class StepLogger:
 
         if metrics:
             self._log(metrics)  # uses step/idx from payload as x-axis per define_metric
-    
-    def get_cumulative_stats(self) -> Dict[str, Any]:
+
+    def get_cumulative_stats(self) -> dict[str, Any]:
         """Get all cumulative statistics for final summary."""
         wall_time = time.time() - self.start_time
         stats = {
@@ -566,7 +578,7 @@ class StepLogger:
     def log_exit_status(
         self,
         status: ExitStatus,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> None:
         """Log why the experiment run terminated.
 
@@ -596,10 +608,10 @@ class StepLogger:
 
     def log_communication(
         self,
-        scientist_z_mean: Optional[float],
-        naive_z_mean: Optional[float],
-        explanation: Optional[str] = None,
-        accuracy: Optional[float] = None,
+        scientist_z_mean: float | None,
+        naive_z_mean: float | None,
+        explanation: str | None = None,
+        accuracy: float | None = None,
     ) -> None:
         """Log communication metrics for discovery mode experiments.
 
@@ -637,9 +649,9 @@ class StepLogger:
             metrics["comm/explanation_length"] = len(explanation)
 
         if self._explanation_lengths:
-            metrics["cumulative/avg_explanation_length"] = sum(
+            metrics["cumulative/avg_explanation_length"] = sum(self._explanation_lengths) / len(
                 self._explanation_lengths
-            ) / len(self._explanation_lengths)
+            )
 
         if metrics:
             self._log(metrics)  # single event, no step association needed

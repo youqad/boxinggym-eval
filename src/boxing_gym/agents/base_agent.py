@@ -1,23 +1,22 @@
+from abc import ABC, abstractmethod
 from typing import (
     Any,
-    Dict,
-    List,
 )
-
-from abc import ABC, abstractmethod
 
 # import unified pricing from pricing.py (single source of truth)
 from boxing_gym.agents.pricing import MODEL_COST_PER_INPUT, MODEL_COST_PER_OUTPUT
 from boxing_gym.agents.usage_tracker import extract_token_usage
 
+
 class BaseAgent(ABC):
     """
     Base agent class.
     """
+
     def __init__(
-        self, 
+        self,
         llm: Any,
-        model_id: str, 
+        model_id: str,
     ) -> None:
         """Initializes a chat model used for code or feedback models.
 
@@ -27,11 +26,8 @@ class BaseAgent(ABC):
         """
         self.llm = llm
         self.model_id = model_id
-    
-    def calc_cost(
-        self, 
-        response
-    ) -> float:
+
+    def calc_cost(self, response) -> float:
         """
         Calculates the cost of a response from the openai API. Taken from https://github.com/princeton-nlp/SWE-bench/blob/main/inference/run_api.py
 
@@ -50,23 +46,23 @@ class BaseAgent(ABC):
         output_rate = MODEL_COST_PER_OUTPUT.get(model_name, 0.0)
         cost = input_rate * tokens["prompt_tokens"] + output_rate * tokens["completion_tokens"]
         return cost
-        
+
     @abstractmethod
-    def get_prompt(self) -> List[Dict[str, str]]:
+    def get_prompt(self) -> list[dict[str, str]]:
         """
-        Get the prompt fed into the model. 
+        Get the prompt fed into the model.
         """
         raise NotImplementedError
 
     @abstractmethod
     def get_response(self) -> str:
         """
-        Get the response from the model. 
+        Get the response from the model.
         """
         raise NotImplementedError
 
-    @abstractmethod 
-    def run(self) -> Dict[str, Any]:
+    @abstractmethod
+    def run(self) -> dict[str, Any]:
         """
         Run the agent.
         """

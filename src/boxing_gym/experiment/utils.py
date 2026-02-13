@@ -1,4 +1,5 @@
 import logging
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -10,7 +11,7 @@ def create_fallback_result(error_msg=""):
     Returns the same first-4-element structure as evaluate():
     (evaluation_score, questions, gts, predictions)
     Note: ppl_evaluate() may append a 5th element (box_loop_stats) in PPL mode.
-    
+
     Marks evaluation as failed with placeholder values to allow
     experiment to save partial results and continue.
     """
@@ -23,8 +24,9 @@ def create_fallback_result(error_msg=""):
     questions = []
     gts = []
     predictions = []
-    
+
     return fallback_score, questions, gts, predictions
+
 
 def compute_z_score(err_mean: float, norm_mu: float, norm_sigma: float) -> float:
     """Standardize raw error to Z-score for paper comparison.
@@ -52,6 +54,7 @@ def compute_z_score(err_mean: float, norm_mu: float, norm_sigma: float) -> float
     z_mean = (err_mean - norm_mu) / norm_sigma
     return z_mean
 
+
 def _format_emotion_prediction(vals):
     keys = [
         "Happiness",
@@ -75,6 +78,7 @@ def _format_emotion_prediction(vals):
         fv = float(np.clip(fv, 1.0, 9.0))
         out_lines.append(f"{k}: {fv:.2f}/9")
     return "\n".join(out_lines)
+
 
 def _make_dummy_eval_input_for_env(env):
     """Create a single eval_input row suitable for construct_features(env, data=[...])."""
@@ -103,6 +107,7 @@ def _make_dummy_eval_input_for_env(env):
     except Exception:
         return None
 
+
 def _baseline_prediction_for_goal(goal):
     """Return a parseable baseline prediction string for the goal."""
     goal_mod = getattr(goal.__class__, "__module__", "")
@@ -110,7 +115,9 @@ def _baseline_prediction_for_goal(goal):
     goal_full = f"{goal_mod}.{goal_cls}"
     env = getattr(goal, "env", None)
 
-    if goal_full.endswith("emotion.DirectEmotionPrediction") or goal_full.endswith("emotion.DirectEmotionNaive"):
+    if goal_full.endswith("emotion.DirectEmotionPrediction") or goal_full.endswith(
+        "emotion.DirectEmotionNaive"
+    ):
         # 8 emotions, Likert 1-9. Use neutral midpoint.
         vals = [5.0] * 8
         keys = [
@@ -125,7 +132,9 @@ def _baseline_prediction_for_goal(goal):
         ]
         return "\n".join([f"{k}: {v}/9" for k, v in zip(keys, vals)])
 
-    if goal_full.endswith("lotka_volterra.DirectGoal") or goal_full.endswith("lotka_volterra.DirectGoalNaive"):
+    if goal_full.endswith("lotka_volterra.DirectGoal") or goal_full.endswith(
+        "lotka_volterra.DirectGoalNaive"
+    ):
         return "[0, 0]"
 
     if goal_full.endswith("location_finding.SourceGoal"):
@@ -139,16 +148,22 @@ def _baseline_prediction_for_goal(goal):
         return str(zeros)
 
     # binary/categorical defaults
-    if goal_full.endswith("moral_machines.DirectPrediction") or goal_full.endswith("moral_machines.DirectPredictionNaive"):
+    if goal_full.endswith("moral_machines.DirectPrediction") or goal_full.endswith(
+        "moral_machines.DirectPredictionNaive"
+    ):
         return "1"
 
     if goal_full.endswith("hyperbolic_temporal_discount.DirectGoal") or goal_full.endswith(
         "hyperbolic_temporal_discount.DirectGoalNaive"
     ):
         return "0"
-    if goal_full.endswith("survival_analysis.DirectGoal") or goal_full.endswith("survival_analysis.DirectGoalNaive"):
+    if goal_full.endswith("survival_analysis.DirectGoal") or goal_full.endswith(
+        "survival_analysis.DirectGoalNaive"
+    ):
         return "0"
-    if goal_full.endswith("irt.DirectCorrectness") or goal_full.endswith("irt.DirectCorrectnessNaive"):
+    if goal_full.endswith("irt.DirectCorrectness") or goal_full.endswith(
+        "irt.DirectCorrectnessNaive"
+    ):
         return "0"
 
     # parameter goals

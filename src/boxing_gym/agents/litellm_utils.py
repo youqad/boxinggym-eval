@@ -5,10 +5,10 @@ Small pieces of LiteLLM/OpenAI Responses-API glue used across agents and environ
 
 from __future__ import annotations
 
-from typing import Any, Optional, List, Dict
+import logging
 import os
 import re
-import logging
+from typing import Any
 
 import litellm
 
@@ -37,9 +37,7 @@ def is_responses_api_model(model_name: str) -> bool:
     # any OpenAI o‑series reasoning model (o1, o3, o4-mini, etc.)
     if _REASONING_MODEL_RE.search(name):
         return True
-    if "gpt-4.1" in name:
-        return True
-    return False
+    return "gpt-4.1" in name
 
 
 def _fake_llm_enabled() -> bool:
@@ -47,18 +45,18 @@ def _fake_llm_enabled() -> bool:
     return bool(flag) and flag.lower() not in ("0", "false", "no")
 
 
-def messages_to_input_text(messages: List[Dict[str, Any]]) -> str:
+def messages_to_input_text(messages: list[dict[str, Any]]) -> str:
     """Flatten chat-style messages into a single text prompt.
 
     The Responses API does not accept structured role/message arrays for
     all providers, so we collapse to a simple transcript.
     """
-    lines: List[str] = []
+    lines: list[str] = []
     for m in messages or []:
         role = m.get("role", "user")
         content = m.get("content", "")
         if isinstance(content, list):
-            parts: List[str] = []
+            parts: list[str] = []
             for c in content:
                 if isinstance(c, dict):
                     if "text" in c:
@@ -78,7 +76,7 @@ def extract_text(resp: Any) -> str:
     """Extract plain text from either ChatCompletions or Responses schema."""
     # ChatCompletions-style
     try:
-        if hasattr(resp, "choices") and getattr(resp, "choices"):
+        if hasattr(resp, "choices") and resp.choices:
             msg = resp.choices[0].message
             content = getattr(msg, "content", None)
             if content:
@@ -92,7 +90,9 @@ def extract_text(resp: Any) -> str:
         for item in output:
             item_type = getattr(item, "type", None) or (isinstance(item, dict) and item.get("type"))
             if item_type == "message":
-                msg_content = getattr(item, "content", None) or (item.get("content") if isinstance(item, dict) else None)
+                msg_content = getattr(item, "content", None) or (
+                    item.get("content") if isinstance(item, dict) else None
+                )
                 if msg_content:
                     for c in msg_content:
                         text = getattr(c, "text", None)
@@ -115,9 +115,9 @@ def extract_text(resp: Any) -> str:
 
 def call_llm_messages_sync(
     model_name: str,
-    messages: List[Dict[str, Any]],
-    api_base: Optional[str] = None,
-    api_key: Optional[str] = None,
+    messages: list[dict[str, Any]],
+    api_base: str | None = None,
+    api_key: str | None = None,
     max_tokens: int = 16384,  # safe default - never use 512!
     temperature: float = 0.7,
     num_retries: int = 3,
@@ -199,8 +199,8 @@ def call_llm_sync(
     model_name: str,
     system_text: str,
     user_text: str,
-    api_base: Optional[str] = None,
-    api_key: Optional[str] = None,
+    api_base: str | None = None,
+    api_key: str | None = None,
     max_tokens: int = 16384,  # safe default - never use 512!
     temperature: float = 0.7,
     num_retries: int = 3,

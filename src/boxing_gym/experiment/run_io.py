@@ -20,6 +20,7 @@ class _NpEncoder(json.JSONEncoder):
         # handle pandas DataFrames/Series
         try:
             import pandas as pd
+
             if isinstance(obj, pd.DataFrame):
                 return obj.to_dict(orient="records")
             if isinstance(obj, pd.Series):
@@ -29,6 +30,7 @@ class _NpEncoder(json.JSONEncoder):
         # handle pymc InferenceData and other complex objects - skip with placeholder
         try:
             import arviz
+
             if isinstance(obj, arviz.InferenceData):
                 return "<InferenceData - not serializable>"
         except ImportError:
@@ -141,7 +143,7 @@ def load_checkpoint(run_id: str) -> dict:
     path = _get_checkpoint_path(run_id)
     if os.path.exists(path):
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 return json.load(f)
         except Exception:
             return {}
@@ -158,11 +160,13 @@ def save_checkpoint(run_id: str, completed_seeds: list, seed_results: list):
     # keep only essential data for recovery
     lightweight_results = []
     for sr in seed_results:
-        lightweight_results.append({
-            "seed": sr["seed"],
-            "z_results": sr["z_results"],
-            "status": sr.get("status", "ok"),
-        })
+        lightweight_results.append(
+            {
+                "seed": sr["seed"],
+                "z_results": sr["z_results"],
+                "status": sr.get("status", "ok"),
+            }
+        )
 
     checkpoint = {
         "completed_seeds": completed_seeds,
@@ -187,6 +191,7 @@ def clear_checkpoint(run_id: str):
 
 
 # per-seed full data files (preserves all_data, messages for investigation)
+
 
 def get_seed_data_path(run_id: str, seed: int) -> str:
     """Path to per-seed full data file."""
@@ -247,7 +252,7 @@ def load_seed_data(run_id: str, seed: int) -> dict:
     path = get_seed_data_path(run_id, seed)
     if os.path.exists(path):
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = json.load(f)
             # reconstruct all_data tuple from dict
             ad = data.get("all_data", {})

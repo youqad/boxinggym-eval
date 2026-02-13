@@ -2,13 +2,11 @@
 
 import re
 import unicodedata
-from typing import Optional
 from enum import Enum
-
 
 # matches numbers: integers, floats, scientific notation (e.g. 1.5e-10)
 # \b prevents matching trailing periods in sentences
-NUMBER_PATTERN = r'-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?\b'
+NUMBER_PATTERN = r"-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?\b"
 
 # minimum content length before checking for "done" (model gave up)
 # short responses like "done" shouldn't trigger normal extraction
@@ -16,24 +14,28 @@ MIN_CONTENT_LENGTH_FOR_DONE_CHECK = 20
 
 # pre-compiled regex patterns for performance (avoid re-compiling on each call)
 _NUMBER_RE = re.compile(NUMBER_PATTERN)
-_WELL_FORMED_RE = re.compile(r'\[[\d\s,\.\-]+\]')
-_BRACKET_START_RE = re.compile(r'^\s*\w{0,20}\s*\[([\d\s,\.\-]+)\]')
-_BRACKET_END_RE = re.compile(r'\[([\d\s,\.\-]+)\]\s*\.?\s*$')
-_PAREN_START_RE = re.compile(r'^\s*\w{0,20}\s*\(([\d\s,\.\-]+)\)')
-_PAREN_END_RE = re.compile(r'\(([\d\s,\.\-]+)\)\s*\.?\s*$')
-_LIST_PATTERN_RE = re.compile(rf'{NUMBER_PATTERN}\s*,\s*{NUMBER_PATTERN}')
-_ANSWER_IS_RE = re.compile(rf'answer\s+(?:is|:|=)\s*({NUMBER_PATTERN})', re.IGNORECASE)
-_WILL_USE_RE = re.compile(rf"(?:I'll|I will)\s+(?:go with|use|choose|answer|predict)\s+({NUMBER_PATTERN})", re.IGNORECASE)
-_THEREFORE_RE = re.compile(rf'(?:so|therefore|thus),?\s*({NUMBER_PATTERN})\s*\.?\s*$', re.IGNORECASE)
-_SENTENCE_SPLIT_RE = re.compile(r'[.!?]\s+')
-_HAS_DIGIT_RE = re.compile(r'\d')
-_NEXT_TAG_RE = re.compile(r'<')
+_WELL_FORMED_RE = re.compile(r"\[[\d\s,\.\-]+\]")
+_BRACKET_START_RE = re.compile(r"^\s*\w{0,20}\s*\[([\d\s,\.\-]+)\]")
+_BRACKET_END_RE = re.compile(r"\[([\d\s,\.\-]+)\]\s*\.?\s*$")
+_PAREN_START_RE = re.compile(r"^\s*\w{0,20}\s*\(([\d\s,\.\-]+)\)")
+_PAREN_END_RE = re.compile(r"\(([\d\s,\.\-]+)\)\s*\.?\s*$")
+_LIST_PATTERN_RE = re.compile(rf"{NUMBER_PATTERN}\s*,\s*{NUMBER_PATTERN}")
+_ANSWER_IS_RE = re.compile(rf"answer\s+(?:is|:|=)\s*({NUMBER_PATTERN})", re.IGNORECASE)
+_WILL_USE_RE = re.compile(
+    rf"(?:I'll|I will)\s+(?:go with|use|choose|answer|predict)\s+({NUMBER_PATTERN})", re.IGNORECASE
+)
+_THEREFORE_RE = re.compile(
+    rf"(?:so|therefore|thus),?\s*({NUMBER_PATTERN})\s*\.?\s*$", re.IGNORECASE
+)
+_SENTENCE_SPLIT_RE = re.compile(r"[.!?]\s+")
+_HAS_DIGIT_RE = re.compile(r"\d")
+_NEXT_TAG_RE = re.compile(r"<")
 
 
 class ValidationMode(Enum):
-    STRICT = "strict"      # reject formatting issues
+    STRICT = "strict"  # reject formatting issues
     MODERATE = "moderate"  # normalize format
-    LOOSE = "loose"        # accept anything with numbers
+    LOOSE = "loose"  # accept anything with numbers
 
 
 class ParsingStrategy(Enum):
@@ -51,22 +53,22 @@ class TagParser:
     empty content, and case variations.
     """
 
-    def __init__(
-        self,
-        tag_name: str,
-        validation_mode: str = "moderate"
-    ):
+    def __init__(self, tag_name: str, validation_mode: str = "moderate"):
         self.tag_name = tag_name.lower()
         self.validation_mode = ValidationMode(validation_mode)
         self.last_strategy_used = None
         self.last_failure_reason = None
         # cache compiled tag-specific patterns
-        self._strict_re = re.compile(rf'<{self.tag_name}>(.*?)</{self.tag_name}>', re.DOTALL | re.IGNORECASE)
-        self._tolerant_re = re.compile(rf'<\s*{self.tag_name}\s*>(.*?)<\s*/\s*{self.tag_name}\s*>', re.DOTALL | re.IGNORECASE)
-        self._opening_re = re.compile(rf'<\s*{self.tag_name}\s*>', re.IGNORECASE)
-        self._closing_re = re.compile(rf'<\s*/\s*{self.tag_name}\s*>', re.IGNORECASE)
-        self._answer_tag_re = re.compile(rf'<answer>\s*({NUMBER_PATTERN})', re.IGNORECASE)
-        self._observe_tag_re = re.compile(rf'<observe>\s*({NUMBER_PATTERN})', re.IGNORECASE)
+        self._strict_re = re.compile(
+            rf"<{self.tag_name}>(.*?)</{self.tag_name}>", re.DOTALL | re.IGNORECASE
+        )
+        self._tolerant_re = re.compile(
+            rf"<\s*{self.tag_name}\s*>(.*?)<\s*/\s*{self.tag_name}\s*>", re.DOTALL | re.IGNORECASE
+        )
+        self._opening_re = re.compile(rf"<\s*{self.tag_name}\s*>", re.IGNORECASE)
+        self._closing_re = re.compile(rf"<\s*/\s*{self.tag_name}\s*>", re.IGNORECASE)
+        self._answer_tag_re = re.compile(rf"<answer>\s*({NUMBER_PATTERN})", re.IGNORECASE)
+        self._observe_tag_re = re.compile(rf"<observe>\s*({NUMBER_PATTERN})", re.IGNORECASE)
 
     def _normalize_text(self, text: str) -> str:
         """Normalize Unicode text (fullwidth digits, punctuation) to ASCII equivalents."""
@@ -75,7 +77,7 @@ class TagParser:
         # NFKC normalization converts fullwidth digits (１２３) and punctuation (，：) to ASCII
         return unicodedata.normalize("NFKC", text)
 
-    def parse(self, response: str) -> Optional[str]:
+    def parse(self, response: str) -> str | None:
         """Extract and validate tag content using hierarchical fallback strategies."""
         if not response or not isinstance(response, str):
             self.last_strategy_used = ParsingStrategy.FAILED
@@ -112,7 +114,7 @@ class TagParser:
         self.last_failure_reason = "No valid tags found after trying all strategies"
         return None
 
-    def _parse_strict(self, response: str) -> Optional[str]:
+    def _parse_strict(self, response: str) -> str | None:
         matches = self._strict_re.findall(response)
 
         for match in matches:
@@ -122,7 +124,7 @@ class TagParser:
 
         return None
 
-    def _parse_tolerant(self, response: str) -> Optional[str]:
+    def _parse_tolerant(self, response: str) -> str | None:
         """Allow whitespace around tags and slashes."""
         matches = self._tolerant_re.findall(response)
 
@@ -133,7 +135,7 @@ class TagParser:
 
         return None
 
-    def _parse_emergency(self, response: str) -> Optional[str]:
+    def _parse_emergency(self, response: str) -> str | None:
         """Lenient extraction for malformed tags (missing closing tag, etc)."""
         opening_match = self._opening_re.search(response)
 
@@ -157,7 +159,7 @@ class TagParser:
         content = response[start_pos:end_pos].strip()
         return self._validate_and_normalize(content)
 
-    def _validate_and_normalize(self, content: str) -> Optional[str]:
+    def _validate_and_normalize(self, content: str) -> str | None:
         """Validate content has numbers and normalize bracket format."""
         content = content.strip()
         # Normalize Unicode in content as well
@@ -168,7 +170,7 @@ class TagParser:
             return None
 
         # Tightened "done" filter: exact match only (was rejecting valid outputs like "done: 5")
-        if re.fullmatch(r'\s*done\s*\.?\s*', content, flags=re.IGNORECASE):
+        if re.fullmatch(r"\s*done\s*\.?\s*", content, flags=re.IGNORECASE):
             self.last_failure_reason = "Content is just 'done' (model gave up)"
             return None
 
@@ -192,7 +194,7 @@ class TagParser:
         content = content.strip()
 
         # extract square brackets if present
-        if '[' in content and ']' in content:
+        if "[" in content and "]" in content:
             match = _BRACKET_START_RE.search(content)
             if match:
                 return f"[{match.group(1)}]"
@@ -201,12 +203,12 @@ class TagParser:
                 return f"[{match.group(1)}]"
 
         # convert parentheses to brackets (avoid matching function notation like P(0))
-        if '(' in content and ')' in content:
+        if "(" in content and ")" in content:
             match = _PAREN_START_RE.search(content)
-            if match and ',' in match.group(1):
+            if match and "," in match.group(1):
                 return f"[{match.group(1)}]"
             match = _PAREN_END_RE.search(content)
-            if match and ',' in match.group(1):
+            if match and "," in match.group(1):
                 return f"[{match.group(1)}]"
 
         # handle verbose reasoning model output
@@ -227,7 +229,7 @@ class TagParser:
 
         return content
 
-    def _extract_from_reasoning(self, reasoning_text: str) -> Optional[str]:
+    def _extract_from_reasoning(self, reasoning_text: str) -> str | None:
         """Extract final answer from verbose reasoning (for o1, DeepSeek-Reasoner, etc)."""
         text = reasoning_text.strip()
 
@@ -260,7 +262,7 @@ class TagParser:
         # fallback: last number overall (prefer integers)
         all_numbers = _NUMBER_RE.findall(text)
         if all_numbers:
-            integers = [n for n in all_numbers if '.' not in n]
+            integers = [n for n in all_numbers if "." not in n]
             if integers:
                 return integers[-1]
             else:

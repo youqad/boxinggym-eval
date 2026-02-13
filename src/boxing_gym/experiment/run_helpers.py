@@ -1,7 +1,8 @@
 import copy
 import logging
 import random
-from typing import Any, Dict, List
+from typing import Any
+
 try:
     from omegaconf import ListConfig
 except Exception:
@@ -11,8 +12,8 @@ import numpy as np
 from omegaconf import OmegaConf
 
 from boxing_gym.agents.agent import LMExperimenter
-from boxing_gym.experiment.utils import compute_z_score, create_fallback_result
 from boxing_gym.envs.registry import get_environment_registry
+from boxing_gym.experiment.utils import compute_z_score, create_fallback_result
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 def build_env_goal(
     env_name: str,
     goal_name: str,
-    env_params: Dict[str, Any],
+    env_params: dict[str, Any],
     include_prior: bool,
 ):
     nametoenv, nameenvtogoal = get_environment_registry()
@@ -49,7 +50,7 @@ def pre_generate_eval_points(
     nameenvtogoal,
     env_name: str,
     goal_name: str,
-    env_params: Dict[str, Any],
+    env_params: dict[str, Any],
     include_prior: bool,
     num_evals: int,
     seed: int,
@@ -178,7 +179,9 @@ def compute_z_results(
     if has_norm_factors:
         print("\n📊 Z-Score Results (standardized for paper comparison):")
     else:
-        print(f"⚠️  No normalization factors found for this goal (norm_mu={norm_mu}, norm_sigma={norm_sigma})")
+        print(
+            f"⚠️  No normalization factors found for this goal (norm_mu={norm_mu}, norm_sigma={norm_sigma})"
+        )
 
     for i, result_entry in enumerate(all_data[0]):
         budget = _budget_for_z_result(i)
@@ -233,8 +236,8 @@ def compute_z_results(
 
 
 def aggregate_z_results_across_seeds(
-    seed_results: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    seed_results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Aggregate z-results across multiple seeds.
 
     For each budget, computes:
@@ -286,16 +289,18 @@ def aggregate_z_results_across_seeds(
 
         n = len(z_means)
         if n == 0:
-            aggregated.append({
-                "budget": budget,
-                "z_mean": None,
-                "z_stderr": None,
-                "z_std": None,
-                "raw_mean": None,
-                "raw_stderr": None,
-                "n_seeds": 0,
-                "per_seed": {},
-            })
+            aggregated.append(
+                {
+                    "budget": budget,
+                    "z_mean": None,
+                    "z_stderr": None,
+                    "z_std": None,
+                    "raw_mean": None,
+                    "raw_stderr": None,
+                    "n_seeds": 0,
+                    "per_seed": {},
+                }
+            )
             continue
 
         z_mean_agg = float(np.mean(z_means))
@@ -306,16 +311,18 @@ def aggregate_z_results_across_seeds(
         raw_std = float(np.std(raw_means, ddof=1)) if len(raw_means) > 1 else 0.0
         raw_stderr = raw_std / np.sqrt(len(raw_means)) if raw_means else None
 
-        aggregated.append({
-            "budget": budget,
-            "z_mean": z_mean_agg,
-            "z_stderr": float(z_stderr),
-            "z_std": z_std_agg,
-            "raw_mean": raw_mean_agg,
-            "raw_stderr": float(raw_stderr) if raw_stderr is not None else None,
-            "n_seeds": n,
-            "per_seed": per_seed,
-        })
+        aggregated.append(
+            {
+                "budget": budget,
+                "z_mean": z_mean_agg,
+                "z_stderr": float(z_stderr),
+                "z_std": z_std_agg,
+                "raw_mean": raw_mean_agg,
+                "raw_stderr": float(raw_stderr) if raw_stderr is not None else None,
+                "n_seeds": n,
+                "per_seed": per_seed,
+            }
+        )
 
     return aggregated
 
@@ -333,7 +340,11 @@ def collect_results_payload(all_data):
         else:
             new_d2 = d[1]
 
-        if isinstance(new_d1, (list, tuple)) and len(new_d1) >= 2 and (new_d1[0] is None or new_d1[1] is None):
+        if (
+            isinstance(new_d1, (list, tuple))
+            and len(new_d1) >= 2
+            and (new_d1[0] is None or new_d1[1] is None)
+        ):
             new_d1 = create_fallback_result("Evaluation returned None metrics")[0]
         results.append([new_d1, new_d2])
     return results
@@ -353,16 +364,16 @@ def collect_observations(all_data):
 
 def build_results_payload(
     config,
-    wandb_meta: Dict[str, Any],
-    results: List[Any],
-    z_results: List[Dict[str, Any]],
+    wandb_meta: dict[str, Any],
+    results: list[Any],
+    z_results: list[dict[str, Any]],
     norm_mu: float,
     norm_sigma: float,
     all_data,
-    observations: List[Any],
+    observations: list[Any],
     ppl_artifacts,
-    scientist_messages: List[Any],
-    naive_messages: List[Any],
+    scientist_messages: list[Any],
+    naive_messages: list[Any],
 ):
     config_payload = OmegaConf.to_container(config, resolve=True)
     try:

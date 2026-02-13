@@ -1,16 +1,15 @@
-"""Statistical functions for benchmark analysis.
+"""Statistical tests for benchmark analysis with multiple comparison corrections."""
 
-Provides proper statistical tests with corrections for multiple comparisons.
-"""
-
-import numpy as np
 from dataclasses import dataclass
 from typing import Literal
+
+import numpy as np
 
 
 @dataclass
 class TTestResult:
     """Result of a t-test."""
+
     t_statistic: float
     p_value: float
     significant: bool  # at alpha=0.05
@@ -20,6 +19,7 @@ class TTestResult:
 @dataclass
 class BootstrapCIResult:
     """Result of bootstrap confidence interval."""
+
     mean: float
     ci_low: float
     ci_high: float
@@ -29,6 +29,7 @@ class BootstrapCIResult:
 @dataclass
 class EffectSizeResult:
     """Result of effect size calculation."""
+
     d: float
     interpretation: Literal["negligible", "small", "medium", "large"]
 
@@ -52,7 +53,7 @@ def welch_ttest(a: np.ndarray, b: np.ndarray, alpha: float = 0.05) -> TTestResul
             t_statistic=float("nan"),
             p_value=1.0,
             significant=False,
-            interpretation="insufficient data"
+            interpretation="insufficient data",
         )
 
     t_stat, p_val = stats.ttest_ind(a, b, equal_var=False)
@@ -71,7 +72,7 @@ def welch_ttest(a: np.ndarray, b: np.ndarray, alpha: float = 0.05) -> TTestResul
         t_statistic=float(t_stat),
         p_value=float(p_val),
         significant=significant,
-        interpretation=interp
+        interpretation=interp,
     )
 
 
@@ -98,7 +99,7 @@ def paired_ttest(a: np.ndarray, b: np.ndarray, alpha: float = 0.05) -> TTestResu
             t_statistic=float("nan"),
             p_value=1.0,
             significant=False,
-            interpretation="insufficient data"
+            interpretation="insufficient data",
         )
 
     t_stat, p_val = stats.ttest_rel(a, b)
@@ -117,7 +118,7 @@ def paired_ttest(a: np.ndarray, b: np.ndarray, alpha: float = 0.05) -> TTestResu
         t_statistic=float(t_stat),
         p_value=float(p_val),
         significant=significant,
-        interpretation=interp
+        interpretation=interp,
     )
 
 
@@ -126,23 +127,13 @@ def bootstrap_ci(
     confidence: float = 0.95,
     n_bootstrap: int = 10000,
     statistic: str = "mean",
-    seed: int | None = 42
+    seed: int | None = 42,
 ) -> BootstrapCIResult:
-    """Bootstrap confidence interval.
+    """Bootstrap confidence interval via resampling. NaN values dropped.
 
-    Non-parametric CI estimation via resampling.
-
-    Args:
-        data: Input array (NaN values are dropped)
-        confidence: Confidence level (default 0.95)
-        n_bootstrap: Number of bootstrap samples (default 10000)
-        statistic: "mean" or "median"
-        seed: RNG seed for reproducibility. Default 42 for benchmark consistency.
-              Use None for fresh randomness each call.
-
-    Note: Uses vectorized sampling when memory-safe (~100x faster).
-    RNG draw order differs from loop-based sampling, so results may
-    differ from pre-vectorization versions for the same seed.
+    Default seed=42 for reproducibility. Pass None for fresh randomness.
+    Uses vectorized sampling when memory-safe (~100x faster); RNG draw order
+    differs from loop-based sampling so results may differ for the same seed.
     """
     data = np.asarray(data)
 
@@ -152,10 +143,7 @@ def bootstrap_ci(
     if len(data) < 2:
         mean_val = float(data[0]) if len(data) == 1 else float("nan")
         return BootstrapCIResult(
-            mean=mean_val,
-            ci_low=mean_val,
-            ci_high=mean_val,
-            confidence=confidence
+            mean=mean_val, ci_low=mean_val, ci_high=mean_val, confidence=confidence
         )
 
     if statistic not in ("mean", "median"):
@@ -193,12 +181,7 @@ def bootstrap_ci(
     else:
         center = float(np.median(data))
 
-    return BootstrapCIResult(
-        mean=center,
-        ci_low=ci_low,
-        ci_high=ci_high,
-        confidence=confidence
-    )
+    return BootstrapCIResult(mean=center, ci_low=ci_low, ci_high=ci_high, confidence=confidence)
 
 
 def cohens_d(a: np.ndarray, b: np.ndarray) -> EffectSizeResult:
@@ -320,17 +303,12 @@ def sem(data: np.ndarray) -> float:
 
 
 def compare_models(
-    df,
-    model_col: str = "model",
-    score_col: str = "z_mean",
-    reference_model: str | None = None
+    df, model_col: str = "model", score_col: str = "z_mean", reference_model: str | None = None
 ) -> dict:
     """Compare all models against a reference (or best model).
 
     Returns dict with pairwise comparisons and FDR-corrected p-values.
     """
-    import pandas as pd
-
     models = df[model_col].unique()
 
     if reference_model is None:
@@ -350,13 +328,15 @@ def compare_models(
         model_scores = df[df[model_col] == model][score_col].values
         result = welch_ttest(ref_scores, model_scores)
 
-        comparisons.append({
-            "model": model,
-            "reference": reference_model,
-            "t_statistic": result.t_statistic,
-            "p_value": result.p_value,
-            "interpretation": result.interpretation,
-        })
+        comparisons.append(
+            {
+                "model": model,
+                "reference": reference_model,
+                "t_statistic": result.t_statistic,
+                "p_value": result.p_value,
+                "interpretation": result.interpretation,
+            }
+        )
         p_values.append(result.p_value)
 
     # FDR correction

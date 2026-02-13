@@ -1,17 +1,15 @@
 import logging
 import os
 import threading
-import tqdm
-import arviz as az
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional, List, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from boxing_gym.experiment.utils import (
-    _baseline_prediction_for_goal
-)
-from boxing_gym.experiment.ppl import (
-    get_ppl_prediction
-)
+import arviz as az
+import tqdm
+
+from boxing_gym.experiment.ppl import get_ppl_prediction
+from boxing_gym.experiment.utils import _baseline_prediction_for_goal
+
 # try importing run_box_loop, handle if missing
 try:
     from boxing_gym.agents.model_search import run_box_loop
@@ -35,7 +33,7 @@ DEFAULT_EVAL_PARALLEL_MODE = "clone"
 # traced via Weave's auto-patching of LiteLLM.
 
 
-def _make_prediction(scientist, question: str, idx: int) -> Tuple[int, str]:
+def _make_prediction(scientist, question: str, idx: int) -> tuple[int, str]:
     """Make a single prediction.
 
     Returns (idx, prediction) tuple to preserve ordering.
@@ -89,14 +87,30 @@ def _merge_usage_stats(target, sources) -> None:
         source_stats = getattr(source, "_usage_stats", None)
         if not isinstance(source_stats, dict):
             continue
-        target_stats["prompt_tokens"] = target_stats.get("prompt_tokens", 0) + source_stats.get("prompt_tokens", 0)
-        target_stats["completion_tokens"] = target_stats.get("completion_tokens", 0) + source_stats.get("completion_tokens", 0)
-        target_stats["reasoning_tokens"] = target_stats.get("reasoning_tokens", 0) + source_stats.get("reasoning_tokens", 0)
-        target_stats["total_tokens"] = target_stats.get("total_tokens", 0) + source_stats.get("total_tokens", 0)
-        target_stats["total_cost_usd"] = target_stats.get("total_cost_usd", 0.0) + source_stats.get("total_cost_usd", 0.0)
-        target_stats["call_count"] = target_stats.get("call_count", 0) + source_stats.get("call_count", 0)
-        target_stats["retry_count"] = target_stats.get("retry_count", 0) + source_stats.get("retry_count", 0)
-        target_stats["error_count"] = target_stats.get("error_count", 0) + source_stats.get("error_count", 0)
+        target_stats["prompt_tokens"] = target_stats.get("prompt_tokens", 0) + source_stats.get(
+            "prompt_tokens", 0
+        )
+        target_stats["completion_tokens"] = target_stats.get(
+            "completion_tokens", 0
+        ) + source_stats.get("completion_tokens", 0)
+        target_stats["reasoning_tokens"] = target_stats.get(
+            "reasoning_tokens", 0
+        ) + source_stats.get("reasoning_tokens", 0)
+        target_stats["total_tokens"] = target_stats.get("total_tokens", 0) + source_stats.get(
+            "total_tokens", 0
+        )
+        target_stats["total_cost_usd"] = target_stats.get("total_cost_usd", 0.0) + source_stats.get(
+            "total_cost_usd", 0.0
+        )
+        target_stats["call_count"] = target_stats.get("call_count", 0) + source_stats.get(
+            "call_count", 0
+        )
+        target_stats["retry_count"] = target_stats.get("retry_count", 0) + source_stats.get(
+            "retry_count", 0
+        )
+        target_stats["error_count"] = target_stats.get("error_count", 0) + source_stats.get(
+            "error_count", 0
+        )
         target_stats.setdefault("latencies_ms", [])
         target_stats["latencies_ms"].extend(source_stats.get("latencies_ms", []))
 
@@ -149,7 +163,7 @@ def evaluate(final_results, goal, scientist, num_evals, include_prior, parallel:
     questions, gts = [], []
     for _ in range(num_evals):
         question, gt = goal.get_goal_eval_question(include_prior)
-        questions.append(final_results + '\n' + question)
+        questions.append(final_results + "\n" + question)
         gts.append(gt)
 
     # 2. run predictions
@@ -157,7 +171,7 @@ def evaluate(final_results, goal, scientist, num_evals, include_prior, parallel:
     parallel_mode = _get_parallel_mode()
     run_parallel = bool(parallel and num_evals > 1)
 
-    clones: Optional[List] = None
+    clones: list | None = None
 
     if run_parallel:
         if parallel_mode == "shared":
@@ -198,12 +212,14 @@ def evaluate(final_results, goal, scientist, num_evals, include_prior, parallel:
                 else:
                     parallel_mode = "clone"
         else:
-            logger.warning(
-                f"Unknown parallel eval mode '{parallel_mode}'; running sequentially."
-            )
+            logger.warning(f"Unknown parallel eval mode '{parallel_mode}'; running sequentially.")
             run_parallel = False
 
-        if run_parallel and parallel_mode == "shared" and not _agent_supports_parallel_eval(scientist):
+        if (
+            run_parallel
+            and parallel_mode == "shared"
+            and not _agent_supports_parallel_eval(scientist)
+        ):
             logger.warning(
                 "Parallel eval requested but agent is not thread-safe; running sequentially."
             )
@@ -228,14 +244,13 @@ def evaluate(final_results, goal, scientist, num_evals, include_prior, parallel:
         elif parallel_mode == "lock":
             lock = threading.Lock()
 
-            def locked_prediction(question: str, idx: int) -> Tuple[int, str]:
+            def locked_prediction(question: str, idx: int) -> tuple[int, str]:
                 with lock:
                     return _make_prediction(scientist, question, idx)
 
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = {
-                    executor.submit(locked_prediction, q, i): i
-                    for i, q in enumerate(questions)
+                    executor.submit(locked_prediction, q, i): i for i, q in enumerate(questions)
                 }
                 for future in tqdm.tqdm(as_completed(futures), total=num_evals):
                     idx, pred = future.result()
@@ -264,15 +279,26 @@ def evaluate(final_results, goal, scientist, num_evals, include_prior, parallel:
     return goal.evaluate_predictions(predictions, gts), questions, gts, predictions
 
 
-def ppl_evaluate(final_results, goal, scientist, num_evals, include_prior, proposed_programs_all, critic_info_all, prior_mode=False, critic_mode=False, llm_model=None, call_recorder=None):
-
+def ppl_evaluate(
+    final_results,
+    goal,
+    scientist,
+    num_evals,
+    include_prior,
+    proposed_programs_all,
+    critic_info_all,
+    prior_mode=False,
+    critic_mode=False,
+    llm_model=None,
+    call_recorder=None,
+):
     if not prior_mode:
         goal.env.get_df()
 
     if len(critic_info_all) > 0:
         if len(critic_info_all[-1]) > 0:
-            prev_str_hypotheses = critic_info_all[-1][0]['str_hypotheses']
-            prev_synthesis = critic_info_all[-1][0]['synthesis']
+            prev_str_hypotheses = critic_info_all[-1][0]["str_hypotheses"]
+            prev_synthesis = critic_info_all[-1][0]["synthesis"]
         else:
             prev_str_hypotheses = None
             prev_synthesis = None
@@ -282,10 +308,10 @@ def ppl_evaluate(final_results, goal, scientist, num_evals, include_prior, propo
         prev_synthesis = None
 
     if run_box_loop is None:
-         raise ImportError("run_box_loop not available. Check boxing_gym.agents.model_search")
+        raise ImportError("run_box_loop not available. Check boxing_gym.agents.model_search")
 
     # use scientist's LLM for Box's Loop
-    model_name = llm_model or getattr(scientist, 'model_name', None)
+    model_name = llm_model or getattr(scientist, "model_name", None)
 
     proposed_programs, critic_info, box_loop_stats = run_box_loop(
         env=goal.env,
@@ -314,7 +340,13 @@ def ppl_evaluate(final_results, goal, scientist, num_evals, include_prior, propo
             gts.append(gt)
             questions.append(q_text)
             predictions.append(_baseline_prediction_for_goal(goal))
-        return goal.evaluate_predictions(predictions, gts), questions, gts, predictions, box_loop_stats
+        return (
+            goal.evaluate_predictions(predictions, gts),
+            questions,
+            gts,
+            predictions,
+            box_loop_stats,
+        )
 
     program_dict = proposed_programs_all[-1][0]
 
@@ -349,34 +381,33 @@ def ppl_evaluate(final_results, goal, scientist, num_evals, include_prior, propo
         questions.append(q_text)
         predictions.append(prediction)
         print(f"prediction: {prediction}, gt: {gt}")
-    
 
     # return box_loop_stats as an optional 5th element for downstream logging (W&B)
     return goal.evaluate_predictions(predictions, gts), questions, gts, predictions, box_loop_stats
 
 
 def evaluate_naive_explanation(
-        final_results,
-        goal,
-        scientist,
-        naive_agent,
-        num_evals,
-        include_prior,
-        com_limit,
-        use_ppl=False,
-        step_logger: Optional["StepLogger"] = None,
-        norm_mu: Optional[float] = None,
-        norm_sigma: Optional[float] = None,
-        llm_model=None,
-        call_recorder=None,
+    final_results,
+    goal,
+    scientist,
+    naive_agent,
+    num_evals,
+    include_prior,
+    com_limit,
+    use_ppl=False,
+    step_logger: Optional["StepLogger"] = None,
+    norm_mu: float | None = None,
+    norm_sigma: float | None = None,
+    llm_model=None,
+    call_recorder=None,
 ):
     if use_ppl:
         goal.env.get_df()
         if run_box_loop is None:
-             raise ImportError("run_box_loop not available. Check boxing_gym.agents.model_search")
+            raise ImportError("run_box_loop not available. Check boxing_gym.agents.model_search")
 
         # use scientist's LLM for Box's Loop
-        model_name = llm_model or getattr(scientist, 'model_name', None)
+        model_name = llm_model or getattr(scientist, "model_name", None)
 
         proposed_programs, _, _ = run_box_loop(
             env=goal.env,
@@ -395,19 +426,19 @@ def evaluate_naive_explanation(
                 include_prior=include_prior,
             )
         else:
-            str_prob_prog = proposed_programs[0].get('str_prob_prog')
-            trace = proposed_programs[0].get('trace')
+            str_prob_prog = proposed_programs[0].get("str_prob_prog")
+            trace = proposed_programs[0].get("trace")
             params_summary_str = ""
             try:
                 if trace is not None:
-                    params_summary_str = az.summary(trace)['mean'].to_string()
+                    params_summary_str = az.summary(trace)["mean"].to_string()
             except Exception as e:
                 logger.warning(f"Failed to summarize PPL trace for comm prompt: {e}")
                 params_summary_str = ""
             request_prompt = goal.get_comm_prompt(
-                com_limit=com_limit, 
-                include_prior=include_prior, 
-                use_ppl=use_ppl, 
+                com_limit=com_limit,
+                include_prior=include_prior,
+                use_ppl=use_ppl,
                 str_prob_prog=str_prob_prog,
                 params_summary_str=params_summary_str,
             )
@@ -438,7 +469,9 @@ def evaluate_naive_explanation(
     if step_logger is not None:
         try:
             naive_eval_score = naive_result[0] if naive_result and len(naive_result) > 0 else None
-            scientist_eval_score = scientist_result[0] if scientist_result and len(scientist_result) > 0 else None
+            scientist_eval_score = (
+                scientist_result[0] if scientist_result and len(scientist_result) > 0 else None
+            )
 
             # z-scores if normalization parameters available
             naive_z_mean = None
@@ -448,7 +481,9 @@ def evaluate_naive_explanation(
                 if naive_eval_score is not None:
                     naive_mean_val = None
                     if isinstance(naive_eval_score, dict):
-                        naive_mean_val = naive_eval_score.get("mse", naive_eval_score.get("accuracy", naive_eval_score.get("score")))
+                        naive_mean_val = naive_eval_score.get(
+                            "mse", naive_eval_score.get("accuracy", naive_eval_score.get("score"))
+                        )
                     elif isinstance(naive_eval_score, (list, tuple)) and len(naive_eval_score) >= 1:
                         naive_mean_val = naive_eval_score[0]
                     if naive_mean_val is not None:
@@ -458,8 +493,14 @@ def evaluate_naive_explanation(
                 if scientist_eval_score is not None:
                     scientist_mean_val = None
                     if isinstance(scientist_eval_score, dict):
-                        scientist_mean_val = scientist_eval_score.get("mse", scientist_eval_score.get("accuracy", scientist_eval_score.get("score")))
-                    elif isinstance(scientist_eval_score, (list, tuple)) and len(scientist_eval_score) >= 1:
+                        scientist_mean_val = scientist_eval_score.get(
+                            "mse",
+                            scientist_eval_score.get("accuracy", scientist_eval_score.get("score")),
+                        )
+                    elif (
+                        isinstance(scientist_eval_score, (list, tuple))
+                        and len(scientist_eval_score) >= 1
+                    ):
                         scientist_mean_val = scientist_eval_score[0]
                     if scientist_mean_val is not None:
                         scientist_z_mean = (float(scientist_mean_val) - norm_mu) / norm_sigma
