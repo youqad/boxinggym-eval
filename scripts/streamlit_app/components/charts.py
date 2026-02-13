@@ -1,37 +1,31 @@
 """Plotly chart builders for BoxingGym sweep analysis."""
 
-from typing import Dict, List, Optional
-
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# Color constants
 COLORS = {
     "positive": "#34d399",  # Green - good (low z_mean)
     "negative": "#fb7185",  # Red - bad (high z_mean)
-    "neutral": "#f59e0b",   # Amber - neutral
-    "accent": "#f59e0b",    # Primary accent
+    "neutral": "#f59e0b",  # Amber - neutral
+    "accent": "#f59e0b",  # Primary accent
     "text": "#f1f5f9",
     "grid": "rgba(148, 163, 184, 0.1)",
 }
 
-# Colorblind-safe palette (blue/orange/gray, distinguishable under all CVD types)
 COLORS_ACCESSIBLE = {
-    "good": "#2563eb",      # Blue - beats baseline (z < 0)
-    "bad": "#ea580c",       # Orange - worse than baseline (z > 0.3)
-    "neutral": "#6b7280",   # Gray - near baseline
+    "good": "#2563eb",  # Blue - beats baseline (z < 0)
+    "bad": "#ea580c",  # Orange - worse than baseline (z > 0.3)
+    "neutral": "#6b7280",  # Gray - near baseline
 }
 
-# Dark mode tooltip styling (applied to each trace to override Plotly's trace-color default)
 DARK_HOVERLABEL = dict(
     bgcolor="#1e293b",  # slate-800
     bordercolor="#334155",  # slate-700
     font=dict(color="#f1f5f9", size=12),  # slate-100
 )
 
-# Common layout settings
 LAYOUT_DEFAULTS = dict(
     template="plotly_dark",
     paper_bgcolor="rgba(0,0,0,0)",
@@ -42,15 +36,8 @@ LAYOUT_DEFAULTS = dict(
 )
 
 
-def build_importance_chart(importances: List[Dict]) -> go.Figure:
-    """Build horizontal bar chart for parameter importance.
-
-    Args:
-        importances: List of dicts with 'parameter' and 'importance' keys
-
-    Returns:
-        Plotly figure
-    """
+def build_importance_chart(importances: list[dict]) -> go.Figure:
+    """Horizontal bar chart for parameter importance."""
     if not importances:
         return go.Figure().add_annotation(text="No importance data", showarrow=False)
 
@@ -85,15 +72,8 @@ def build_importance_chart(importances: List[Dict]) -> go.Figure:
     return fig
 
 
-def build_model_ranking_chart(aggregates: List[Dict]) -> go.Figure:
-    """Build horizontal bar chart for model rankings.
-
-    Args:
-        aggregates: List of dicts with model aggregation results
-
-    Returns:
-        Plotly figure
-    """
+def build_model_ranking_chart(aggregates: list[dict]) -> go.Figure:
+    """Horizontal bar chart for model rankings."""
     if not aggregates:
         return go.Figure().add_annotation(text="No model data", showarrow=False)
 
@@ -109,20 +89,16 @@ def build_model_ranking_chart(aggregates: List[Dict]) -> go.Figure:
 
     df = pd.DataFrame(aggregates).sort_values("mean", ascending=True)
 
-    # Clip display values for better visualization (cap at 5)
     actual_vals = df["mean"].values
     display_vals = np.clip(actual_vals, -2, 5)
 
-    # Color bars by performance
     colors = [
         COLORS["positive"] if v < -0.5 else COLORS["negative"] if v > 0.5 else COLORS["neutral"]
         for v in actual_vals
     ]
 
-    # Show actual value in label, but clip bar length
     text_labels = [f"{v:+.2f}" if abs(v) <= 5 else f"{v:+.1f}*" for v in actual_vals]
 
-    # Get error bars if available
     error_x = None
     if "sem" in df.columns:
         error_x = dict(
@@ -165,24 +141,15 @@ def build_model_ranking_chart(aggregates: List[Dict]) -> go.Figure:
 
 
 def build_heatmap_chart(
-    runs: List[Dict],
+    runs: list[dict],
     target_metric: str = "metric/eval/z_mean",
 ) -> go.Figure:
-    """Build environment × model heatmap.
-
-    Args:
-        runs: List of run dicts with config and metrics
-        target_metric: Metric column to visualize
-
-    Returns:
-        Plotly figure
-    """
+    """Environment x model heatmap."""
     if not runs:
         return go.Figure().add_annotation(text="No run data", showarrow=False)
 
     df = pd.DataFrame(runs)
 
-    # Find column names
     env_col = None
     model_col = None
 
@@ -208,20 +175,19 @@ def build_heatmap_chart(
             showarrow=False,
         )
 
-    # Create pivot table
+    # Coerce metric to numeric to avoid pivot/np.isnan crashes on mixed types.
+    df[metric_col] = pd.to_numeric(df[metric_col], errors="coerce")
     pivot = df.pivot_table(
         index=env_col,
         columns=model_col,
         values=metric_col,
         aggfunc="mean",
-    ).fillna(0)
+    )
 
-    # Truncate labels
     x_labels = [str(c)[:18] for c in pivot.columns]
     y_labels = [str(r).replace("_direct", "").replace("_", " ")[:22] for r in pivot.index]
 
-    # Create text matrix for annotations
-    text_matrix = [[f"{v:.2f}" if not np.isnan(v) else "" for v in row] for row in pivot.values]
+    text_matrix = [[f"{v:.2f}" if not pd.isna(v) else "" for v in row] for row in pivot.values]
 
     fig = go.Figure(
         go.Heatmap(
@@ -259,24 +225,15 @@ def build_heatmap_chart(
 
 
 def build_parameter_effect_chart(
-    aggregates: List[Dict],
+    aggregates: list[dict],
     parameter_name: str,
 ) -> go.Figure:
-    """Build bar chart showing parameter effect on z_mean.
-
-    Args:
-        aggregates: List of dicts with parameter aggregation results
-        parameter_name: Name of the parameter being analyzed
-
-    Returns:
-        Plotly figure
-    """
+    """Bar chart showing parameter effect on z_mean."""
     if not aggregates:
         return go.Figure().add_annotation(text="No data", showarrow=False)
 
     df = pd.DataFrame(aggregates).sort_values("mean", ascending=True)
 
-    # Get parameter value column
     param_col = None
     for col in df.columns:
         if col not in ["mean", "std", "count", "sem"]:
@@ -286,13 +243,11 @@ def build_parameter_effect_chart(
     if not param_col:
         return go.Figure().add_annotation(text="No parameter column", showarrow=False)
 
-    # Color bars by performance
     colors = [
         COLORS["positive"] if v < -0.5 else COLORS["negative"] if v > 0.5 else COLORS["neutral"]
         for v in df["mean"].values
     ]
 
-    # Error bars
     error_x = None
     if "sem" in df.columns:
         error_x = dict(type="data", array=df["sem"].values, visible=True)
@@ -326,37 +281,116 @@ def build_parameter_effect_chart(
     return fig
 
 
-# Paper comparison colors
+def build_budget_progression_sweep_chart(
+    df: pd.DataFrame,
+    metric_col: str,
+    budget_col: str,
+    model_col: str,
+    max_models: int = 8,
+) -> go.Figure:
+    """Line chart of z_mean vs budget by model."""
+    if (
+        df.empty
+        or metric_col not in df.columns
+        or budget_col not in df.columns
+        or model_col not in df.columns
+    ):
+        return go.Figure().add_annotation(text="No data for budget progression", showarrow=False)
+
+    df_plot = df[[model_col, budget_col, metric_col]].copy()
+    budget_num = pd.to_numeric(df_plot[budget_col], errors="coerce")
+    if budget_num.notna().sum() >= 2:
+        df_plot["_budget_key"] = budget_num
+        df_plot = df_plot.dropna(subset=["_budget_key", metric_col, model_col])
+        budget_key = "_budget_key"
+        xaxis_type = "linear"
+    else:
+        df_plot = df_plot.dropna(subset=[budget_col, metric_col, model_col])
+        df_plot["_budget_key"] = df_plot[budget_col].astype(str)
+        budget_key = "_budget_key"
+        xaxis_type = "category"
+
+    agg = df_plot.groupby([model_col, budget_key])[metric_col].mean().reset_index()
+    if agg.empty:
+        return go.Figure().add_annotation(text="No data for budget progression", showarrow=False)
+
+    models = agg[model_col].dropna().unique().tolist()
+    models = models[:max_models]
+
+    fig = go.Figure()
+
+    palette = [
+        "#60a5fa",
+        "#f472b6",
+        "#4ade80",
+        "#facc15",
+        "#f97316",
+        "#a78bfa",
+        "#22c55e",
+        "#fb7185",
+    ]
+
+    for i, model in enumerate(models):
+        model_data = agg[agg[model_col] == model].sort_values(budget_key)
+        fig.add_trace(
+            go.Scatter(
+                x=model_data[budget_key],
+                y=model_data[metric_col],
+                mode="lines+markers",
+                name=str(model)[:20],
+                line=dict(color=palette[i % len(palette)], width=2),
+                marker=dict(size=7),
+                hovertemplate=f"{model}<br>Budget: %{{x}}<br>z_mean: %{{y:.3f}}<extra></extra>",
+                hoverlabel=DARK_HOVERLABEL,
+            )
+        )
+
+    fig.update_layout(
+        **LAYOUT_DEFAULTS,
+        title=dict(text="Budget progression by model", x=0),
+        xaxis=dict(
+            title="Budget",
+            type=xaxis_type,
+            gridcolor=COLORS["grid"],
+            zeroline=True,
+            zerolinecolor=COLORS["grid"],
+        ),
+        yaxis=dict(
+            title="z_mean (lower is better)",
+            gridcolor=COLORS["grid"],
+            zeroline=True,
+            zerolinecolor=COLORS["grid"],
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5),
+        height=500,
+    )
+    fig.update_layout(margin=dict(l=50, r=20, t=40, b=80))
+
+    fig.add_hline(y=0, line_dash="dash", line_color="rgba(148, 163, 184, 0.5)")
+
+    return fig
+
+
 PAPER_COLORS = {
     "Paper (GPT-4o)": "#60a5fa",  # blue
-    "Paper (BOX)": "#fb923c",     # orange
+    "Paper (BOX)": "#fb923c",  # orange
 }
 
 
 def build_budget_progression_chart(
     paper_df: pd.DataFrame,
     sweep_df: pd.DataFrame,
-    selected_envs: Optional[List[str]] = None,
+    selected_envs: list[str] | None = None,
     include_prior: bool = True,
 ) -> go.Figure:
-    """Build faceted line chart showing z_mean vs experiment budget.
-
-    Paper lines are dashed; sweep model lines are solid.
-
-    Args:
-        paper_df: DataFrame with paper baselines
-        sweep_df: DataFrame with sweep results
-        selected_envs: Optional list of environments to show
-        include_prior: Filter to this prior setting
-
-    Returns:
-        Plotly figure with faceted subplots
-    """
-    # Filter by prior
+    """Faceted line chart: z_mean vs budget. Paper lines dashed, sweep lines solid."""
     paper = paper_df[paper_df["include_prior"] == include_prior].copy()
-    sweep = sweep_df[sweep_df["include_prior"] == include_prior].copy() if len(sweep_df) > 0 else pd.DataFrame()
+    sweep = (
+        sweep_df[sweep_df["include_prior"] == include_prior].copy()
+        if len(sweep_df) > 0
+        else pd.DataFrame()
+    )
 
-    # Get environments to show
     if selected_envs:
         envs = selected_envs
     else:
@@ -365,11 +399,9 @@ def build_budget_progression_chart(
     if len(envs) == 0:
         return go.Figure().add_annotation(text="No data for selected filters", showarrow=False)
 
-    # Create subplots grid
     n_cols = min(3, len(envs))
     n_rows = (len(envs) + n_cols - 1) // n_cols
 
-    # Shorten environment names for subplot titles
     short_envs = [e.replace("_direct", "").replace("_", " ")[:18] for e in envs]
 
     fig = make_subplots(
@@ -377,10 +409,9 @@ def build_budget_progression_chart(
         cols=n_cols,
         subplot_titles=short_envs,
         horizontal_spacing=0.12,  # more space between columns
-        vertical_spacing=0.18,    # more space between rows for titles
+        vertical_spacing=0.18,
     )
 
-    # Track which models we've added to legend
     legend_added = set()
 
     for idx, env in enumerate(envs):
@@ -422,7 +453,12 @@ def build_budget_progression_chart(
             sweep_env = sweep[sweep["env"] == env]
             models = sweep_env["model"].unique() if "model" in sweep_env.columns else []
 
-            sweep_colors = ["#a78bfa", "#f472b6", "#4ade80", "#facc15"]  # purple, pink, green, yellow
+            sweep_colors = [
+                "#a78bfa",
+                "#f472b6",
+                "#4ade80",
+                "#facc15",
+            ]  # purple, pink, green, yellow
 
             for m_idx, model in enumerate(models[:4]):
                 data = sweep_env[sweep_env["model"] == model]
@@ -452,7 +488,6 @@ def build_budget_progression_chart(
                     col=col,
                 )
 
-    # Update layout
     fig.update_layout(
         **LAYOUT_DEFAULTS,
         title=dict(
@@ -460,7 +495,7 @@ def build_budget_progression_chart(
             x=0,
             y=0.98,
         ),
-        height=320 * n_rows + 60,  # more height per row
+        height=320 * n_rows + 60,
         legend=dict(
             orientation="h",
             yanchor="top",
@@ -470,16 +505,16 @@ def build_budget_progression_chart(
             font=dict(size=11),
         ),
     )
-    fig.update_layout(margin=dict(l=50, r=20, t=100, b=40))  # more top margin
+    fig.update_layout(margin=dict(l=50, r=20, t=100, b=40))
 
-    # Style subplot titles (annotations)
-    for annotation in fig['layout']['annotations']:
-        annotation['font'] = dict(size=12, color=COLORS["text"])
-        annotation['yshift'] = 10  # shift titles up slightly
+    for annotation in fig["layout"]["annotations"]:
+        annotation["font"] = dict(size=12, color=COLORS["text"])
+        annotation["yshift"] = 10
 
-    # Update axes - only show "Budget" on bottom row
     fig.update_xaxes(dtick=5, tickfont=dict(size=10))
-    fig.update_yaxes(title_text="z_mean", zeroline=True, zerolinecolor=COLORS["grid"], tickfont=dict(size=10))
+    fig.update_yaxes(
+        title_text="z_mean", zeroline=True, zerolinecolor=COLORS["grid"], tickfont=dict(size=10)
+    )
 
     return fig
 
@@ -490,34 +525,25 @@ def build_model_comparison_bars(
     budget: int = 10,
     include_prior: bool = True,
 ) -> go.Figure:
-    """Build grouped bar chart comparing models at specific budget.
-
-    Args:
-        paper_df: DataFrame with paper baselines
-        sweep_df: DataFrame with sweep results
-        budget: Budget level to compare (0 or 10)
-        include_prior: Filter to this prior setting
-
-    Returns:
-        Plotly figure with grouped bars
-    """
-    # Filter data
+    """Grouped bar chart comparing models at specific budget."""
     paper = paper_df[
         (paper_df["budget"] == budget) & (paper_df["include_prior"] == include_prior)
     ].copy()
-    sweep = sweep_df[
-        (sweep_df["budget"] == budget) & (sweep_df["include_prior"] == include_prior)
-    ].copy() if len(sweep_df) > 0 else pd.DataFrame()
+    sweep = (
+        sweep_df[
+            (sweep_df["budget"] == budget) & (sweep_df["include_prior"] == include_prior)
+        ].copy()
+        if len(sweep_df) > 0
+        else pd.DataFrame()
+    )
 
     if len(paper) == 0 and len(sweep) == 0:
         return go.Figure().add_annotation(text="No data for selected filters", showarrow=False)
 
-    # Get environments present in data
     envs = sorted(paper["env"].unique())
 
     fig = go.Figure()
 
-    # Paper GPT-4o bars
     gpt_data = paper[paper["source"] == "Paper (GPT-4o)"]
     if len(gpt_data) > 0:
         gpt_vals = []
@@ -538,7 +564,6 @@ def build_model_comparison_bars(
             )
         )
 
-    # Paper BOX bars
     box_data = paper[paper["source"] == "Paper (BOX)"]
     if len(box_data) > 0:
         box_vals = []
@@ -559,14 +584,12 @@ def build_model_comparison_bars(
             )
         )
 
-    # Sweep model bars
     if len(sweep) > 0:
         sweep_colors = ["#a78bfa", "#f472b6", "#4ade80", "#facc15"]
         models = sweep["model"].unique()[:4]
 
         for m_idx, model in enumerate(models):
             model_data = sweep[sweep["model"] == model]
-            # Aggregate by env
             agg = model_data.groupby("env")["z_mean"].mean()
 
             sweep_vals = []
@@ -617,16 +640,8 @@ def build_model_comparison_bars(
     return fig
 
 
-def build_leaderboard_chart(rankings: List[Dict]) -> go.Figure:
-    """Horizontal bar chart with bootstrap CI error bars for model rankings.
-
-    Args:
-        rankings: List of dicts with keys: model, mean, ci_low, ci_high, n,
-                  and optionally 'significant' (bool).
-
-    Returns:
-        Plotly figure with asymmetric error bars.
-    """
+def build_leaderboard_chart(rankings: list[dict]) -> go.Figure:
+    """Horizontal bar chart with bootstrap CI error bars."""
     if not rankings:
         return go.Figure().add_annotation(text="No ranking data", showarrow=False)
 
@@ -668,11 +683,7 @@ def build_leaderboard_chart(rankings: List[Dict]) -> go.Figure:
             textposition="outside",
             textfont=dict(size=11),
             cliponaxis=False,
-            hovertemplate=(
-                "<b>%{y}</b><br>"
-                "Mean z: %{x:+.3f}<br>"
-                "<extra></extra>"
-            ),
+            hovertemplate=("<b>%{y}</b><br>Mean z: %{x:+.3f}<br><extra></extra>"),
             hoverlabel=DARK_HOVERLABEL,
         )
     )
@@ -698,15 +709,8 @@ def build_leaderboard_chart(rankings: List[Dict]) -> go.Figure:
     return fig
 
 
-def build_env_champions_chart(champions: List[Dict]) -> go.Figure:
-    """Horizontal bar chart showing best model per environment.
-
-    Args:
-        champions: List of dicts with keys: env, model, z_mean.
-
-    Returns:
-        Plotly figure.
-    """
+def build_env_champions_chart(champions: list[dict]) -> go.Figure:
+    """Horizontal bar chart: best model per environment."""
     if not champions:
         return go.Figure().add_annotation(text="No champion data", showarrow=False)
 
@@ -721,10 +725,7 @@ def build_env_champions_chart(champions: List[Dict]) -> go.Figure:
         else:
             colors.append(COLORS_ACCESSIBLE["neutral"])
 
-    env_labels = [
-        e.replace("_direct", "").replace("_", " ").title()
-        for e in df["env"].values
-    ]
+    env_labels = [e.replace("_direct", "").replace("_", " ").title() for e in df["env"].values]
 
     fig = go.Figure(
         go.Bar(
@@ -732,11 +733,7 @@ def build_env_champions_chart(champions: List[Dict]) -> go.Figure:
             y=env_labels,
             orientation="h",
             marker_color=colors,
-            hovertemplate=(
-                "<b>%{y}</b><br>"
-                "z: %{x:+.3f}<br>"
-                "<extra></extra>"
-            ),
+            hovertemplate=("<b>%{y}</b><br>z: %{x:+.3f}<br><extra></extra>"),
             hoverlabel=DARK_HOVERLABEL,
         )
     )

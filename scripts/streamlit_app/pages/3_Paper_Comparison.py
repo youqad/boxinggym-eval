@@ -40,7 +40,9 @@ inject_custom_css()
 
 # Title
 st.title("📄 Paper Comparison")
-st.markdown("Overlay your sweep results on the paper's GPT-4o and BOX baselines. Dashed = paper, solid = your runs.")
+st.markdown(
+    "Overlay your sweep results on the paper's GPT-4o and BOX baselines. Dashed = paper, solid = your runs."
+)
 
 # Sidebar controls
 with st.sidebar:
@@ -95,17 +97,19 @@ if sweep_ids:
                 try:
                     runs = load_wandb_results(sweep_id, entity, project)
                     for r in runs:
-                        sweep_runs.append({
-                            "env": r.env,
-                            "goal": r.goal,
-                            "include_prior": r.include_prior,
-                            "use_ppl": r.use_ppl if r.use_ppl is not None else False,
-                            "budget": r.budget,
-                            "z_mean": r.z_mean,
-                            "model": r.model,
-                            "seed": r.seed,
-                            "source": "Sweep",
-                        })
+                        sweep_runs.append(
+                            {
+                                "env": r.env,
+                                "goal": r.goal,
+                                "include_prior": r.include_prior,
+                                "use_ppl": r.use_ppl if r.use_ppl is not None else False,
+                                "budget": r.budget,
+                                "z_mean": r.z_mean,
+                                "model": r.model,
+                                "seed": r.seed,
+                                "source": "Sweep",
+                            }
+                        )
                 except Exception as e:
                     st.warning(f"Failed to load sweep {sweep_id}: {e}")
 
@@ -142,12 +146,17 @@ with c3:
     if len(sweep_df) > 0:
         beat_gpt = 0
         paper_gpt = paper_df[paper_df["source"] == "Paper (GPT-4o)"]
-        for _, row in sweep_df.groupby(["env", "goal", "include_prior", "budget"])["z_mean"].mean().reset_index().iterrows():
+        for _, row in (
+            sweep_df.groupby(["env", "goal", "include_prior", "budget"])["z_mean"]
+            .mean()
+            .reset_index()
+            .iterrows()
+        ):
             paper_val = paper_gpt[
-                (paper_gpt["env"] == row["env"]) &
-                (paper_gpt["goal"] == row["goal"]) &
-                (paper_gpt["include_prior"] == row["include_prior"]) &
-                (paper_gpt["budget"] == row["budget"])
+                (paper_gpt["env"] == row["env"])
+                & (paper_gpt["goal"] == row["goal"])
+                & (paper_gpt["include_prior"] == row["include_prior"])
+                & (paper_gpt["budget"] == row["budget"])
             ]["z_mean"]
             if len(paper_val) > 0 and row["z_mean"] < paper_val.values[0]:
                 beat_gpt += 1
@@ -160,12 +169,17 @@ with c4:
     if len(sweep_df) > 0:
         beat_box = 0
         paper_box = paper_df[paper_df["source"] == "Paper (BOX)"]
-        for _, row in sweep_df.groupby(["env", "goal", "include_prior", "budget"])["z_mean"].mean().reset_index().iterrows():
+        for _, row in (
+            sweep_df.groupby(["env", "goal", "include_prior", "budget"])["z_mean"]
+            .mean()
+            .reset_index()
+            .iterrows()
+        ):
             paper_val = paper_box[
-                (paper_box["env"] == row["env"]) &
-                (paper_box["goal"] == row["goal"]) &
-                (paper_box["include_prior"] == row["include_prior"]) &
-                (paper_box["budget"] == row["budget"])
+                (paper_box["env"] == row["env"])
+                & (paper_box["goal"] == row["goal"])
+                & (paper_box["include_prior"] == row["include_prior"])
+                & (paper_box["budget"] == row["budget"])
             ]["z_mean"]
             if len(paper_val) > 0 and row["z_mean"] < paper_val.values[0]:
                 beat_box += 1
@@ -177,7 +191,9 @@ st.divider()
 
 # Budget Progression Chart (Figure 4 style)
 st.subheader("Budget Progression")
-st.caption("Shows z_mean vs experiment budget (in-context learning, not gradient-based). Paper baselines are dashed.")
+st.caption(
+    "Shows z_mean vs experiment budget (in-context learning, not gradient-based). Paper baselines are dashed."
+)
 
 # Get available environments
 all_envs = sorted(paper_df["env"].unique())
@@ -225,7 +241,9 @@ st.caption("Side-by-side comparison of z_mean values. Green = model beats GPT-4o
 table_rows = []
 
 # Get unique models from sweep data
-sweep_models = sorted(sweep_df["model"].unique()) if len(sweep_df) > 0 and "model" in sweep_df.columns else []
+sweep_models = (
+    sorted(sweep_df["model"].unique()) if len(sweep_df) > 0 and "model" in sweep_df.columns else []
+)
 
 # Get unique (env, goal, prior, budget) combinations from paper data
 paper_keys = paper_df.groupby(["env", "goal", "include_prior", "budget"]).first().reset_index()
@@ -238,20 +256,20 @@ for _, row in paper_keys.iterrows():
 
     # Get paper values
     gpt_val = paper_df[
-        (paper_df["env"] == env) &
-        (paper_df["goal"] == goal) &
-        (paper_df["include_prior"] == prior) &
-        (paper_df["budget"] == budget) &
-        (paper_df["source"] == "Paper (GPT-4o)")
+        (paper_df["env"] == env)
+        & (paper_df["goal"] == goal)
+        & (paper_df["include_prior"] == prior)
+        & (paper_df["budget"] == budget)
+        & (paper_df["source"] == "Paper (GPT-4o)")
     ]["z_mean"]
     gpt_val = gpt_val.values[0] if len(gpt_val) > 0 else None
 
     box_val = paper_df[
-        (paper_df["env"] == env) &
-        (paper_df["goal"] == goal) &
-        (paper_df["include_prior"] == prior) &
-        (paper_df["budget"] == budget) &
-        (paper_df["source"] == "Paper (BOX)")
+        (paper_df["env"] == env)
+        & (paper_df["goal"] == goal)
+        & (paper_df["include_prior"] == prior)
+        & (paper_df["budget"] == budget)
+        & (paper_df["source"] == "Paper (BOX)")
     ]["z_mean"]
     box_val = box_val.values[0] if len(box_val) > 0 else None
 
@@ -259,10 +277,10 @@ for _, row in paper_keys.iterrows():
     ppl_values = [False]  # default
     if sweep_has_ppl:
         sweep_match_all = sweep_df[
-            (sweep_df["env"] == env) &
-            (sweep_df["goal"] == goal) &
-            (sweep_df["include_prior"] == prior) &
-            (sweep_df["budget"] == budget)
+            (sweep_df["env"] == env)
+            & (sweep_df["goal"] == goal)
+            & (sweep_df["include_prior"] == prior)
+            & (sweep_df["budget"] == budget)
         ]
         if len(sweep_match_all) > 0:
             ppl_values = sorted(sweep_match_all["use_ppl"].unique())
@@ -286,22 +304,22 @@ for _, row in paper_keys.iterrows():
             if len(sweep_df) > 0 and use_ppl is not None and sweep_has_ppl:
                 # Filter including use_ppl
                 sweep_match = sweep_df[
-                    (sweep_df["env"] == env) &
-                    (sweep_df["goal"] == goal) &
-                    (sweep_df["include_prior"] == prior) &
-                    (sweep_df["budget"] == budget) &
-                    (sweep_df["model"] == model) &
-                    (sweep_df["use_ppl"] == use_ppl)
+                    (sweep_df["env"] == env)
+                    & (sweep_df["goal"] == goal)
+                    & (sweep_df["include_prior"] == prior)
+                    & (sweep_df["budget"] == budget)
+                    & (sweep_df["model"] == model)
+                    & (sweep_df["use_ppl"] == use_ppl)
                 ]["z_mean"]
                 row_data[model_col] = sweep_match.mean() if len(sweep_match) > 0 else None
             elif len(sweep_df) > 0 and not sweep_has_ppl:
                 # No use_ppl column - filter without it
                 sweep_match = sweep_df[
-                    (sweep_df["env"] == env) &
-                    (sweep_df["goal"] == goal) &
-                    (sweep_df["include_prior"] == prior) &
-                    (sweep_df["budget"] == budget) &
-                    (sweep_df["model"] == model)
+                    (sweep_df["env"] == env)
+                    & (sweep_df["goal"] == goal)
+                    & (sweep_df["include_prior"] == prior)
+                    & (sweep_df["budget"] == budget)
+                    & (sweep_df["model"] == model)
                 ]["z_mean"]
                 row_data[model_col] = sweep_match.mean() if len(sweep_match) > 0 else None
             else:
@@ -310,6 +328,7 @@ for _, row in paper_keys.iterrows():
         table_rows.append(row_data)
 
 comparison_df = pd.DataFrame(table_rows)
+
 
 # Apply styling - highlight model columns that beat GPT-4o
 def style_vs_gpt(row):
@@ -358,6 +377,8 @@ st.dataframe(
 # Footer
 st.divider()
 if sweep_ids:
-    st.caption(f"Comparing sweeps: {', '.join(sweep_ids)} | {len(sweep_df)} runs | {len(paper_df)} paper baselines")
+    st.caption(
+        f"Comparing sweeps: {', '.join(sweep_ids)} | {len(sweep_df)} runs | {len(paper_df)} paper baselines"
+    )
 else:
     st.caption(f"Viewing paper baselines only ({len(paper_df)} entries). Add sweep ID to compare.")

@@ -90,6 +90,13 @@ def inject_custom_css():
         margin-bottom: 1rem;
     }
 
+    /* Force Plotly charts to have transparent backgrounds */
+    .js-plotly-plot .svg-container,
+    .js-plotly-plot .main-svg,
+    .js-plotly-plot .user-select-none {
+        background-color: transparent !important;
+    }
+
     /* Hide Streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}

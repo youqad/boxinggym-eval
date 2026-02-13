@@ -55,7 +55,8 @@ st.markdown("""
 """)
 
 with st.expander("Usage"):
-    st.code("""
+    st.code(
+        """
 # web dashboard
 uv run python scripts/analyze_sweep_results.py --sweep-id <SWEEP_ID> --web
 
@@ -64,7 +65,9 @@ uv run python scripts/analyze_sweep_results.py --sweep-id <SWEEP_ID>
 
 # or run streamlit directly
 streamlit run scripts/streamlit_app/app.py
-    """, language="bash")
+    """,
+        language="bash",
+    )
 
 st.markdown("---")
 

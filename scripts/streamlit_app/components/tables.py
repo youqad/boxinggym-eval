@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -14,7 +11,7 @@ from .filters import get_paper_reference_value
 def compute_delta_column(
     df: pd.DataFrame,
     baseline: str,
-    ref_budget: Optional[str],
+    ref_budget: str | None,
 ) -> pd.DataFrame:
     """Add delta column comparing z_mean to paper baseline.
 
@@ -59,6 +56,7 @@ def style_dataframe(df: pd.DataFrame) -> pd.io.formats.style.Styler:
     Returns:
         Styled DataFrame
     """
+
     def color_delta(val):
         """Color delta values: green for negative (better), red for positive (worse)."""
         if pd.isna(val) or val == "—":
@@ -130,7 +128,7 @@ def style_dataframe(df: pd.DataFrame) -> pd.io.formats.style.Styler:
 def render_results_table(
     df: pd.DataFrame,
     baseline: str,
-    ref_budget: Optional[str],
+    ref_budget: str | None,
 ) -> None:
     """Render the main results table with filtering and styling.
 

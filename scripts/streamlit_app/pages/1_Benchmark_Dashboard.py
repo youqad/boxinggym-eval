@@ -3,11 +3,9 @@
 View and compare benchmark results with paper baselines.
 """
 
-import os
 import sys
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
 
 # Page config
@@ -40,7 +38,9 @@ inject_custom_css()
 
 # Title
 st.title("📊 Benchmark Dashboard")
-st.markdown("Compare against paper baselines (GPT-4o and BOX). Lower z_mean = better. Negative delta = better than baseline.")
+st.markdown(
+    "Compare against paper baselines (GPT-4o and BOX). Lower z_mean = better. Negative delta = better than baseline."
+)
 
 # Data source selector
 st.subheader("Data Source")
@@ -131,7 +131,9 @@ render_summary_stats(filtered_df)
 st.divider()
 
 # detect if data uses new multi-seed format (has z_stderr from built-in aggregation)
-has_builtin_aggregation = "z_stderr" in filtered_df.columns and filtered_df["z_stderr"].notna().any()
+has_builtin_aggregation = (
+    "z_stderr" in filtered_df.columns and filtered_df["z_stderr"].notna().any()
+)
 
 # Aggregate toggle (only needed for old per-seed format)
 col_toggle, col_spacer = st.columns([1, 3])

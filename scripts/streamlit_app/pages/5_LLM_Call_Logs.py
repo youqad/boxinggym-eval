@@ -6,7 +6,6 @@ Browse LLM call logs from experiments with filtering, cost analysis, and latency
 import json
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 import pandas as pd
 import streamlit as st
@@ -29,7 +28,7 @@ from utils.theme import inject_custom_css
 inject_custom_css()
 
 
-def find_jsonl_files(base_paths: List[Path]) -> List[Path]:
+def find_jsonl_files(base_paths: list[Path]) -> list[Path]:
     """Find all JSONL call log files across multiple directories."""
     files = []
     for base in base_paths:
@@ -42,7 +41,7 @@ def find_jsonl_files(base_paths: List[Path]) -> List[Path]:
 def load_jsonl_file(path: str) -> pd.DataFrame:
     """Load JSONL file to DataFrame with caching."""
     entries = []
-    with open(path, "r") as f:
+    with open(path) as f:
         for line in f:
             if line.strip():
                 try:
@@ -78,7 +77,7 @@ def truncate_text(text: str, max_len: int = 100) -> str:
         return str(text)[:max_len]
     if len(text) <= max_len:
         return text
-    return text[:max_len - 3] + "..."
+    return text[: max_len - 3] + "..."
 
 
 # Title
@@ -149,7 +148,12 @@ error_count = df["error"].notna().sum() if "error" in df.columns else 0
 col1.metric("Total Calls", f"{total_calls:,}")
 col2.metric("Total Cost", format_cost(total_cost))
 col3.metric("Avg Latency", f"{avg_latency:,.0f} ms")
-col4.metric("Errors", f"{error_count:,}", delta=None if error_count == 0 else f"-{error_count}", delta_color="inverse")
+col4.metric(
+    "Errors",
+    f"{error_count:,}",
+    delta=None if error_count == 0 else f"-{error_count}",
+    delta_color="inverse",
+)
 
 # Token summary
 if all(col in df.columns for col in ["prompt_tokens", "completion_tokens"]):
@@ -176,7 +180,9 @@ models = ["All"] + sorted(df["model"].unique().tolist()) if "model" in df.column
 selected_model = st.sidebar.selectbox("Model", models)
 
 # Call type filter
-call_types = ["All"] + sorted(df["call_type"].unique().tolist()) if "call_type" in df.columns else ["All"]
+call_types = (
+    ["All"] + sorted(df["call_type"].unique().tolist()) if "call_type" in df.columns else ["All"]
+)
 selected_call_type = st.sidebar.selectbox("Call Type", call_types)
 
 # Errors only toggle
@@ -338,7 +344,9 @@ if len(filtered_df) > 0:
     st.markdown("**Response**")
     response_text = selected_call.get("response", "")
     if len(response_text) > 5000:
-        st.text_area("Response (truncated)", response_text[:5000] + "...", height=200, disabled=True)
+        st.text_area(
+            "Response (truncated)", response_text[:5000] + "...", height=200, disabled=True
+        )
     else:
         st.text_area("Response", response_text, height=200, disabled=True)
 

@@ -25,7 +25,20 @@ Interactive dashboard for analyzing LLM agent performance on the BoxingGym bench
 
 ## Setup
 
-The **Leaderboard** page works with bundled demo data — no secrets needed.
+The **Leaderboard** page works with bundled canonical snapshot data — no secrets needed.
+
+<!-- CANONICAL_HF_SNAPSHOT:START -->
+## Canonical Snapshot
+
+- Generated: **2026-02-13T21:14:31Z**
+- Source: `.boxing-gym-cache/runs.parquet`
+- Filters: `budget >= 10`, `exclude_outliers=true`
+- Valid runs: **1,948** across **7 models** and **10 environments**
+- Current #1 model: **MiniMax-M2.1** (`z=+0.185`)
+
+The Leaderboard page defaults to this pinned snapshot in HF demo mode.
+Live W&B views are exploratory and may differ from the published snapshot.
+<!-- CANONICAL_HF_SNAPSHOT:END -->
 
 ### Optional Secrets (for Sweep Analysis)
 

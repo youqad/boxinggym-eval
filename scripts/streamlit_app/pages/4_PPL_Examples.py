@@ -35,7 +35,9 @@ inject_custom_css()
 
 # Title
 st.title("🧪 PPL Examples")
-st.markdown("PyMC models from `use_ppl=True` runs. Check diagnostics: Rhat < 1.01, ESS > 400, divergences = 0.")
+st.markdown(
+    "PyMC models from `use_ppl=True` runs. Check diagnostics: Rhat < 1.01, ESS > 400, divergences = 0."
+)
 
 # Sidebar controls
 with st.sidebar:
@@ -55,7 +57,9 @@ with st.sidebar:
     st.divider()
 
     max_runs = st.slider("Max runs to load", 10, 200, 50)
-    fetch_details = st.toggle("Fetch detailed data", value=True, help="Load tables/artifacts (slower)")
+    fetch_details = st.toggle(
+        "Fetch detailed data", value=True, help="Load tables/artifacts (slower)"
+    )
 
     st.divider()
 
@@ -64,7 +68,9 @@ with st.sidebar:
         st.rerun()
 
 
-def safe_get_config_value(config: dict, key: str, subkey: str, fallback_key: str, default="unknown"):
+def safe_get_config_value(
+    config: dict, key: str, subkey: str, fallback_key: str, default="unknown"
+):
     """Safely extract config values handling both dict and string formats."""
     val = config.get(key, {})
     if isinstance(val, dict):
@@ -96,7 +102,9 @@ def load_ppl_runs(entity: str, project: str, max_runs: int = 50, fetch_details: 
         summary = run.summary
 
         # Extract PPL code from config or summary
-        ppl_code = config.get("ppl/best_program_code", "") or summary.get("ppl/best_program_code", "")
+        ppl_code = config.get("ppl/best_program_code", "") or summary.get(
+            "ppl/best_program_code", ""
+        )
         if not ppl_code:
             continue
 
@@ -266,12 +274,18 @@ def build_model_performance_chart(df: pd.DataFrame):
         return None
 
     # Aggregate by model
-    model_stats = df.groupby("model").agg({
-        "z_mean": "mean",
-        "best_loo": "mean",
-        "num_programs": "sum",
-        "run_id": "count",
-    }).reset_index()
+    model_stats = (
+        df.groupby("model")
+        .agg(
+            {
+                "z_mean": "mean",
+                "best_loo": "mean",
+                "num_programs": "sum",
+                "run_id": "count",
+            }
+        )
+        .reset_index()
+    )
     model_stats.columns = ["model", "avg_z_mean", "avg_loo", "total_programs", "num_runs"]
 
     fig = px.scatter(
@@ -282,7 +296,10 @@ def build_model_performance_chart(df: pd.DataFrame):
         color="model",
         text="model",
         title="Model Performance: Z-Mean vs LOO",
-        labels={"avg_z_mean": "Avg Z-Mean (lower is better)", "avg_loo": "Avg LOO (lower is better)"},
+        labels={
+            "avg_z_mean": "Avg Z-Mean (lower is better)",
+            "avg_loo": "Avg LOO (lower is better)",
+        },
     )
 
     fig.update_traces(textposition="top center")
@@ -338,17 +355,21 @@ else:
         st.divider()
 
         # Tabs for different views
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "📊 Best Models",
-            "📈 Visualizations",
-            "🔬 Diagnostics",
-            "🔍 Detailed View",
-        ])
+        tab1, tab2, tab3, tab4 = st.tabs(
+            [
+                "📊 Best Models",
+                "📈 Visualizations",
+                "🔬 Diagnostics",
+                "🔍 Detailed View",
+            ]
+        )
 
         with tab1:
             if len(df) > 0:
                 st.subheader("Best PPL Models by Environment")
-                st.caption("Showing the best-performing PyMC model for each environment (lowest z_mean).")
+                st.caption(
+                    "Showing the best-performing PyMC model for each environment (lowest z_mean)."
+                )
 
                 # Find best (lowest z_mean) for each env
                 valid_df = df.dropna(subset=["z_mean"])
@@ -356,10 +377,12 @@ else:
                     best_per_env = valid_df.loc[valid_df.groupby("env")["z_mean"].idxmin()]
 
                     for _, row in best_per_env.iterrows():
-                        loo_str = f"{row['best_loo']:.2f}" if pd.notna(row.get("best_loo")) else "N/A"
+                        loo_str = (
+                            f"{row['best_loo']:.2f}" if pd.notna(row.get("best_loo")) else "N/A"
+                        )
                         with st.expander(
                             f"**{row['env']}** — {row['model']} (z={row['z_mean']:.2f}, LOO={loo_str})",
-                            expanded=False
+                            expanded=False,
                         ):
                             col1, col2 = st.columns([2, 1])
 
@@ -373,7 +396,9 @@ else:
                                 st.markdown(f"**Model:** `{row['model']}`")
                                 st.markdown(f"**Budget:** {row['budget']}")
                                 st.markdown(f"**Seed:** {row['seed']}")
-                                st.markdown(f"**Include Prior:** {'✓' if row['include_prior'] else '—'}")
+                                st.markdown(
+                                    f"**Include Prior:** {'✓' if row['include_prior'] else '—'}"
+                                )
 
                                 st.markdown("---")
                                 st.markdown("#### Performance")
@@ -391,14 +416,38 @@ else:
                                 st.markdown("---")
                                 st.markdown("#### MCMC Diagnostics")
                                 if pd.notna(row.get("best_divergences")):
-                                    div_color = "🟢" if row["best_divergences"] == 0 else "🟡" if row["best_divergences"] < 10 else "🔴"
-                                    st.markdown(f"{div_color} **Divergences:** {int(row['best_divergences'])}")
+                                    div_color = (
+                                        "🟢"
+                                        if row["best_divergences"] == 0
+                                        else "🟡"
+                                        if row["best_divergences"] < 10
+                                        else "🔴"
+                                    )
+                                    st.markdown(
+                                        f"{div_color} **Divergences:** {int(row['best_divergences'])}"
+                                    )
                                 if pd.notna(row.get("best_max_rhat")):
-                                    rhat_color = "🟢" if row["best_max_rhat"] < 1.01 else "🟡" if row["best_max_rhat"] < 1.1 else "🔴"
-                                    st.markdown(f"{rhat_color} **Max Rhat:** {row['best_max_rhat']:.3f}")
+                                    rhat_color = (
+                                        "🟢"
+                                        if row["best_max_rhat"] < 1.01
+                                        else "🟡"
+                                        if row["best_max_rhat"] < 1.1
+                                        else "🔴"
+                                    )
+                                    st.markdown(
+                                        f"{rhat_color} **Max Rhat:** {row['best_max_rhat']:.3f}"
+                                    )
                                 if pd.notna(row.get("best_min_ess")):
-                                    ess_color = "🟢" if row["best_min_ess"] > 400 else "🟡" if row["best_min_ess"] > 100 else "🔴"
-                                    st.markdown(f"{ess_color} **Min ESS:** {row['best_min_ess']:.0f}")
+                                    ess_color = (
+                                        "🟢"
+                                        if row["best_min_ess"] > 400
+                                        else "🟡"
+                                        if row["best_min_ess"] > 100
+                                        else "🔴"
+                                    )
+                                    st.markdown(
+                                        f"{ess_color} **Min ESS:** {row['best_min_ess']:.0f}"
+                                    )
 
                                 st.markdown("---")
                                 st.markdown(f"[View Run on W&B]({row['url']})")
@@ -427,7 +476,9 @@ else:
 
                 # Environment x Model heatmap
                 st.markdown("#### LOO Heatmap: Environment × Model")
-                pivot = df.pivot_table(values="best_loo", index="env", columns="model", aggfunc="min")
+                pivot = df.pivot_table(
+                    values="best_loo", index="env", columns="model", aggfunc="min"
+                )
                 if not pivot.empty:
                     fig = px.imshow(
                         pivot,
@@ -462,17 +513,27 @@ else:
 
                 # Diagnostics table
                 st.markdown("#### Diagnostics Summary Table")
-                diag_cols = ["env", "model", "best_divergences", "best_max_rhat", "best_min_ess", "num_programs"]
+                diag_cols = [
+                    "env",
+                    "model",
+                    "best_divergences",
+                    "best_max_rhat",
+                    "best_min_ess",
+                    "num_programs",
+                ]
                 diag_df = df[diag_cols].copy()
                 diag_df = diag_df.dropna(subset=["best_max_rhat", "best_min_ess"])
 
                 if len(diag_df) > 0:
                     st.dataframe(
-                        diag_df.style.format({
-                            "best_max_rhat": "{:.3f}",
-                            "best_min_ess": "{:.0f}",
-                            "best_divergences": "{:.0f}",
-                        }, na_rep="—"),
+                        diag_df.style.format(
+                            {
+                                "best_max_rhat": "{:.3f}",
+                                "best_min_ess": "{:.0f}",
+                                "best_divergences": "{:.0f}",
+                            },
+                            na_rep="—",
+                        ),
                         use_container_width=True,
                         hide_index=True,
                     )
@@ -488,8 +549,7 @@ else:
             if len(df) > 0:
                 # Run selector
                 run_options = df.apply(
-                    lambda r: f"{r['run_name']} ({r['env']}, {r['model']}, b={r['budget']})",
-                    axis=1
+                    lambda r: f"{r['run_name']} ({r['env']}, {r['model']}, b={r['budget']})", axis=1
                 ).tolist()
 
                 selected_run_label = st.selectbox("Select Run", run_options)
@@ -504,37 +564,63 @@ else:
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     st.markdown("**Performance Metrics**")
-                    st.json({
-                        "z_mean": round(selected_run["z_mean"], 4) if pd.notna(selected_run["z_mean"]) else None,
-                        "best_loo": round(selected_run["best_loo"], 2) if pd.notna(selected_run.get("best_loo")) else None,
-                        "best_waic": round(selected_run["best_waic"], 2) if pd.notna(selected_run.get("best_waic")) else None,
-                        "mean_loo": round(selected_run["mean_loo"], 2) if pd.notna(selected_run.get("mean_loo")) else None,
-                    })
+                    st.json(
+                        {
+                            "z_mean": round(selected_run["z_mean"], 4)
+                            if pd.notna(selected_run["z_mean"])
+                            else None,
+                            "best_loo": round(selected_run["best_loo"], 2)
+                            if pd.notna(selected_run.get("best_loo"))
+                            else None,
+                            "best_waic": round(selected_run["best_waic"], 2)
+                            if pd.notna(selected_run.get("best_waic"))
+                            else None,
+                            "mean_loo": round(selected_run["mean_loo"], 2)
+                            if pd.notna(selected_run.get("mean_loo"))
+                            else None,
+                        }
+                    )
 
                 with col2:
                     st.markdown("**Generation Stats**")
-                    st.json({
-                        "num_programs": int(selected_run.get("num_programs", 1)),
-                        "num_rounds": int(selected_run.get("num_rounds", 1)),
-                        "has_posterior_predictive": selected_run.get("has_ppc", False),
-                    })
+                    st.json(
+                        {
+                            "num_programs": int(selected_run.get("num_programs", 1)),
+                            "num_rounds": int(selected_run.get("num_rounds", 1)),
+                            "has_posterior_predictive": selected_run.get("has_ppc", False),
+                        }
+                    )
 
                 with col3:
                     st.markdown("**MCMC Diagnostics**")
-                    st.json({
-                        "divergences": int(selected_run.get("best_divergences", 0)) if pd.notna(selected_run.get("best_divergences")) else None,
-                        "max_rhat": round(selected_run.get("best_max_rhat", 0), 4) if pd.notna(selected_run.get("best_max_rhat")) else None,
-                        "min_ess": round(selected_run.get("best_min_ess", 0), 0) if pd.notna(selected_run.get("best_min_ess")) else None,
-                    })
+                    st.json(
+                        {
+                            "divergences": int(selected_run.get("best_divergences", 0))
+                            if pd.notna(selected_run.get("best_divergences"))
+                            else None,
+                            "max_rhat": round(selected_run.get("best_max_rhat", 0), 4)
+                            if pd.notna(selected_run.get("best_max_rhat"))
+                            else None,
+                            "min_ess": round(selected_run.get("best_min_ess", 0), 0)
+                            if pd.notna(selected_run.get("best_min_ess"))
+                            else None,
+                        }
+                    )
 
                 # LLM Responses (if available)
-                if fetch_details and "llm_responses" in selected_run and selected_run["llm_responses"]:
+                if (
+                    fetch_details
+                    and "llm_responses" in selected_run
+                    and selected_run["llm_responses"]
+                ):
                     st.markdown("---")
                     st.markdown("#### LLM Generation Trajectory")
                     st.caption("The prompts and responses that led to this PyMC model.")
 
                     for i, resp in enumerate(selected_run["llm_responses"]):
-                        with st.expander(f"Round {resp.get('round', i+1)}, Program {resp.get('program_idx', i+1)}"):
+                        with st.expander(
+                            f"Round {resp.get('round', i + 1)}, Program {resp.get('program_idx', i + 1)}"
+                        ):
                             if "llm_response" in resp:
                                 st.markdown("**LLM Response:**")
                                 st.code(resp["llm_response"][:5000], language="text")
@@ -543,14 +629,32 @@ else:
                                 st.code(resp["program_code"][:3000], language="python")
 
                 # Programs table (if available)
-                if fetch_details and "programs_table" in selected_run and selected_run["programs_table"]:
+                if (
+                    fetch_details
+                    and "programs_table" in selected_run
+                    and selected_run["programs_table"]
+                ):
                     st.markdown("---")
                     st.markdown("#### All Programs Generated")
                     programs_df = pd.DataFrame(selected_run["programs_table"])
                     if len(programs_df) > 0:
-                        display_cols = [c for c in ["round", "program_idx", "loo_score", "waic_score", "n_divergences", "max_rhat", "min_ess_bulk"] if c in programs_df.columns]
+                        display_cols = [
+                            c
+                            for c in [
+                                "round",
+                                "program_idx",
+                                "loo_score",
+                                "waic_score",
+                                "n_divergences",
+                                "max_rhat",
+                                "min_ess_bulk",
+                            ]
+                            if c in programs_df.columns
+                        ]
                         if display_cols:
-                            st.dataframe(programs_df[display_cols], use_container_width=True, hide_index=True)
+                            st.dataframe(
+                                programs_df[display_cols], use_container_width=True, hide_index=True
+                            )
 
                 # Link to W&B
                 st.markdown("---")
@@ -563,16 +667,29 @@ else:
         st.subheader("All PPL Runs")
 
         if len(df) > 0:
-            display_cols = ["env", "model", "budget", "seed", "z_mean", "best_loo", "best_waic", "num_programs", "run_name"]
+            display_cols = [
+                "env",
+                "model",
+                "budget",
+                "seed",
+                "z_mean",
+                "best_loo",
+                "best_waic",
+                "num_programs",
+                "run_name",
+            ]
             display_df = df[[c for c in display_cols if c in df.columns]].copy()
             display_df = display_df.sort_values(["env", "z_mean"])
 
             st.dataframe(
-                display_df.style.format({
-                    "z_mean": "{:.3f}",
-                    "best_loo": "{:.2f}",
-                    "best_waic": "{:.2f}",
-                }, na_rep="—"),
+                display_df.style.format(
+                    {
+                        "z_mean": "{:.3f}",
+                        "best_loo": "{:.2f}",
+                        "best_waic": "{:.2f}",
+                    },
+                    na_rep="—",
+                ),
                 use_container_width=True,
                 hide_index=True,
             )
@@ -584,15 +701,19 @@ else:
 
         if len(df) >= 2:
             available_runs = df.apply(
-                lambda r: f"{r['run_name']} ({r['env']}, {r['model']}, b={r['budget']})",
-                axis=1
+                lambda r: f"{r['run_name']} ({r['env']}, {r['model']}, b={r['budget']})", axis=1
             ).tolist()
 
             col1, col2 = st.columns(2)
             with col1:
                 run1_label = st.selectbox("Run 1", available_runs, index=0, key="compare_run1")
             with col2:
-                run2_label = st.selectbox("Run 2", available_runs, index=min(1, len(available_runs) - 1), key="compare_run2")
+                run2_label = st.selectbox(
+                    "Run 2",
+                    available_runs,
+                    index=min(1, len(available_runs) - 1),
+                    key="compare_run2",
+                )
 
             run1_idx = available_runs.index(run1_label)
             run2_idx = available_runs.index(run2_label)

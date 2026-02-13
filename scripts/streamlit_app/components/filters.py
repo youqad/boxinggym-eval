@@ -1,12 +1,12 @@
 """Sidebar filter components for BoxingGym dashboard."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 import streamlit as st
 
 
-def render_sidebar_filters(df: pd.DataFrame) -> Dict[str, Any]:
+def render_sidebar_filters(df: pd.DataFrame) -> dict[str, Any]:
     """Render sidebar filters and return filter state.
 
     Args:
@@ -93,7 +93,7 @@ def render_sidebar_filters(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
-def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
+def apply_filters(df: pd.DataFrame, filters: dict[str, Any]) -> pd.DataFrame:
     """Apply filters to DataFrame.
 
     Args:
@@ -125,10 +125,10 @@ def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
     if filters["search"]:
         search_term = filters["search"]
         mask = (
-            filtered["path"].str.lower().str.contains(search_term, na=False) |
-            filtered["goal"].str.lower().str.contains(search_term, na=False) |
-            filtered["env"].str.lower().str.contains(search_term, na=False) |
-            filtered["model"].str.lower().str.contains(search_term, na=False)
+            filtered["path"].str.lower().str.contains(search_term, na=False)
+            | filtered["goal"].str.lower().str.contains(search_term, na=False)
+            | filtered["env"].str.lower().str.contains(search_term, na=False)
+            | filtered["model"].str.lower().str.contains(search_term, na=False)
         )
         filtered = filtered[mask]
 
@@ -145,8 +145,7 @@ def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
                 filtered = filtered[filtered["paper_gpt4o_b10"].notna()]
             else:
                 filtered = filtered[
-                    filtered["paper_gpt4o_b0"].notna() |
-                    filtered["paper_gpt4o_b10"].notna()
+                    filtered["paper_gpt4o_b0"].notna() | filtered["paper_gpt4o_b10"].notna()
                 ]
         else:
             if ref_budget == "0":
@@ -155,8 +154,7 @@ def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
                 filtered = filtered[filtered["paper_box_b10"].notna()]
             else:
                 filtered = filtered[
-                    filtered["paper_box_b0"].notna() |
-                    filtered["paper_box_b10"].notna()
+                    filtered["paper_box_b0"].notna() | filtered["paper_box_b10"].notna()
                 ]
 
     return filtered
@@ -165,8 +163,8 @@ def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
 def get_paper_reference_value(
     row: pd.Series,
     baseline: str,
-    ref_budget: Optional[str],
-) -> Optional[float]:
+    ref_budget: str | None,
+) -> float | None:
     """Get the appropriate paper reference value for a row.
 
     Args:
