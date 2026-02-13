@@ -2,14 +2,13 @@
 
 These tests lock current behavior for paper reproducibility.
 """
-import pytest
-from unittest.mock import Mock, MagicMock
+
 from types import SimpleNamespace
 
 from boxing_gym.agents.litellm_utils import (
+    extract_text,
     is_responses_api_model,
     messages_to_input_text,
-    extract_text,
 )
 
 
@@ -122,33 +121,30 @@ class TestMessagesToInputText:
         assert lines[3] == "user: And 3+3?"
 
     def test_content_as_list_with_text(self):
-        messages = [
-            {"role": "user", "content": [{"type": "text", "text": "Hello world"}]}
-        ]
+        messages = [{"role": "user", "content": [{"type": "text", "text": "Hello world"}]}]
         result = messages_to_input_text(messages)
         assert result == "user: Hello world"
 
     def test_content_as_list_with_value(self):
-        messages = [
-            {"role": "user", "content": [{"type": "text", "value": "Hello value"}]}
-        ]
+        messages = [{"role": "user", "content": [{"type": "text", "value": "Hello value"}]}]
         result = messages_to_input_text(messages)
         assert result == "user: Hello value"
 
     def test_content_as_list_multiple_parts(self):
         messages = [
-            {"role": "user", "content": [
-                {"type": "text", "text": "Part 1"},
-                {"type": "text", "text": "Part 2"},
-            ]}
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Part 1"},
+                    {"type": "text", "text": "Part 2"},
+                ],
+            }
         ]
         result = messages_to_input_text(messages)
         assert result == "user: Part 1 Part 2"
 
     def test_content_as_list_with_string_items(self):
-        messages = [
-            {"role": "user", "content": ["Hello", "World"]}
-        ]
+        messages = [{"role": "user", "content": ["Hello", "World"]}]
         result = messages_to_input_text(messages)
         assert result == "user: Hello World"
 
@@ -173,20 +169,12 @@ class TestExtractText:
     # ChatCompletions-style responses
     def test_chat_completions_with_object(self):
         resp = SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content="Hello from ChatCompletions")
-                )
-            ]
+            choices=[SimpleNamespace(message=SimpleNamespace(content="Hello from ChatCompletions"))]
         )
         assert extract_text(resp) == "Hello from ChatCompletions"
 
     def test_chat_completions_with_dict(self):
-        resp = {
-            "choices": [
-                {"message": {"content": "Dict response"}}
-            ]
-        }
+        resp = {"choices": [{"message": {"content": "Dict response"}}]}
         assert extract_text(resp) == "Dict response"
 
     def test_chat_completions_empty_choices(self):
@@ -194,11 +182,7 @@ class TestExtractText:
         assert extract_text(resp) == ""
 
     def test_chat_completions_none_content(self):
-        resp = SimpleNamespace(
-            choices=[
-                SimpleNamespace(message=SimpleNamespace(content=None))
-            ]
-        )
+        resp = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=None))])
         assert extract_text(resp) == ""
 
     # Responses-style responses (output array)
@@ -207,9 +191,7 @@ class TestExtractText:
             output=[
                 SimpleNamespace(
                     type="message",
-                    content=[
-                        SimpleNamespace(type="text", text="Responses API output")
-                    ]
+                    content=[SimpleNamespace(type="text", text="Responses API output")],
                 )
             ]
         )
@@ -218,12 +200,7 @@ class TestExtractText:
     def test_responses_style_with_dicts(self):
         resp = SimpleNamespace(
             output=[
-                {
-                    "type": "message",
-                    "content": [
-                        {"type": "text", "text": "Dict Responses output"}
-                    ]
-                }
+                {"type": "message", "content": [{"type": "text", "text": "Dict Responses output"}]}
             ]
         )
         assert extract_text(resp) == "Dict Responses output"
@@ -233,10 +210,7 @@ class TestExtractText:
         resp = SimpleNamespace(
             output=[
                 SimpleNamespace(type="thinking", content=[]),  # skip
-                SimpleNamespace(
-                    type="message",
-                    content=[SimpleNamespace(text="The answer")]
-                )
+                SimpleNamespace(type="message", content=[SimpleNamespace(text="The answer")]),
             ]
         )
         assert extract_text(resp) == "The answer"
@@ -246,11 +220,7 @@ class TestExtractText:
         assert extract_text(resp) == ""
 
     def test_responses_style_no_text(self):
-        resp = SimpleNamespace(
-            output=[
-                SimpleNamespace(type="message", content=[])
-            ]
-        )
+        resp = SimpleNamespace(output=[SimpleNamespace(type="message", content=[])])
         assert extract_text(resp) == ""
 
     # Edge cases
@@ -275,9 +245,6 @@ class TestExtractText:
 
         resp = FailingChoices()
         resp.output = [
-            SimpleNamespace(
-                type="message",
-                content=[SimpleNamespace(text="Fallback worked")]
-            )
+            SimpleNamespace(type="message", content=[SimpleNamespace(text="Fallback worked")])
         ]
         assert extract_text(resp) == "Fallback worked"

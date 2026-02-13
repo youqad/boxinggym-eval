@@ -1,5 +1,5 @@
-import json
 import importlib
+import json
 import sys
 import types
 from pathlib import Path
@@ -129,7 +129,7 @@ def test_build_eval_payload_includes_z_mean_for_dict_scores():
 
 def test_compute_z_results_handles_tuple_scores():
     compute_z_results = _load_compute_z_results()
-    all_data = [[[ [2.5, 0.5], [] ]]]
+    all_data = [[[[2.5, 0.5], []]]]
 
     z_results = compute_z_results(
         all_data=all_data,
@@ -149,7 +149,7 @@ def test_compute_z_results_handles_tuple_scores():
 
 def test_compute_z_results_applies_location_finding_transform():
     compute_z_results = _load_compute_z_results()
-    all_data = [[[ [20000.0, 1.0], [] ]]]
+    all_data = [[[[20000.0, 1.0], []]]]
 
     z_results = compute_z_results(
         all_data=all_data,

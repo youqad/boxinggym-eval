@@ -5,17 +5,18 @@ Phase 0 safety net: capture current behavior BEFORE any changes.
 
 import numpy as np
 import pytest
+
 from boxing_gym.analysis.stats import (
-    welch_ttest,
-    paired_ttest,
-    bootstrap_ci,
-    cohens_d,
-    benjamini_hochberg,
-    bonferroni_correct,
-    sem,
-    TTestResult,
     BootstrapCIResult,
     EffectSizeResult,
+    TTestResult,
+    benjamini_hochberg,
+    bonferroni_correct,
+    bootstrap_ci,
+    cohens_d,
+    paired_ttest,
+    sem,
+    welch_ttest,
 )
 
 

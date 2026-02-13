@@ -1,10 +1,11 @@
 """Tests for evaluation module, including parallel evaluation."""
 
 import os
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from boxing_gym.experiment.evaluation import evaluate, _make_prediction
+import pytest
+
+from boxing_gym.experiment.evaluation import _make_prediction, evaluate
 
 
 class TestParallelEvaluation:
@@ -48,20 +49,24 @@ class TestParallelEvaluation:
         # mock goal
         goal = MagicMock()
         call_count = 0
+
         def mock_get_question(include_prior):
             nonlocal call_count
             call_count += 1
             return f"question_{call_count}", f"gt_{call_count}"
+
         goal.get_goal_eval_question.side_effect = mock_get_question
         goal.evaluate_predictions.return_value = {"mse": 0.1}
         goal.eval_pointer = 0
 
         # mock scientist
         scientist = MagicMock()
+
         def mock_predict(q):
             # extract question number and return matching prediction
             num = q.split("question_")[-1].strip()
             return f"pred_{num}"
+
         scientist.generate_predictions.side_effect = mock_predict
 
         result, questions, gts, predictions = evaluate(
@@ -70,16 +75,16 @@ class TestParallelEvaluation:
             scientist=scientist,
             num_evals=5,
             include_prior=False,
-            parallel=True
+            parallel=True,
         )
 
         # verify ordering is preserved
         assert len(predictions) == 5
         assert len(gts) == 5
         for i in range(5):
-            assert gts[i] == f"gt_{i+1}"
+            assert gts[i] == f"gt_{i + 1}"
             # questions have "context\n" prepended
-            assert f"question_{i+1}" in questions[i]
+            assert f"question_{i + 1}" in questions[i]
 
     def test_evaluate_parallel_clone_mode_uses_clones(self, monkeypatch):
         """Test that clone mode uses per-task clones instead of the base agent."""
@@ -123,7 +128,7 @@ class TestParallelEvaluation:
             scientist=scientist,
             num_evals=3,
             include_prior=False,
-            parallel=True
+            parallel=True,
         )
 
         assert counter["base_calls"] == 0
@@ -147,7 +152,7 @@ class TestParallelEvaluation:
             scientist=scientist,
             num_evals=3,
             include_prior=False,
-            parallel=True
+            parallel=True,
         )
 
         assert scientist.generate_predictions.call_count == 3
@@ -167,7 +172,7 @@ class TestParallelEvaluation:
             scientist=scientist,
             num_evals=3,
             include_prior=False,
-            parallel=False
+            parallel=False,
         )
 
         assert scientist.generate_predictions.call_count == 3
@@ -188,7 +193,7 @@ class TestParallelEvaluation:
             scientist=scientist,
             num_evals=1,
             include_prior=False,
-            parallel=True
+            parallel=True,
         )
 
         scientist.generate_predictions.assert_called_once()
@@ -209,7 +214,7 @@ class TestParallelEvaluation:
             scientist=scientist,
             num_evals=2,
             include_prior=False,
-            parallel=False
+            parallel=False,
         )
 
         # verify pointer was reset
@@ -223,7 +228,8 @@ class TestEvaluateWorkerConfig:
         """Test that BOXINGGYM_EVAL_WORKERS env var is respected."""
         # this is tricky to test since it's read at import time
         # we just verify the default is reasonable
-        from boxing_gym.experiment.evaluation import MAX_EVAL_WORKERS, DEFAULT_EVAL_WORKERS
+        from boxing_gym.experiment.evaluation import DEFAULT_EVAL_WORKERS, MAX_EVAL_WORKERS
+
         assert DEFAULT_EVAL_WORKERS == 8
         # MAX_EVAL_WORKERS could be different if env var is set
         assert MAX_EVAL_WORKERS >= 1

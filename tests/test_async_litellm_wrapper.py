@@ -4,11 +4,11 @@ Phase 0 safety net: tests for call recording and fake mode behavior.
 """
 
 import asyncio
-import os
 import tempfile
 
 import litellm
 import pytest
+
 from boxing_gym.agents.async_litellm_wrapper import AsyncLiteLLM
 from boxing_gym.agents.call_recorder import CallRecorder
 

@@ -3,11 +3,11 @@
 Tests that all registered environments can be instantiated and used correctly.
 """
 
+from typing import Any
+
 import pytest
-from typing import Tuple, Any
 
 from boxing_gym.envs.registry import get_environment_registry
-
 
 # get all registered environments and goals
 ENVS, GOALS = get_environment_registry()
@@ -33,10 +33,7 @@ class TestEnvironmentRegistry:
     def test_all_envs_have_direct_goal(self):
         """Every environment should have at least a direct goal."""
         for env_name in ENVS:
-            has_direct = any(
-                e == env_name and "direct" in g
-                for (e, g) in GOALS.keys()
-            )
+            has_direct = any(e == env_name and "direct" in g for (e, g) in GOALS.keys())
             assert has_direct, f"Environment '{env_name}' missing direct goal"
 
 
@@ -58,16 +55,16 @@ class TestEnvironmentInstantiation:
 
         # all envs should have these methods
         assert hasattr(env, "validate_input")
-        assert callable(getattr(env, "validate_input"))
+        assert callable(env.validate_input)
         assert hasattr(env, "run_experiment")
-        assert callable(getattr(env, "run_experiment"))
+        assert callable(env.run_experiment)
 
 
 class TestGoalInstantiation:
     """Test that all goals can be instantiated with their environments."""
 
     @pytest.mark.parametrize("env_goal", ALL_GOALS)
-    def test_goal_can_be_instantiated(self, env_goal: Tuple[str, str]):
+    def test_goal_can_be_instantiated(self, env_goal: tuple[str, str]):
         """Test that goal classes can be instantiated."""
         env_name, goal_type = env_goal
         EnvClass = ENVS[env_name]
@@ -78,7 +75,7 @@ class TestGoalInstantiation:
         assert goal is not None
 
     @pytest.mark.parametrize("env_goal", ALL_GOALS)
-    def test_goal_has_required_methods(self, env_goal: Tuple[str, str]):
+    def test_goal_has_required_methods(self, env_goal: tuple[str, str]):
         """Test that goals have required interface methods."""
         env_name, goal_type = env_goal
         EnvClass = ENVS[env_name]
@@ -101,7 +98,7 @@ class TestDirectGoalEvaluation:
     """Test that direct goals can generate and evaluate predictions."""
 
     @pytest.mark.parametrize("env_goal", DIRECT_GOALS)
-    def test_goal_generates_eval_question(self, env_goal: Tuple[str, str]):
+    def test_goal_generates_eval_question(self, env_goal: tuple[str, str]):
         """Test that goals can generate evaluation questions."""
         env_name, goal_type = env_goal
         EnvClass = ENVS[env_name]
@@ -118,7 +115,7 @@ class TestDirectGoalEvaluation:
         # gt can be various types (float, int, str, list, etc.)
 
     @pytest.mark.parametrize("env_goal", DIRECT_GOALS)
-    def test_goal_evaluates_predictions(self, env_goal: Tuple[str, str]):
+    def test_goal_evaluates_predictions(self, env_goal: tuple[str, str]):
         """Test that goals can evaluate predictions."""
         env_name, goal_type = env_goal
         EnvClass = ENVS[env_name]
@@ -163,7 +160,9 @@ class TestEnvironmentValidation:
         """
         if result is False or result is None:
             return True
-        if isinstance(result, str) and any(word in result.lower() for word in ["invalid", "must", "error", "expected"]):
+        if isinstance(result, str) and any(
+            word in result.lower() for word in ["invalid", "must", "error", "expected"]
+        ):
             return True
         return False
 
@@ -179,7 +178,9 @@ class TestEnvironmentValidation:
         # empty string should be invalid
         try:
             result = env.validate_input("")
-            assert self._is_invalid_result(result), f"Expected invalid result for empty input, got: {result}"
+            assert self._is_invalid_result(result), (
+                f"Expected invalid result for empty input, got: {result}"
+            )
         except (ValueError, TypeError, AttributeError):
             pass  # raising is also acceptable
 
@@ -193,7 +194,9 @@ class TestEnvironmentValidation:
 
         try:
             result = env.validate_input(None)
-            assert self._is_invalid_result(result), f"Expected invalid result for None input, got: {result}"
+            assert self._is_invalid_result(result), (
+                f"Expected invalid result for None input, got: {result}"
+            )
         except (TypeError, AttributeError, ValueError):
             pass  # raising is acceptable for None input
 
@@ -208,7 +211,9 @@ class TestEnvironmentValidation:
         # gibberish should be invalid
         try:
             result = env.validate_input("not a valid observation format xyz123")
-            assert self._is_invalid_result(result), f"Expected invalid result for gibberish input, got: {result}"
+            assert self._is_invalid_result(result), (
+                f"Expected invalid result for gibberish input, got: {result}"
+            )
         except (ValueError, TypeError, AttributeError):
             pass  # raising is also acceptable
 
@@ -223,9 +228,8 @@ class TestEnvironmentDescription:
         env = EnvClass()
 
         # should have either get_description() or __doc__
-        has_description = (
-            hasattr(env, "get_description")
-            or (EnvClass.__doc__ and len(EnvClass.__doc__) > 10)
+        has_description = hasattr(env, "get_description") or (
+            EnvClass.__doc__ and len(EnvClass.__doc__) > 10
         )
         assert has_description, f"Environment '{env_name}' lacks description"
 
@@ -234,7 +238,7 @@ class TestGoalSystemMessage:
     """Test that goals can generate system messages."""
 
     @pytest.mark.parametrize("env_goal", DIRECT_GOALS)
-    def test_goal_has_system_message(self, env_goal: Tuple[str, str]):
+    def test_goal_has_system_message(self, env_goal: tuple[str, str]):
         """Test that goals can generate system messages for agents."""
         env_name, goal_type = env_goal
         EnvClass = ENVS[env_name]

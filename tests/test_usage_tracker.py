@@ -1,6 +1,7 @@
 """Tests for UsageTrackerMixin."""
 
 import pytest
+
 from boxing_gym.agents.usage_tracker import UsageTrackerMixin
 
 
@@ -105,7 +106,9 @@ class TestGetUsageStats:
 
     def test_returns_all_fields(self):
         tracker = ConcreteTracker()
-        tracker._record_usage(prompt_tokens=100, completion_tokens=50, cost_usd=0.01, latency_ms=150)
+        tracker._record_usage(
+            prompt_tokens=100, completion_tokens=50, cost_usd=0.01, latency_ms=150
+        )
 
         stats = tracker.get_usage_stats()
 
@@ -185,7 +188,7 @@ class TestResetUsageStats:
             completion_tokens=50,
             reasoning_tokens=25,
             cost_usd=0.05,
-            latency_ms=150
+            latency_ms=150,
         )
         tracker._record_retry()
         tracker._record_error()
@@ -216,6 +219,7 @@ class TestExtractTokenUsage:
 
     def test_none_returns_zeros(self):
         from boxing_gym.agents.usage_tracker import extract_token_usage
+
         result = extract_token_usage(None)
         assert result == {"prompt_tokens": 0, "completion_tokens": 0, "reasoning_tokens": 0}
 
@@ -246,13 +250,17 @@ class TestExtractTokenUsage:
 
     def test_dict_prompt_completion_keys(self):
         from boxing_gym.agents.usage_tracker import extract_token_usage
-        result = extract_token_usage({"prompt_tokens": 10, "completion_tokens": 5, "reasoning_tokens": 2})
+
+        result = extract_token_usage(
+            {"prompt_tokens": 10, "completion_tokens": 5, "reasoning_tokens": 2}
+        )
         assert result["prompt_tokens"] == 10
         assert result["completion_tokens"] == 5
         assert result["reasoning_tokens"] == 2
 
     def test_dict_input_output_keys(self):
         from boxing_gym.agents.usage_tracker import extract_token_usage
+
         result = extract_token_usage({"input_tokens": 10, "output_tokens": 5})
         assert result["prompt_tokens"] == 10
         assert result["completion_tokens"] == 5
@@ -269,6 +277,7 @@ class TestExtractTokenUsage:
 
     def test_none_values_become_zero(self):
         from boxing_gym.agents.usage_tracker import extract_token_usage
+
         result = extract_token_usage({"prompt_tokens": None, "completion_tokens": None})
         assert result["prompt_tokens"] == 0
         assert result["completion_tokens"] == 0

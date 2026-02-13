@@ -1,11 +1,13 @@
 """Integration tests for the experiment loop."""
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+
 from boxing_gym.experiment.loop import (
-    iterative_experiment,
-    _normalize_budgets,
     _compute_z_stats,
+    _normalize_budgets,
+    iterative_experiment,
 )
 
 

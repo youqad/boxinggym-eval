@@ -1,17 +1,18 @@
 """Tests for the unified pricing module."""
 
 import pytest
+
 from boxing_gym.agents.pricing import (
-    MODEL_REGISTRY,
     MODEL_COST_PER_INPUT,
     MODEL_COST_PER_OUTPUT,
-    get_model_pricing,
-    get_input_cost,
-    get_output_cost,
-    get_api_config,
-    get_max_tokens,
+    MODEL_REGISTRY,
     calculate_cost,
+    get_api_config,
+    get_input_cost,
     get_litellm_pricing_dict,
+    get_max_tokens,
+    get_model_pricing,
+    get_output_cost,
 )
 
 
@@ -27,7 +28,13 @@ class TestModelRegistry:
             assert model in MODEL_REGISTRY, f"Critical model {model} missing from registry"
 
     def test_all_entries_have_required_fields(self):
-        required = {"input_cost_per_token", "output_cost_per_token", "max_tokens", "litellm_provider", "mode"}
+        required = {
+            "input_cost_per_token",
+            "output_cost_per_token",
+            "max_tokens",
+            "litellm_provider",
+            "mode",
+        }
         for model, config in MODEL_REGISTRY.items():
             missing = required - set(config.keys())
             assert not missing, f"{model} missing fields: {missing}"
@@ -170,7 +177,13 @@ class TestGetLitellmPricingDict:
 
     def test_values_contain_required_litellm_fields(self):
         result = get_litellm_pricing_dict()
-        required = {"input_cost_per_token", "output_cost_per_token", "max_tokens", "litellm_provider", "mode"}
+        required = {
+            "input_cost_per_token",
+            "output_cost_per_token",
+            "max_tokens",
+            "litellm_provider",
+            "mode",
+        }
         for model, config in result.items():
             missing = required - set(config.keys())
             assert not missing, f"{model} missing litellm fields: {missing}"
@@ -179,12 +192,15 @@ class TestGetLitellmPricingDict:
 class TestPricingAccuracy:
     """Spot-check pricing against known values."""
 
-    @pytest.mark.parametrize("model,input_per_million,output_per_million", [
-        ("gpt-4o", 2.50, 10.00),
-        ("claude-sonnet-4", 3.00, 15.00),
-        ("deepseek-chat", 0.28, 0.42),
-        ("gemini-2.0-flash", 0.10, 0.40),
-    ])
+    @pytest.mark.parametrize(
+        "model,input_per_million,output_per_million",
+        [
+            ("gpt-4o", 2.50, 10.00),
+            ("claude-sonnet-4", 3.00, 15.00),
+            ("deepseek-chat", 0.28, 0.42),
+            ("gemini-2.0-flash", 0.10, 0.40),
+        ],
+    )
     def test_known_pricing_values(self, model, input_per_million, output_per_million):
         input_cost = get_input_cost(model) * 1_000_000
         output_cost = get_output_cost(model) * 1_000_000

@@ -21,14 +21,14 @@ pytestmark = pytest.mark.skipif(
 
 if pm is not None and az is not None:
     from boxing_gym.agents.box_loop_helper import construct_features, pymc_evaluate
-    from boxing_gym.envs.dugongs import Dugongs, DirectGoal as DugongsDirectGoal
+    from boxing_gym.envs.death_process import DeathProcess, InfectionRate
+    from boxing_gym.envs.dugongs import DirectGoal as DugongsDirectGoal
+    from boxing_gym.envs.dugongs import Dugongs
     from boxing_gym.envs.emotion import DirectEmotionPrediction, EmotionFromOutcome
     from boxing_gym.envs.hyperbolic_temporal_discount import DirectGoal as TDDirectGoal
-    from boxing_gym.envs.hyperbolic_temporal_discount import TemporalDiscount
+    from boxing_gym.envs.hyperbolic_temporal_discount import DiscountGoal, TemporalDiscount
     from boxing_gym.envs.lotka_volterra import DirectGoal as LVDirectGoal
     from boxing_gym.envs.lotka_volterra import LotkaVolterra
-    from boxing_gym.envs.hyperbolic_temporal_discount import DiscountGoal
-    from boxing_gym.envs.death_process import DeathProcess, InfectionRate
     from boxing_gym.experiment.ppl import get_ppl_prediction
 
 
@@ -310,7 +310,9 @@ def test_pymc_evaluate_prefers_obs_id_dim_when_not_first():
     with pm.Model(coords={"event": np.arange(2), "obs_id": np.arange(n)}) as model:
         mu = pm.Normal("mu", 0, 1, shape=(2,))
         sigma = pm.HalfNormal("sigma", 1, shape=(2,))
-        pm.Normal("y_obs", mu=mu[:, None], sigma=sigma[:, None], observed=y, dims=("event", "obs_id"))
+        pm.Normal(
+            "y_obs", mu=mu[:, None], sigma=sigma[:, None], observed=y, dims=("event", "obs_id")
+        )
         trace = pm.sample(
             10,
             tune=10,
@@ -325,7 +327,9 @@ def test_pymc_evaluate_prefers_obs_id_dim_when_not_first():
     # Compute the expected joint score by summing out the event dim while keeping obs_id.
     da = trace.log_likelihood["y_obs"].sum(dim=["event"])
     trace_expected = trace.copy()
-    trace_expected.log_likelihood["__joint__"] = da.rename({"obs_id": "__obs__"}).assign_coords({"__obs__": np.arange(n)})
+    trace_expected.log_likelihood["__joint__"] = da.rename({"obs_id": "__obs__"}).assign_coords(
+        {"__obs__": np.arange(n)}
+    )
     loo_expected = az.loo(trace_expected, var_name="__joint__").elpd_loo
     waic_expected = az.waic(trace_expected, var_name="__joint__").elpd_waic
 

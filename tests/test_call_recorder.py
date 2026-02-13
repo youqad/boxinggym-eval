@@ -1,20 +1,18 @@
 """Tests for CallRecorder crash-resilient LLM call logging."""
 
 import json
-import os
 import tempfile
 import threading
 import time
-from pathlib import Path
 
 import pytest
 
 from boxing_gym.agents.call_recorder import (
-    CallRecorder,
-    CallRecord,
-    get_call_recorder,
-    clear_recorder,
     MAX_LOG_LENGTH,
+    CallRecord,
+    CallRecorder,
+    clear_recorder,
+    get_call_recorder,
 )
 
 
@@ -133,14 +131,16 @@ class TestCallRecorder:
 
     def test_record_dict_convenience(self, recorder):
         """Test record_dict() convenience method."""
-        recorder.record_dict({
-            "agent": "naive",
-            "model": "claude-3-opus",
-            "prompt": "test prompt",
-            "response": "test response",
-            "latency_ms": 200.0,
-            "cost_usd": 0.05,
-        })
+        recorder.record_dict(
+            {
+                "agent": "naive",
+                "model": "claude-3-opus",
+                "prompt": "test prompt",
+                "response": "test response",
+                "latency_ms": 200.0,
+                "cost_usd": 0.05,
+            }
+        )
 
         calls = recorder.get_all_calls()
         assert len(calls) == 1
@@ -149,13 +149,15 @@ class TestCallRecorder:
 
     def test_record_dict_handles_none_values(self, recorder):
         """Test that record_dict handles None for prompt/response."""
-        recorder.record_dict({
-            "agent": "test",
-            "model": "test",
-            "prompt": None,
-            "response": None,
-            "latency_ms": 0.0,
-        })
+        recorder.record_dict(
+            {
+                "agent": "test",
+                "model": "test",
+                "prompt": None,
+                "response": None,
+                "latency_ms": 0.0,
+            }
+        )
 
         calls = recorder.get_all_calls()
         assert len(calls) == 1
@@ -165,13 +167,15 @@ class TestCallRecorder:
     def test_truncates_long_content(self, recorder):
         """Test that long prompt/response are truncated."""
         long_text = "x" * (MAX_LOG_LENGTH + 1000)
-        recorder.record_dict({
-            "agent": "test",
-            "model": "test",
-            "prompt": long_text,
-            "response": long_text,
-            "latency_ms": 0.0,
-        })
+        recorder.record_dict(
+            {
+                "agent": "test",
+                "model": "test",
+                "prompt": long_text,
+                "response": long_text,
+                "latency_ms": 0.0,
+            }
+        )
 
         calls = recorder.get_all_calls()
         assert len(calls[0]["prompt"]) == MAX_LOG_LENGTH
@@ -180,13 +184,15 @@ class TestCallRecorder:
     def test_get_all_calls_returns_all(self, recorder):
         """Test that get_all_calls() returns all recorded calls."""
         for i in range(5):
-            recorder.record_dict({
-                "agent": f"agent_{i}",
-                "model": "test",
-                "prompt": f"prompt_{i}",
-                "response": f"response_{i}",
-                "latency_ms": float(i),
-            })
+            recorder.record_dict(
+                {
+                    "agent": f"agent_{i}",
+                    "model": "test",
+                    "prompt": f"prompt_{i}",
+                    "response": f"response_{i}",
+                    "latency_ms": float(i),
+                }
+            )
 
         calls = recorder.get_all_calls()
         assert len(calls) == 5
@@ -198,13 +204,15 @@ class TestCallRecorder:
         assert recorder.get_call_count() == 0
 
         for i in range(3):
-            recorder.record_dict({
-                "agent": "test",
-                "model": "test",
-                "prompt": "x",
-                "response": "y",
-                "latency_ms": 0.0,
-            })
+            recorder.record_dict(
+                {
+                    "agent": "test",
+                    "model": "test",
+                    "prompt": "x",
+                    "response": "y",
+                    "latency_ms": 0.0,
+                }
+            )
             assert recorder.get_call_count() == i + 1
 
     def test_resumes_existing_file(self, temp_dir):
@@ -212,10 +220,15 @@ class TestCallRecorder:
         # create initial recorder and write some calls
         recorder1 = CallRecorder(run_id="resume-test", output_dir=temp_dir)
         for _ in range(3):
-            recorder1.record_dict({
-                "agent": "test", "model": "test",
-                "prompt": "x", "response": "y", "latency_ms": 0.0,
-            })
+            recorder1.record_dict(
+                {
+                    "agent": "test",
+                    "model": "test",
+                    "prompt": "x",
+                    "response": "y",
+                    "latency_ms": 0.0,
+                }
+            )
         recorder1._cleanup()
 
         # create new recorder for same run_id
@@ -223,10 +236,15 @@ class TestCallRecorder:
         assert recorder2.get_call_count() == 3
 
         # new writes should have correct call_idx
-        recorder2.record_dict({
-            "agent": "test", "model": "test",
-            "prompt": "x", "response": "y", "latency_ms": 0.0,
-        })
+        recorder2.record_dict(
+            {
+                "agent": "test",
+                "model": "test",
+                "prompt": "x",
+                "response": "y",
+                "latency_ms": 0.0,
+            }
+        )
         calls = recorder2.get_all_calls()
         assert calls[-1]["call_idx"] == 3
         recorder2._cleanup()
@@ -251,13 +269,15 @@ class TestCallRecorderThreadSafety:
         def writer(thread_id):
             try:
                 for i in range(writes_per_thread):
-                    recorder.record_dict({
-                        "agent": f"thread_{thread_id}",
-                        "model": "test",
-                        "prompt": f"prompt_{thread_id}_{i}",
-                        "response": f"response_{thread_id}_{i}",
-                        "latency_ms": float(i),
-                    })
+                    recorder.record_dict(
+                        {
+                            "agent": f"thread_{thread_id}",
+                            "model": "test",
+                            "prompt": f"prompt_{thread_id}_{i}",
+                            "response": f"response_{thread_id}_{i}",
+                            "latency_ms": float(i),
+                        }
+                    )
             except Exception as e:
                 errors.append(e)
 

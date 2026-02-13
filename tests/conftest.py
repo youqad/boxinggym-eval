@@ -3,7 +3,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-
 # Ensure the package is importable when running pytest without installation.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = REPO_ROOT / "src"

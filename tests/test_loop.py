@@ -2,14 +2,16 @@
 
 These tests lock current behavior for paper reproducibility.
 """
-import pytest
+
 from unittest.mock import Mock
 
+import pytest
+
 from boxing_gym.experiment.loop import (
-    _normalize_budgets,
-    _get_step_latency_ms,
-    _get_latency_count,
     _compute_z_stats,
+    _get_latency_count,
+    _get_step_latency_ms,
+    _normalize_budgets,
 )
 
 
@@ -130,56 +132,34 @@ class TestComputeZStats:
         assert z_std is None
 
     def test_dict_with_mse_key(self):
-        z_mean, z_std = _compute_z_stats(
-            {"mse": 0.7, "std_mse": 0.05},
-            norm_mu=0.5,
-            norm_sigma=0.1
-        )
+        z_mean, z_std = _compute_z_stats({"mse": 0.7, "std_mse": 0.05}, norm_mu=0.5, norm_sigma=0.1)
         assert z_mean == pytest.approx(2.0)  # (0.7 - 0.5) / 0.1
-        assert z_std == pytest.approx(0.5)   # 0.05 / 0.1
+        assert z_std == pytest.approx(0.5)  # 0.05 / 0.1
 
     def test_dict_with_accuracy_key(self):
         z_mean, z_std = _compute_z_stats(
-            {"accuracy": 0.8, "std_accuracy": 0.02},
-            norm_mu=0.7,
-            norm_sigma=0.05
+            {"accuracy": 0.8, "std_accuracy": 0.02}, norm_mu=0.7, norm_sigma=0.05
         )
         assert z_mean == pytest.approx(2.0)  # (0.8 - 0.7) / 0.05
-        assert z_std == pytest.approx(0.4)   # 0.02 / 0.05
+        assert z_std == pytest.approx(0.4)  # 0.02 / 0.05
 
     def test_dict_with_score_key(self):
-        z_mean, z_std = _compute_z_stats(
-            {"score": 1.0},
-            norm_mu=0.5,
-            norm_sigma=0.25
-        )
+        z_mean, z_std = _compute_z_stats({"score": 1.0}, norm_mu=0.5, norm_sigma=0.25)
         assert z_mean == pytest.approx(2.0)  # (1.0 - 0.5) / 0.25
         assert z_std == 0.0  # no std provided, defaults to 0
 
     def test_tuple_with_mean_only(self):
-        z_mean, z_std = _compute_z_stats(
-            (0.6,),
-            norm_mu=0.5,
-            norm_sigma=0.1
-        )
+        z_mean, z_std = _compute_z_stats((0.6,), norm_mu=0.5, norm_sigma=0.1)
         assert z_mean == pytest.approx(1.0)
         assert z_std == 0.0  # defaults to 0 when no std
 
     def test_tuple_with_mean_and_std(self):
-        z_mean, z_std = _compute_z_stats(
-            (0.6, 0.02),
-            norm_mu=0.5,
-            norm_sigma=0.1
-        )
+        z_mean, z_std = _compute_z_stats((0.6, 0.02), norm_mu=0.5, norm_sigma=0.1)
         assert z_mean == pytest.approx(1.0)
         assert z_std == pytest.approx(0.2)
 
     def test_list_with_mean_and_std(self):
-        z_mean, z_std = _compute_z_stats(
-            [0.6, 0.02],
-            norm_mu=0.5,
-            norm_sigma=0.1
-        )
+        z_mean, z_std = _compute_z_stats([0.6, 0.02], norm_mu=0.5, norm_sigma=0.1)
         assert z_mean == pytest.approx(1.0)
         assert z_std == pytest.approx(0.2)
 

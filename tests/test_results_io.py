@@ -4,13 +4,14 @@ Phase 0 safety net: capture current behavior BEFORE any changes.
 """
 
 import pytest
+
 from boxing_gym.agents.results_io import (
-    get_model_display_name,
+    NORM_STATIC,
+    _parse_wandb_run_name,
     get_env_display_name,
     get_goal_display_name,
-    _parse_wandb_run_name,
+    get_model_display_name,
     standardize,
-    NORM_STATIC,
 )
 
 
@@ -18,28 +19,23 @@ class TestGetModelDisplayName:
     """Tests for model name normalization."""
 
     def test_known_model_exact_match(self):
-        """Direct key lookup should work."""
         assert get_model_display_name("gpt-4o") == "GPT-4o"
         assert get_model_display_name("deepseek-chat") == "DeepSeek-Chat"
         assert get_model_display_name("glm-4.7") == "GLM-4.7"
 
     def test_known_model_case_insensitive(self):
-        """Lowercase lookup should work."""
         assert get_model_display_name("GPT-4O") == "GPT-4o"
         assert get_model_display_name("DEEPSEEK-CHAT") == "DeepSeek-Chat"
 
     def test_litellm_prefixed_models(self):
-        """Models with provider prefix should resolve."""
         assert get_model_display_name("openai/gpt-4o") == "GPT-4o"
         assert get_model_display_name("deepseek/deepseek-chat") == "DeepSeek-V3.2"
         assert get_model_display_name("anthropic/glm-4.7") == "GLM-4.7"
 
     def test_unknown_model_returns_key(self):
-        """Unknown model should return input unchanged."""
         assert get_model_display_name("unknown-model-xyz") == "unknown-model-xyz"
 
     def test_minimax_variants(self):
-        """MiniMax model variants should normalize."""
         assert get_model_display_name("minimax-m2.1") == "MiniMax-M2.1"
         assert get_model_display_name("openai/MiniMax-M2.1") == "MiniMax-M2.1"
         assert get_model_display_name("openai/minimax-m2.1") == "MiniMax-M2.1"
@@ -49,57 +45,49 @@ class TestGetEnvDisplayName:
     """Tests for environment name normalization."""
 
     def test_direct_suffix_removed(self):
-        """_direct suffix should be stripped."""
         assert get_env_display_name("dugongs_direct") == "dugongs"
         assert get_env_display_name("peregrines_direct") == "peregrines"
         assert get_env_display_name("lotka_volterra_direct") == "lotka_volterra"
 
     def test_morals_normalized(self):
-        """morals should become moral_machines."""
         assert get_env_display_name("morals") == "moral_machines"
         assert get_env_display_name("moral") == "moral_machines"
 
     def test_unknown_env_returns_base(self):
-        """Unknown env should return with _direct stripped."""
         assert get_env_display_name("unknown_env") == "unknown_env"
         assert get_env_display_name("unknown_env_direct") == "unknown_env"
 
     def test_already_canonical_unchanged(self):
-        """Already canonical names should pass through."""
         assert get_env_display_name("dugongs") == "dugongs"
-        assert get_env_display_name("hyperbolic_temporal_discount") == "hyperbolic_temporal_discount"
+        assert (
+            get_env_display_name("hyperbolic_temporal_discount") == "hyperbolic_temporal_discount"
+        )
 
 
 class TestGetGoalDisplayName:
     """Tests for goal name normalization."""
 
     def test_none_goal_uses_default(self):
-        """None goal should return environment default."""
         assert get_goal_display_name("dugongs", None) == "length"
         assert get_goal_display_name("peregrines", None) == "population"
         assert get_goal_display_name("hyperbolic_temporal_discount", None) == "choice"
 
     def test_direct_variants_use_default(self):
-        """direct/direct_naive/direct_discovery should use default."""
         assert get_goal_display_name("dugongs", "direct") == "length"
         assert get_goal_display_name("dugongs", "direct_naive") == "length"
         assert get_goal_display_name("dugongs", "direct_discovery") == "length"
 
     def test_location_finding_source_alias(self):
-        """location_finding source -> source_location."""
         assert get_goal_display_name("location_finding", "source") == "source_location"
 
     def test_death_process_infection_alias(self):
-        """death_process infection -> infection_rate."""
         assert get_goal_display_name("death_process", "infection") == "infection_rate"
 
     def test_specific_goal_preserved(self):
-        """Non-default goals should pass through."""
         assert get_goal_display_name("irt", "best_student") == "best_student"
         assert get_goal_display_name("irt", "difficult_question") == "difficult_question"
 
     def test_unknown_env_unknown_goal(self):
-        """Unknown env with unknown goal should return goal as-is."""
         assert get_goal_display_name("unknown_env", "custom_goal") == "custom_goal"
 
 
@@ -107,7 +95,6 @@ class TestParseWandbRunName:
     """Tests for W&B run name parsing."""
 
     def test_parses_oed_run(self):
-        """OED experiment run should parse correctly."""
         result = _parse_wandb_run_name("dugongs_oed_gpt-4o_seed42")
         assert result is not None
         assert result["env"] == "dugongs"
@@ -116,7 +103,6 @@ class TestParseWandbRunName:
         assert result["seed"] == 42
 
     def test_parses_discovery_run(self):
-        """Discovery experiment run should parse correctly."""
         result = _parse_wandb_run_name("peregrines_discovery_deepseek-chat_seed1")
         assert result is not None
         assert result["env"] == "peregrines"
@@ -125,7 +111,6 @@ class TestParseWandbRunName:
         assert result["seed"] == 1
 
     def test_parses_run_with_goal(self):
-        """Run with goal suffix should parse correctly."""
         result = _parse_wandb_run_name("irt_best_student_oed_gpt-4o_seed0")
         assert result is not None
         assert result["env"] == "irt"
@@ -134,14 +119,12 @@ class TestParseWandbRunName:
         assert result["seed"] == 0
 
     def test_env_normalization_applied(self):
-        """Environment should be normalized during parsing."""
         result = _parse_wandb_run_name("dugongs_direct_oed_gpt-4o_seed1")
         assert result is not None
         # dugongs_direct should become dugongs
         assert result["env"] == "dugongs"
 
     def test_invalid_run_name_returns_none(self):
-        """Invalid run names should return None."""
         assert _parse_wandb_run_name("random_string") is None
         assert _parse_wandb_run_name("missing_seed_oed_gpt4o") is None
         assert _parse_wandb_run_name("") is None
@@ -149,7 +132,7 @@ class TestParseWandbRunName:
     def test_hyperbolic_env_parsing(self):
         """Hyperbolic temporal discount parsing (known bug: 'discount' goal match).
 
-        NOTE: This documents a bug where 'discount' in _KNOWN_GOALS incorrectly
+        This documents a bug where 'discount' in _KNOWN_GOALS incorrectly
         matches the env name suffix, truncating to 'hyperbolic_temporal'.
         The actual env name in configs is 'hyperbolic_direct' which parses correctly.
         """
@@ -173,20 +156,17 @@ class TestStandardize:
     """Tests for z-score standardization."""
 
     def test_known_env_standardizes(self):
-        """Known environments should standardize correctly."""
-        # dugongs: (0.9058681693402041, 9.234192516908691)
-        z_mean, z_std = standardize(0.9058681693402041, 1.0, "dugongs")
+        # dugongs: (1.3199, 17.0068) — v2_2026-01-27
+        z_mean, z_std = standardize(1.3199, 1.0, "dugongs")
         assert z_mean is not None
         assert z_mean == pytest.approx(0.0, abs=0.01)  # z-score of mean is 0
 
     def test_unknown_env_returns_none(self):
-        """Unknown environments should return None."""
         z_mean, z_std = standardize(1.0, 0.5, "unknown_env")
         assert z_mean is None
         assert z_std is None
 
     def test_all_known_envs_have_norm_constants(self):
-        """All standard environments should have normalization constants."""
         known_envs = [
             "dugongs",
             "peregrines",
@@ -204,7 +184,7 @@ class TestStandardize:
             assert sigma > 0, f"Invalid sigma for {env}"
 
     def test_standardize_formula(self):
-        """Z-score should follow (x - mu) / sigma."""
+        # z = (x - mu) / sigma
         # For dugongs: mu=0.9058681693402041, sigma=9.234192516908691
         mu, sigma = NORM_STATIC["dugongs"]
         test_value = mu + sigma  # should give z=1.0
@@ -212,8 +192,7 @@ class TestStandardize:
         assert z_mean == pytest.approx(1.0, abs=0.01)
 
     def test_zero_sigma_returns_none(self):
-        """Environment with zero sigma should return None."""
-        # This is a safety check - if an env had sigma=0 it would be undefined
+        # if sigma=0, z-score is undefined
         # Currently no such env exists, but function handles it
         # We test by checking that valid envs don't have zero sigma
         for env, (mu, sigma) in NORM_STATIC.items():
@@ -224,14 +203,12 @@ class TestNormStaticConstants:
     """Tests for NORM_STATIC reference values."""
 
     def test_morals_variants_both_present(self):
-        """Both morals and moral_machines should have constants."""
         assert "morals" in NORM_STATIC
         assert "moral_machines" in NORM_STATIC
         # They should be identical
         assert NORM_STATIC["morals"] == NORM_STATIC["moral_machines"]
 
     def test_constants_are_reasonable(self):
-        """Normalization constants should be sensible values."""
         for env, (mu, sigma) in NORM_STATIC.items():
             assert isinstance(mu, (int, float))
             assert isinstance(sigma, (int, float))
@@ -243,37 +220,45 @@ class TestSafeFloat:
 
     def test_none_returns_default(self):
         from boxing_gym.agents.results_io import _safe_float
+
         assert _safe_float(None) == 0.0
         assert _safe_float(None, 99.0) == 99.0
 
     def test_bool_returns_default(self):
         from boxing_gym.agents.results_io import _safe_float
+
         assert _safe_float(True) == 0.0
         assert _safe_float(False) == 0.0
         assert _safe_float(True, 5.0) == 5.0
 
     def test_int_converts(self):
         from boxing_gym.agents.results_io import _safe_float
+
         assert _safe_float(42) == 42.0
         assert _safe_float(-5) == -5.0
 
     def test_float_passthrough(self):
         from boxing_gym.agents.results_io import _safe_float
+
         assert _safe_float(3.14) == 3.14
         assert _safe_float(-0.5) == -0.5
 
     def test_string_number_converts(self):
         from boxing_gym.agents.results_io import _safe_float
+
         assert _safe_float("3.14") == 3.14
         assert _safe_float("-5") == -5.0
 
     def test_invalid_string_returns_default(self):
         from boxing_gym.agents.results_io import _safe_float
+
         assert _safe_float("not_a_number") == 0.0
         assert _safe_float("abc", 99.0) == 99.0
 
     def test_numpy_scalar_converts(self):
         import numpy as np
+
         from boxing_gym.agents.results_io import _safe_float
+
         assert _safe_float(np.float64(3.14)) == pytest.approx(3.14)
         assert _safe_float(np.int32(42)) == 42.0

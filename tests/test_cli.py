@@ -2,6 +2,7 @@
 
 import pytest
 from click.testing import CliRunner
+
 from boxing_gym.cli.main import main
 
 
@@ -62,7 +63,11 @@ class TestQueryCommand:
     def test_query_unknown_name_fails(self, runner):
         result = runner.invoke(main, ["query", "not-a-real-query"])
         # should fail gracefully with unknown query
-        assert result.exit_code != 0 or "not found" in result.output.lower() or "unknown" in result.output.lower()
+        assert (
+            result.exit_code != 0
+            or "not found" in result.output.lower()
+            or "unknown" in result.output.lower()
+        )
 
 
 class TestResultsCommand:

@@ -16,7 +16,7 @@ Tests cover:
 Run with: python -m pytest tests/test_tag_parser.py -v
 """
 
-from boxing_gym.agents.tag_parser import TagParser, ParsingStrategy
+from boxing_gym.agents.tag_parser import ParsingStrategy, TagParser
 
 
 class TestTagParserBasic:

@@ -1,15 +1,15 @@
 """Tests for LMExperimenter agent."""
 
 import os
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from boxing_gym.agents.agent import (
     LMExperimenter,
-    _model_profile,
-    _compute_effective_max_tokens,
-    ModelProfile,
     _build_weave_payload,
+    _compute_effective_max_tokens,
+    _model_profile,
 )
 
 
@@ -103,18 +103,14 @@ class TestLMExperimenterFakeMode:
     def test_fake_mode_returns_parseable_observation(self):
         agent = LMExperimenter(model_name="gpt-4o", temperature=0.0)
         response, retries = agent.prompt_llm_and_parse(
-            "What observation would you like to make?",
-            is_observation=True
+            "What observation would you like to make?", is_observation=True
         )
         assert response is not None
         assert response.strip(), "Response should not be empty"
 
     def test_fake_mode_returns_parseable_answer(self):
         agent = LMExperimenter(model_name="gpt-4o", temperature=0.0)
-        response, retries = agent.prompt_llm_and_parse(
-            "What is your answer?",
-            is_observation=False
-        )
+        response, retries = agent.prompt_llm_and_parse("What is your answer?", is_observation=False)
         assert response is not None
         assert response.strip(), "Response should not be empty"
 
@@ -122,16 +118,14 @@ class TestLMExperimenterFakeMode:
         os.environ["BOXINGGYM_FAKE_LLM"] = "dugongs"
         agent = LMExperimenter(model_name="gpt-4o", temperature=0.0)
         response, retries = agent.prompt_llm_and_parse(
-            "What is the dugong age?",
-            is_observation=False
+            "What is the dugong age?", is_observation=False
         )
         assert response == "2.0"
 
     def test_fake_mode_lotka_returns_valid_params(self):
         agent = LMExperimenter(model_name="gpt-4o", temperature=0.0)
         response, retries = agent.prompt_llm_and_parse(
-            "What are the lotka-volterra parameters?",
-            is_observation=False
+            "What are the lotka-volterra parameters?", is_observation=False
         )
         assert response is not None
         assert response.strip(), "Response should not be empty"
@@ -183,6 +177,7 @@ class TestLMExperimenterRetryLogic:
         agent = LMExperimenter(model_name="gpt-4o", temperature=0.0)
 
         call_count = 0
+
         def mock_prompt_llm(prompt, _weave_context=None):
             nonlocal call_count
             call_count += 1
@@ -190,7 +185,7 @@ class TestLMExperimenterRetryLogic:
                 return "Invalid response without tags"
             return "<answer>42</answer>"
 
-        with patch.object(agent, 'prompt_llm', side_effect=mock_prompt_llm):
+        with patch.object(agent, "prompt_llm", side_effect=mock_prompt_llm):
             response, retries = agent.prompt_llm_and_parse("test", is_observation=False)
 
         assert response == "42"
@@ -203,7 +198,7 @@ class TestLMExperimenterRetryLogic:
         def mock_prompt_llm(prompt, _weave_context=None):
             return "Always invalid - no tags"
 
-        with patch.object(agent, 'prompt_llm', side_effect=mock_prompt_llm):
+        with patch.object(agent, "prompt_llm", side_effect=mock_prompt_llm):
             with pytest.raises(ValueError, match="Failed to get valid response"):
                 agent.prompt_llm_and_parse("test", is_observation=False, max_tries=4)
 
@@ -211,6 +206,7 @@ class TestLMExperimenterRetryLogic:
         agent = LMExperimenter(model_name="gpt-4o", temperature=0.0)
 
         call_count = 0
+
         def mock_prompt_llm(prompt, _weave_context=None):
             nonlocal call_count
             call_count += 1
@@ -218,7 +214,7 @@ class TestLMExperimenterRetryLogic:
                 return "<answer>no numbers here</answer>"
             return "<answer>42</answer>"
 
-        with patch.object(agent, 'prompt_llm', side_effect=mock_prompt_llm):
+        with patch.object(agent, "prompt_llm", side_effect=mock_prompt_llm):
             response, retries = agent.prompt_llm_and_parse("test", is_observation=False)
 
         assert response == "42"
@@ -230,7 +226,7 @@ class TestLMExperimenterRetryLogic:
         def mock_prompt_llm(prompt, _weave_context=None):
             return "<answer>one half</answer>"
 
-        with patch.object(agent, 'prompt_llm', side_effect=mock_prompt_llm):
+        with patch.object(agent, "prompt_llm", side_effect=mock_prompt_llm):
             response, retries = agent.prompt_llm_and_parse("test", is_observation=False)
 
         # word numbers should be accepted
@@ -255,6 +251,7 @@ class TestLMExperimenterUsageStats:
             agent = LMExperimenter(model_name="gpt-4o", temperature=0.0)
 
             call_count = 0
+
             def mock_prompt_llm(prompt, _weave_context=None):
                 nonlocal call_count
                 call_count += 1
@@ -262,7 +259,7 @@ class TestLMExperimenterUsageStats:
                     return "Invalid"
                 return "<answer>42</answer>"
 
-            with patch.object(agent, 'prompt_llm', side_effect=mock_prompt_llm):
+            with patch.object(agent, "prompt_llm", side_effect=mock_prompt_llm):
                 agent.prompt_llm_and_parse("test", is_observation=False)
 
             assert agent._usage_stats["retry_count"] == 2
@@ -285,7 +282,7 @@ class TestLMExperimenterInitialization:
         agent = LMExperimenter(
             model_name="deepseek/deepseek-chat",
             temperature=0.0,
-            api_base="https://api.deepseek.com/v1"
+            api_base="https://api.deepseek.com/v1",
         )
         assert agent.api_base == "https://api.deepseek.com/v1"
 
