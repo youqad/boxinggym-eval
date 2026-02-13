@@ -1,4 +1,6 @@
-# 🥊 BoxingGym: Multi-Model Evaluation & Analysis
+# 🥊 SynthStats Multi-Model Evaluation and Analysis of BoxingGym 
+
+
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-3670A0?style=flat-square&logo=python&logoColor=ffdd54" alt="Python 3.11+"></a>&nbsp;
@@ -18,7 +20,7 @@
 ---
 
 ## What's New
-
+Stanford's BoxingGym is a benchmarking framework designed to evaluate the capabilities of language-based agents in experimental design and model discovery. The original benchmark was primarily designed for evalution through OpenAI endpoints.
 This fork adds multi-model evaluation tooling to Stanford's BoxingGym:
 
 - 7 LLM providers (DeepSeek, MiniMax-M2.1, GLM-4.7, Kimi-K2, GPT-4o, GPT-5.1-Codex-mini, Qwen3-32B)
