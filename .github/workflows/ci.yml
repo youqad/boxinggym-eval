@@ -33,8 +33,8 @@ jobs:
           enable-cache: true
       - run: uv python install 3.11
       - run: uv sync --frozen --extra dev
-      - name: Run mypy (informational)
-        run: uv run mypy src/
+      - name: Run ty (informational)
+        run: uvx ty check src/
         continue-on-error: true
 
   test:
