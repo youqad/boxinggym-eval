@@ -1,16 +1,17 @@
-import re
 import random
+import re
 
-import pymc as pm
 import numpy as np
+import pymc as pm
 
-from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
+from .goal import Goal
+
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
-    
+
 class DirectCorrectness(Goal):
     def __init__(self, env):
         super().__init__(env)
@@ -32,9 +33,11 @@ class DirectCorrectness(Goal):
             result = self.env.step(student_id, question_id)
             if int(result) == 0:
                 self.eval_points.append((student_id, question_id, int(result)))
-        
-        self.env.restricted_pair = [(student_id, question_id) for student_id, question_id, _ in self.eval_points]
-    
+
+        self.env.restricted_pair = [
+            (student_id, question_id) for student_id, question_id, _ in self.eval_points
+        ]
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = "Your goal is to be able to reliably predict the correctness of a student's answer to a specific question. Respond with 1 if you think the student will respond correctly and with 0 if you think the student will answer incorrectly. Conduct experiments to learn about the environment and make predictions based on your observations."
@@ -42,7 +45,7 @@ class DirectCorrectness(Goal):
             goal_description = "Your goal is to be able to reliably predict the boolean output (0 or 1) of the environment for different integer inputs. Conduct experiments to learn about the environment and make predictions based on your observations."
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
         student_id, question, response = self.eval_points[self.eval_pointer]
         self.eval_pointer += 1
@@ -51,7 +54,7 @@ class DirectCorrectness(Goal):
         else:
             question = f"What is the output of the environment at input [{student_id}, {question}]?"
         return question, response
-    
+
     def evaluate_predictions(self, predictions, measurements):
         parsed_predictions = []
         for pred in predictions:
@@ -60,13 +63,13 @@ class DirectCorrectness(Goal):
                 pred = int(pred)
             except:
                 # get last int with re
-                pred = int(re.findall(r'\d+', pred)[-1])
+                pred = int(re.findall(r"\d+", pred)[-1])
             parsed_predictions.append(int(pred))
         correct = np.array(parsed_predictions) == np.array(measurements)
         accuracy = np.mean(correct)
         std = np.std(correct)
-        return 1-accuracy, std
-    
+        return 1 - accuracy, std
+
     def expected_information_gain(self, query_point, num_outer_samples=1000, num_inner_samples=10):
         student_id, question_id = query_point
         existing_data = self.env.observed_data
@@ -75,33 +78,36 @@ class DirectCorrectness(Goal):
             print("Updating parameters")
             with pm.Model() as model:
                 # Reconstruct the prior model
-                alphai = pm.Normal('alpha_inf', mu=0, sigma=1, shape=self.env.num_students)
-                betai = pm.Normal('beta_inf', mu=0, sigma=1, shape=self.env.num_questions)
-                if self.env.mode in ['2pl', '3pl']:
-                    gammai = pm.Normal('gamma_inf', mu=0, sigma=1, shape=self.env.num_questions)
-
+                alphai = pm.Normal("alpha_inf", mu=0, sigma=1, shape=self.env.num_students)
+                betai = pm.Normal("beta_inf", mu=0, sigma=1, shape=self.env.num_questions)
+                if self.env.mode in ["2pl", "3pl"]:
+                    gammai = pm.Normal("gamma_inf", mu=0, sigma=1, shape=self.env.num_questions)
 
                 def likelihood(si, qi, ri):
                     alpha = alphai[si]
                     beta = betai[qi]
-                    if self.env.mode == '1pl':
+                    if self.env.mode == "1pl":
                         pi = pm.math.invlogit(alpha - beta)
-                    elif self.env.mode in ['2pl', '3pl']:
+                    elif self.env.mode in ["2pl", "3pl"]:
                         gamma = gammai[qi]
                         pi = pm.math.invlogit(gamma * (alpha - beta))
-                    return pm.Bernoulli('responsei', p=pi, observed=ri)
-                
+                    return pm.Bernoulli("responsei", p=pi, observed=ri)
+
                 if len(existing_data) > 0:
-                    stud_obs = pm.Data('stud_obs', [d[0] for d in existing_data])
-                    quest_obs = pm.Data('quest_obs', [d[1] for d in existing_data])
-                    resp_obs = pm.Data('resp_obs', [d[2] for d in existing_data])
+                    stud_obs = pm.Data("stud_obs", [d[0] for d in existing_data])
+                    quest_obs = pm.Data("quest_obs", [d[1] for d in existing_data])
+                    resp_obs = pm.Data("resp_obs", [d[2] for d in existing_data])
                     likelihood(stud_obs, quest_obs, resp_obs)
-                trace = pm.sample(num_outer_samples * num_inner_samples + num_outer_samples, tune=1000, return_inferencedata=False)
-            
-            alphas = trace['alpha_inf']
-            betas = trace['beta_inf']
-            if self.env.mode in ['2pl', '3pl']:
-                gammas = trace['gamma_inf']
+                trace = pm.sample(
+                    num_outer_samples * num_inner_samples + num_outer_samples,
+                    tune=1000,
+                    return_inferencedata=False,
+                )
+
+            alphas = trace["alpha_inf"]
+            betas = trace["beta_inf"]
+            if self.env.mode in ["2pl", "3pl"]:
+                gammas = trace["gamma_inf"]
                 shuffling = list(zip(alphas, betas, gammas))
                 random.shuffle(shuffling)
                 alphas, betas, gammas = zip(*shuffling)
@@ -117,32 +123,47 @@ class DirectCorrectness(Goal):
         log_likelihoods = []
         updated_alpha_samples = alphas[:num_outer_samples]
         updated_beta_samples = betas[:num_outer_samples]
-        if self.env.mode in ['2pl', '3pl']:
+        if self.env.mode in ["2pl", "3pl"]:
             updated_gamma_samples = gammas[:num_outer_samples]
 
         for n in range(num_outer_samples):
             # Calculate the log-likelihood for the new query point only
-            if self.env.mode == '1pl':
-                prob = sigmoid(updated_alpha_samples[n][student_id] - updated_beta_samples[n][question_id])
-            elif self.env.mode in ['2pl', '3pl']:
-                prob = sigmoid(updated_gamma_samples[n][question_id] *
-                               (updated_alpha_samples[n][student_id] - updated_beta_samples[n][question_id]))
+            if self.env.mode == "1pl":
+                prob = sigmoid(
+                    updated_alpha_samples[n][student_id] - updated_beta_samples[n][question_id]
+                )
+            elif self.env.mode in ["2pl", "3pl"]:
+                prob = sigmoid(
+                    updated_gamma_samples[n][question_id]
+                    * (updated_alpha_samples[n][student_id] - updated_beta_samples[n][question_id])
+                )
 
             sampled_choice = np.random.binomial(n=1, p=prob)
             log_likelihood = np.log(prob) if sampled_choice == 1 else np.log(1 - prob)
 
-            inner_alphas = alphas[num_outer_samples + n*num_inner_samples:num_outer_samples + (n+1)*num_inner_samples]
-            inner_betas = betas[num_outer_samples + n*num_inner_samples:num_outer_samples + (n+1)*num_inner_samples]
-            if self.env.mode in ['2pl', '3pl']:
-                inner_gammas = gammas[num_outer_samples + n*num_inner_samples:num_outer_samples + (n+1)*num_inner_samples]
+            inner_alphas = alphas[
+                num_outer_samples + n * num_inner_samples : num_outer_samples
+                + (n + 1) * num_inner_samples
+            ]
+            inner_betas = betas[
+                num_outer_samples + n * num_inner_samples : num_outer_samples
+                + (n + 1) * num_inner_samples
+            ]
+            if self.env.mode in ["2pl", "3pl"]:
+                inner_gammas = gammas[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
             # Calculate the marginal log-likelihood for the new query point only
             marginal_log_likelihoods = []
             for m in range(num_inner_samples):
-                if self.env.mode == '1pl':
+                if self.env.mode == "1pl":
                     prob = sigmoid(inner_alphas[m][student_id] - inner_betas[m][question_id])
-                elif self.env.mode in ['2pl', '3pl']:
-                    prob = sigmoid(inner_gammas[m][question_id] *
-                                    (inner_alphas[m][student_id] - inner_betas[m][question_id]))
+                elif self.env.mode in ["2pl", "3pl"]:
+                    prob = sigmoid(
+                        inner_gammas[m][question_id]
+                        * (inner_alphas[m][student_id] - inner_betas[m][question_id])
+                    )
 
                 prob = prob if sampled_choice == 1 else 1 - prob
                 marginal_log_likelihood = np.log(prob)
@@ -150,7 +171,9 @@ class DirectCorrectness(Goal):
 
             # Use the log-sum-exp trick for numerical stability
             max_log = np.max(marginal_log_likelihoods)
-            log_marginal_likelihood = max_log + np.log(np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log)))
+            log_marginal_likelihood = max_log + np.log(
+                np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log))
+            )
             log_likelihoods.append(log_likelihood - log_marginal_likelihood)
 
         # Calculate the EIG for the new query point
@@ -162,7 +185,7 @@ class DirectCorrectness(Goal):
         errs = []
         measurements = []
         for i in range(N):
-            if i % 10 == 0: 
+            if i % 10 == 0:
                 self.env.reset()
             s_id, q_id = self.env.sample_random_input()
             result = self.env.step(s_id, q_id)
@@ -173,7 +196,7 @@ class DirectCorrectness(Goal):
         _, std_err = self.evaluate_predictions(predictions, measurements)
         mu_pred = 0.5
         return mu_pred, std_err
-        
+
 
 class DirectCorrectnessNaive(DirectCorrectness):
     def __init__(self, env):
@@ -199,8 +222,15 @@ class DirectCorrectnessNaive(DirectCorrectness):
         description = goal_description + format_description
         description += "Here is what you know about the enivronment:\n"
         return description
-    
-    def get_comm_prompt(self, include_prior, com_limit=300, use_ppl=False, str_prob_prog=None, params_summary_str=None):    
+
+    def get_comm_prompt(
+        self,
+        include_prior,
+        com_limit=300,
+        use_ppl=False,
+        str_prob_prog=None,
+        params_summary_str=None,
+    ):
         description = f"""Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. 
 They will make predictions based solely on your explanation, so provide as much detail as possible. You CANNOT provide your own experiments or observations.
 Limit your explanation to {com_limit} words."""
@@ -213,12 +243,13 @@ Limit your explanation to {com_limit} words."""
             description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
 
+
 class BestStudent(Goal):
     def __init__(self, env):
         super().__init__(env)
         self.eval_points = []
         self.eval_pointer = 0
-    
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = "Your goal is to be able to identify the student with the highest ability. Respond with the student ID of the student you think has the highest ability. Conduct experiments to learn about the environment and make predictions based on your observations."
@@ -226,13 +257,13 @@ class BestStudent(Goal):
             goal_description = "Your goal is to be able to identify the row entity with the highest cumulative performance score. Respond with the row ID (0-indexed integer) of the entity you think has the highest score. Conduct experiments to learn about the environment and make predictions based on your observations."
         description = self.env.get_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
         # get student with highest ability
         student_id = np.argmax(self.env.responses.sum(axis=1))
         question = "Who is the student with the highest ability?"
         return question, student_id
-    
+
     def evaluate_predictions(self, predictions, measurements):
         parsed_predictions = []
         for pred in predictions:
@@ -240,14 +271,15 @@ class BestStudent(Goal):
         correct = np.array(parsed_predictions) == np.array(measurements)
         accuracy = np.mean(correct)
         std = np.std(correct)
-        return 1-accuracy, std
+        return 1 - accuracy, std
+
 
 class DifficultQuestion(Goal):
     def __init__(self, env):
         super().__init__(env)
         self.eval_points = []
         self.eval_pointer = 0
-    
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = "Your goal is to be able to identify the most difficult question. Respond with the question ID of the question you think is the most difficult. Conduct experiments to learn about the environment and make predictions based on your observations."
@@ -262,7 +294,7 @@ class DifficultQuestion(Goal):
         question = "Which question is the most difficult?"
         question += " Respond with the question ID."
         return question, question_id
-    
+
     def evaluate_predictions(self, predictions, measurements):
         parsed_predictions = []
         for pred in predictions:
@@ -270,14 +302,15 @@ class DifficultQuestion(Goal):
         correct = np.array(parsed_predictions) == np.array(measurements)
         accuracy = np.mean(correct)
         std = np.std(correct)
-        return 1-accuracy, std
+        return 1 - accuracy, std
+
 
 class DiscriminatingQuestion(Goal):
     def __init__(self, env):
         super().__init__(env)
         self.eval_points = []
         self.eval_pointer = 0
-    
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = "Your goal is to be able to identify the most discriminating question, that can discriminate among students' abilities the most. Respond with the question ID of the question you think is the most discriminating. Conduct experiments to learn about the environment and make predictions based on your observations."
@@ -285,7 +318,7 @@ class DiscriminatingQuestion(Goal):
             goal_description = "Your goal is to be able to identify the column with the highest variance across rows. Respond with the column ID (0-indexed integer) of the column you think has the highest variability. Conduct experiments to learn about the environment and make predictions based on your observations."
         description = self.env.get_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
         # get question with highest discrimination from 2PL model
         gamma = np.std(self.env.responses, axis=0)
@@ -293,7 +326,7 @@ class DiscriminatingQuestion(Goal):
         question = "Which question is the most discriminating?"
         question += " Respond with the question ID."
         return question, question_id
-    
+
     def evaluate_predictions(self, predictions, measurements):
         parsed_predictions = []
         for pred in predictions:
@@ -301,10 +334,11 @@ class DiscriminatingQuestion(Goal):
         correct = np.array(parsed_predictions) == np.array(measurements)
         accuracy = np.mean(correct)
         std = np.std(correct)
-        return 1-accuracy, std
+        return 1 - accuracy, std
+
 
 class IRT:
-    def __init__(self, num_students=6, num_questions=6, mode='2pl', restricted_pair=None):
+    def __init__(self, num_students=6, num_questions=6, mode="2pl", restricted_pair=None):
         self.num_students = num_students
         self.num_questions = num_questions
         self.mode = mode
@@ -315,29 +349,33 @@ class IRT:
     def reset(self):
         with pm.Model() as model:
             # Define student ability
-            alpha = pm.Normal('alpha', mu=0, sigma=1, shape=self.num_students)
+            alpha = pm.Normal("alpha", mu=0, sigma=1, shape=self.num_students)
 
             # Define item difficulty
-            beta = pm.Normal('beta', mu=0, sigma=1, shape=self.num_questions)
+            beta = pm.Normal("beta", mu=0, sigma=1, shape=self.num_questions)
 
-            if self.mode in ['2pl', '3pl']:
+            if self.mode in ["2pl", "3pl"]:
                 # Add item discrimination for 2PL and 3PL
-                gamma = pm.Normal('gamma', mu=0, sigma=1, shape=self.num_questions)
+                gamma = pm.Normal("gamma", mu=0, sigma=1, shape=self.num_questions)
 
-            if self.mode == '3pl':
+            if self.mode == "3pl":
                 # Add guessing parameter for 3PL
-                c = pm.Uniform('c', lower=0, upper=1, shape=self.num_questions)
+                c = pm.Uniform("c", lower=0, upper=1, shape=self.num_questions)
 
             # Define probabilities according to the IRT model
-            if self.mode == '1pl':
+            if self.mode == "1pl":
                 p = pm.math.invlogit(alpha[:, None] - beta[None, :])
-            elif self.mode == '2pl':
+            elif self.mode == "2pl":
                 p = pm.math.invlogit(gamma[None, :] * (alpha[:, None] - beta[None, :]))
             else:  # 3PL
-                p = c[None, :] + (1 - c[None, :]) * pm.math.invlogit(gamma[None, :] * (alpha[:, None] - beta[None, :]))
+                p = c[None, :] + (1 - c[None, :]) * pm.math.invlogit(
+                    gamma[None, :] * (alpha[:, None] - beta[None, :])
+                )
 
             # Create the responses variable as part of the model
-            responses = pm.Bernoulli('responses', p=p, shape=(self.num_students, self.num_questions))
+            responses = pm.Bernoulli(
+                "responses", p=p, shape=(self.num_students, self.num_questions)
+            )
 
         with model:
             prior_pred = pm.sample_prior_predictive(samples=1)
@@ -346,17 +384,17 @@ class IRT:
             prior_group = prior_pred.prior
 
             # Extract 'responses' from the 'prior' group
-            responses_samples = prior_group['responses'].values
+            responses_samples = prior_group["responses"].values
             self.responses = responses_samples[0, 0]
         self.observed_data = []
-    
+
     def generate_system_message(self, include_prior=True, goal=None):
         assert goal is not None, "Goal must be provided"
         if include_prior:
             message = f"""There are {self.num_students} students and {self.num_questions} questions.
 {goal}
 You may query a student-question pair to check if a student got a specific question right or wrong.
-Student IDs range from 0 to {self.num_students-1} and question IDs range from 0 to {self.num_questions-1}.
+Student IDs range from 0 to {self.num_students - 1} and question IDs range from 0 to {self.num_questions - 1}.
 Make observations about the students and questions by specifying a single student-question pair in the following format: [student_id, question_id]
 The environment will respond with the correctness of the student's answer to the question.
 
@@ -370,7 +408,7 @@ When asked to answer a question about the environement, respond in the format sp
 <answer> your answer </answer>
 """
         else:
-            message = f"""The environment maps two integers to a boolean value. The first integer ranges from 0 to {self.num_students-1}, and the second integer ranges from 0 to {self.num_questions-1}.
+            message = f"""The environment maps two integers to a boolean value. The first integer ranges from 0 to {self.num_students - 1}, and the second integer ranges from 0 to {self.num_questions - 1}.
 The function outputs a boolean 0 or 1.
 {goal}
 Make observations by specifying an input in the following format: [integer 1, integer 2]
@@ -400,10 +438,12 @@ When asked to answer a question about the environement, respond in the format sp
         student_id, question_id = items
         return student_id, question_id
 
-
     def sample_random_input(self):
-
-        query_points = [(student_id, question_id) for student_id in range(self.num_students) for question_id in range(self.num_questions)]
+        query_points = [
+            (student_id, question_id)
+            for student_id in range(self.num_students)
+            for question_id in range(self.num_questions)
+        ]
         while True:
             query_point = random.choice(query_points)
             if query_point not in self.restricted_pair:
@@ -412,7 +452,7 @@ When asked to answer a question about the environement, respond in the format sp
 
     def step(self, student_id, question_id):
         obs = self.responses[student_id, question_id]
-        return int(obs) 
+        return int(obs)
 
     def run_experiment(self, input_string):
         designs = self.validate_input(input_string)
@@ -423,22 +463,22 @@ When asked to answer a question about the environement, respond in the format sp
             return "You cannot query this observation, try again.", False
         result = self.step(student_id, question_id)
         self.observed_data.append((student_id, question_id, result))
-        return  result, True
+        return result, True
 
     def get_data(self):
         return self.observed_data
 
     def get_df(self):
-        '''
-            Construct dataframe used for Box's Loop
-        '''
+        """
+        Construct dataframe used for Box's Loop
+        """
         self.df = construct_dataframe(self)
-    
+
     def get_description(self):
         if self.include_prior:
             return f"""There are {self.num_students} students and {self.num_questions} questions.
 You may query a student-question pair to check if a student got a specific question right or wrong.
-Student IDs range from 0 to {self.num_students-1} and question IDs range from 0 to {self.num_questions-1}.
+Student IDs range from 0 to {self.num_students - 1} and question IDs range from 0 to {self.num_questions - 1}.
 You will receive observations about the student-question pairs [student_id, question_id]
 The environment will respond with the correctness (binary response) of the student's answer to the question.
 """
@@ -455,23 +495,27 @@ The environment models a binary response to a tuple of two positive integer valu
             return ["Student_ID", "Question_ID", "Correctness"]
         else:
             return ["Input_1", "Input_2", "Output"]
-    
+
     def get_ordered_features(self):
-        return self.get_ordered_column_names()[:-1] 
+        return self.get_ordered_column_names()[:-1]
 
     def format_column_description(self):
         if self.include_prior:
-            return ("The observations are: \n -Correctness: whether the student answered correctly (1) or not (0) \n"
-                    "The input values are \n -Student_ID: student id \n -Question_ID: question id \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -Correctness: whether the student answered correctly (1) or not (0) \n"
+                "The input values are \n -Student_ID: student id \n -Question_ID: question id \n"
+                "Use the values of the input values to help you model the observations. "
+            )
         else:
-            return ("The observations are: \n -Output \n"
-                    "The input values are \n -Input_1 \n -Input_2 \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -Output \n"
+                "The input values are \n -Input_1 \n -Input_2 \n"
+                "Use the values of the input values to help you model the observations. "
+            )
 
 
 if __name__ == "__main__":
-    env = IRT(num_students=30, num_questions=10, mode='2pl', restricted_pair=[])
+    env = IRT(num_students=30, num_questions=10, mode="2pl", restricted_pair=[])
     print("True parameters:", env.responses)
     goal = DirectCorrectness(env)
     print(goal.get_norm_factors())

@@ -2,16 +2,17 @@ import logging
 import random
 
 import numpy as np
-from scipy.stats import norm, halfnorm
 import pymc as pm
+from scipy.stats import halfnorm, norm
 
-from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
+from .goal import Goal
 
 logger = logging.getLogger(__name__)
 
 PRIOR = """A person has to choose between a delayed reward dR dollars in x days and an immediate reward iR dollars today."""
 NO_PRIOR = """You are observing a binary response for a tuple of three positive integer values (integer, integer, integer)."""
+
 
 class DirectGoal(Goal):
     def __init__(self, env):
@@ -19,8 +20,10 @@ class DirectGoal(Goal):
         self.eval_points = []
         self.eval_pointer = 0
         self.update_param_cache = {}
-        self.norm_mu = 0.5
-        self.norm_sigma = 0.4692829610160591
+        # Recomputed v2_2026-01-27: median of 5 seeds [42,123,456,789,101112]
+        # Previous: (0.5, 0.4693) — mu was rounded, actual mean-predictor ~0.327
+        self.norm_mu = 0.3265
+        self.norm_sigma = 0.4689
 
     def get_system_message(self, include_prior):
         if include_prior:
@@ -28,14 +31,14 @@ class DirectGoal(Goal):
 Remember, the decisions are not deterministic."""
         else:
             goal_description = "Your goal is to be able to predict the binary response of the environment to a given set of parameters."
-        
+
         self.goal_description = goal_description
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
         logger.debug(f"eval_pointer: {self.eval_pointer}")
-        if self.eval_pointer+1 > len(self.eval_points):
+        if self.eval_pointer + 1 > len(self.eval_points):
             logger.debug("Generating new eval point")
             # check number of 1s and 0s in eval_points and add more of the minority
             num_ones = sum([1 for _, _, _, choice in self.eval_points if choice == 1])
@@ -62,8 +65,8 @@ Remember, the decisions are not deterministic."""
         else:
             question = f"Predict the binary response for the parameters: {ir}, {dr}, {days}."
         question += " Respond using a binary value 0 or 1."
-        return question, choice 
-    
+        return question, choice
+
     def evaluate_predictions(self, predictions, measurements):
         parsed_predictions = []
         for p in predictions:
@@ -74,7 +77,7 @@ Remember, the decisions are not deterministic."""
             else:
                 logger.warning("prediction not parsed")
                 parsed_predictions.append(None)
-        correctness = [parsed_predictions[i]==measurements[i] for i in range(len(predictions))]
+        correctness = [parsed_predictions[i] == measurements[i] for i in range(len(predictions))]
         accuracy = sum(correctness) / len(correctness)
         error_rate = 1 - accuracy
         # Std of error indicators (1 for incorrect, 0 for correct)
@@ -89,9 +92,9 @@ Remember, the decisions are not deterministic."""
             # Update the parameter prior using PyMC
             logger.debug("updating parameters")
             with pm.Model() as model:
-                log_k = pm.Normal('log_k', mu=self.env.k_mean, sigma=self.env.k_std)
-                k = pm.Deterministic('k', pm.math.exp(log_k))
-                alpha = pm.HalfNormal('alpha', sigma=self.env.alpha_scale)
+                log_k = pm.Normal("log_k", mu=self.env.k_mean, sigma=self.env.k_std)
+                k = pm.Deterministic("k", pm.math.exp(log_k))
+                alpha = pm.HalfNormal("alpha", sigma=self.env.alpha_scale)
 
                 # Define the likelihood function
                 def likelihood(iR, dR, Days, choice):
@@ -99,27 +102,47 @@ Remember, the decisions are not deterministic."""
                     z = (V1 - V0) / alpha
                     phi = pm.math.erf(z / pm.math.sqrt(2)) / 2 + 0.5
                     probability = self.env.epsilon + (1 - 2 * self.env.epsilon) * phi
-                    return pm.Bernoulli('choice', p=probability, observed=choice)
+                    return pm.Bernoulli("choice", p=probability, observed=choice)
 
-                iR_obs = pm.Data('iR_obs', [d[0] for d in existing_data])
-                dR_obs = pm.Data('dR_obs', [d[1] for d in existing_data])
-                Days_obs = pm.Data('Days_obs', [d[2] for d in existing_data])
-                choice_obs = pm.Data('choice_obs', [d[3] for d in existing_data])                        
+                iR_obs = pm.Data("iR_obs", [d[0] for d in existing_data])
+                dR_obs = pm.Data("dR_obs", [d[1] for d in existing_data])
+                Days_obs = pm.Data("Days_obs", [d[2] for d in existing_data])
+                choice_obs = pm.Data("choice_obs", [d[3] for d in existing_data])
                 likelihood(iR_obs, dR_obs, Days_obs, choice_obs)
-                trace = pm.sample(num_outer_samples*num_inner_samples+num_outer_samples, cores=1, tune=1000, return_inferencedata=False)
-            ks = trace['k']
-            alphas = trace['alpha']
+                trace = pm.sample(
+                    num_outer_samples * num_inner_samples + num_outer_samples,
+                    cores=1,
+                    tune=1000,
+                    return_inferencedata=False,
+                )
+            ks = trace["k"]
+            alphas = trace["alpha"]
             shuffling = list(zip(ks, alphas))
             random.shuffle(shuffling)
             ks, alphas = zip(*shuffling)
             updated_k_samples = ks[:num_outer_samples]
             updated_alpha_samples = alphas[:num_outer_samples]
-            logger.debug("trace samples: %d", len(trace['k']))
-            logger.debug("updated parameters: k=%d, alpha=%d", len(updated_k_samples), len(updated_alpha_samples))
-            logger.debug("inferred k: %.4f, alpha: %.4f", np.mean(updated_k_samples), np.mean(updated_alpha_samples))
-            self.update_param_cache[tuple(existing_data)] = (updated_k_samples, updated_alpha_samples, ks[num_outer_samples:], alphas[num_outer_samples:])
+            logger.debug("trace samples: %d", len(trace["k"]))
+            logger.debug(
+                "updated parameters: k=%d, alpha=%d",
+                len(updated_k_samples),
+                len(updated_alpha_samples),
+            )
+            logger.debug(
+                "inferred k: %.4f, alpha: %.4f",
+                np.mean(updated_k_samples),
+                np.mean(updated_alpha_samples),
+            )
+            self.update_param_cache[tuple(existing_data)] = (
+                updated_k_samples,
+                updated_alpha_samples,
+                ks[num_outer_samples:],
+                alphas[num_outer_samples:],
+            )
         else:
-            updated_k_samples, updated_alpha_samples, ks, alphas = self.update_param_cache[tuple(existing_data)]
+            updated_k_samples, updated_alpha_samples, ks, alphas = self.update_param_cache[
+                tuple(existing_data)
+            ]
         log_likelihoods = []
 
         for n, (outer_k, outer_alpha) in enumerate(zip(updated_k_samples, updated_alpha_samples)):
@@ -129,8 +152,8 @@ Remember, the decisions are not deterministic."""
             prob = self.env.epsilon + (1 - 2 * self.env.epsilon) * norm.cdf(z)
             # print(f"prob: {prob}, days: {days}, iR: {ir}, dR: {dr}, k: {outer_k} alpha: {outer_alpha}")
 
-            inner_k_samples = ks[n*num_inner_samples:(n+1)*num_inner_samples]
-            inner_alpha_samples = alphas[n*num_inner_samples:(n+1)*num_inner_samples]
+            inner_k_samples = ks[n * num_inner_samples : (n + 1) * num_inner_samples]
+            inner_alpha_samples = alphas[n * num_inner_samples : (n + 1) * num_inner_samples]
             sampled_choice = np.random.binomial(n=1, p=prob)
             log_likelihood = np.log(prob) if sampled_choice == 1 else np.log(1 - prob)
 
@@ -146,7 +169,9 @@ Remember, the decisions are not deterministic."""
 
             # Use the log-sum-exp trick for numerical stability
             max_log = np.max(marginal_log_likelihoods)
-            log_marginal_likelihood = max_log + np.log(np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log)))
+            log_marginal_likelihood = max_log + np.log(
+                np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log))
+            )
             naive_mean = np.log(np.mean(np.exp(marginal_log_likelihoods)))
             # print(f"log_marginal_likelihood: {log_marginal_likelihood}, max_log: {max_log}, naive: {naive_mean}")
             # print(f"log_likelihood: {log_likelihood}, diff: {log_likelihood - log_marginal_likelihood}")
@@ -155,7 +180,7 @@ Remember, the decisions are not deterministic."""
         # Calculate the EIG for the new query point
         eig_value = np.mean(log_likelihoods)
         return eig_value
-    
+
     def get_norm_factors(self):
         N = 100000
         predictions = []
@@ -168,17 +193,17 @@ Remember, the decisions are not deterministic."""
             measurements.append(choice)
         pred = np.mean(predictions)
         pred = 0 if pred < 0.5 else 1
-        avg_preds =  [str(pred) for _ in range(N)]
+        avg_preds = [str(pred) for _ in range(N)]
         mean_error, std = self.evaluate_predictions(avg_preds, measurements)
         return mean_error, std
+
 
 class DirectGoalNaive(DirectGoal):
     def __init__(self, env):
         super().__init__(env)
         self.eval_points = []
         self.eval_pointer = 0
-        
-    
+
     def get_system_message(self, include_prior):
         goal_description = "Your goal is to conduct experiments and explain the environment to the user so that they can achieve their goal."
         if include_prior:
@@ -189,7 +214,7 @@ class DirectGoalNaive(DirectGoal):
         self.goal_description = goal_description
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_naive_system_message(self, include_prior):
         if include_prior:
             goal_description = "Your goal is to predict the choice of a person between a delayed reward and an immediate reward."
@@ -200,11 +225,13 @@ You must respond with a binary value. You may also think before providing your p
 Here is an example:
 <thought>your thought</thought>
 <answer>1</answer>"""
-        description = goal_description + '\n' + format_instructions
+        description = goal_description + "\n" + format_instructions
         description += "Here is what you know about the environment:\n"
-        return description    
-    
-    def get_comm_prompt(self, include_prior, com_limit=300, use_ppl=False, str_prob_prog="", params_summary_str=""):
+        return description
+
+    def get_comm_prompt(
+        self, include_prior, com_limit=300, use_ppl=False, str_prob_prog="", params_summary_str=""
+    ):
         description = f"""Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. 
 They will make predictions based solely on your explanation, so provide as much detail as possible. You cannot provide your own experiments or observations.
 Limit your explanation to {com_limit} words."""
@@ -216,6 +243,7 @@ Limit your explanation to {com_limit} words."""
             description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
 
+
 class DiscountGoal(Goal):
     def __init__(self, env):
         super().__init__(env)
@@ -224,7 +252,7 @@ class DiscountGoal(Goal):
         self.update_param_cache = {}
         self.norm_mu = 0.25
         self.norm_sigma = 4.3
-    
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = """Your goal is to predict the discount factor k that characterizes a person\'s perception of future reward in decision making.
@@ -238,7 +266,7 @@ The system's behavior is not deterministic.
 The parameter k affects how the system values the three input parameters."""
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
         (k, _) = self.env.truth
         if include_prior:
@@ -247,15 +275,17 @@ The parameter k affects how the system values the three input parameters."""
             question = "What is the latent parameter k that governs the system's behavior?"
         question += " Respond with the float value for k."
         return question, k
-    
+
     def evaluate_predictions(self, predictions, measurements):
-        assert len(predictions) == len(measurements), "Predictions and measurements must have the same length."
+        assert len(predictions) == len(measurements), (
+            "Predictions and measurements must have the same length."
+        )
         predictions = [float(p) for p in predictions]
         predictions = np.array(predictions)
         measurements = np.array(measurements)
         se = (predictions - measurements) ** 2
         return (np.mean(se), np.std(se))
-    
+
     def expected_information_gain(self, query_point, num_outer_samples=1000, num_inner_samples=10):
         ir, dr, days = query_point
         existing_data = self.env.observed_data
@@ -263,9 +293,9 @@ The parameter k affects how the system values the three input parameters."""
             # Update the parameter prior using PyMC
             logger.debug("updating parameters")
             with pm.Model() as model:
-                log_k = pm.Normal('log_k', mu=self.env.k_mean, sigma=self.env.k_std)
-                k = pm.Deterministic('k', pm.math.exp(log_k))
-                alpha = pm.HalfNormal('alpha', sigma=self.env.alpha_scale)
+                log_k = pm.Normal("log_k", mu=self.env.k_mean, sigma=self.env.k_std)
+                k = pm.Deterministic("k", pm.math.exp(log_k))
+                alpha = pm.HalfNormal("alpha", sigma=self.env.alpha_scale)
 
                 # Define the likelihood function
                 def likelihood(iR, dR, Days, choice):
@@ -273,33 +303,53 @@ The parameter k affects how the system values the three input parameters."""
                     z = (V1 - V0) / alpha
                     phi = pm.math.erf(z / pm.math.sqrt(2)) / 2 + 0.5
                     probability = self.env.epsilon + (1 - 2 * self.env.epsilon) * phi
-                    return pm.Bernoulli('choice', p=probability, observed=choice)
+                    return pm.Bernoulli("choice", p=probability, observed=choice)
 
-                iR_obs = pm.Data('iR_obs', [d[0] for d in existing_data])
-                dR_obs = pm.Data('dR_obs', [d[1] for d in existing_data])
-                Days_obs = pm.Data('Days_obs', [d[2] for d in existing_data])
-                choice_obs = pm.Data('choice_obs', [d[3] for d in existing_data])                        
+                iR_obs = pm.Data("iR_obs", [d[0] for d in existing_data])
+                dR_obs = pm.Data("dR_obs", [d[1] for d in existing_data])
+                Days_obs = pm.Data("Days_obs", [d[2] for d in existing_data])
+                choice_obs = pm.Data("choice_obs", [d[3] for d in existing_data])
                 likelihood(iR_obs, dR_obs, Days_obs, choice_obs)
-                trace = pm.sample(num_outer_samples*num_inner_samples+num_outer_samples, tune=1000, cores=1, return_inferencedata=False)
+                trace = pm.sample(
+                    num_outer_samples * num_inner_samples + num_outer_samples,
+                    tune=1000,
+                    cores=1,
+                    return_inferencedata=False,
+                )
 
-            ks = trace['k']
-            alphas = trace['alpha']
+            ks = trace["k"]
+            alphas = trace["alpha"]
             shuffling = list(zip(ks, alphas))
             random.shuffle(shuffling)
             ks, alphas = zip(*shuffling)
             updated_k_samples = ks[:num_outer_samples]
             updated_alpha_samples = alphas[:num_outer_samples]
-            logger.debug("trace samples: %d", len(trace['k']))
-            logger.debug("updated parameters: k=%d, alpha=%d", len(updated_k_samples), len(updated_alpha_samples))
-            logger.debug("inferred k: %.4f, alpha: %.4f", np.mean(updated_k_samples), np.mean(updated_alpha_samples))
-            self.update_param_cache[tuple(existing_data)] = (updated_k_samples, updated_alpha_samples, ks[num_outer_samples:], alphas[num_outer_samples:])
+            logger.debug("trace samples: %d", len(trace["k"]))
+            logger.debug(
+                "updated parameters: k=%d, alpha=%d",
+                len(updated_k_samples),
+                len(updated_alpha_samples),
+            )
+            logger.debug(
+                "inferred k: %.4f, alpha: %.4f",
+                np.mean(updated_k_samples),
+                np.mean(updated_alpha_samples),
+            )
+            self.update_param_cache[tuple(existing_data)] = (
+                updated_k_samples,
+                updated_alpha_samples,
+                ks[num_outer_samples:],
+                alphas[num_outer_samples:],
+            )
         else:
-            updated_k_samples, updated_alpha_samples, ks, alphas = self.update_param_cache[tuple(existing_data)]
+            updated_k_samples, updated_alpha_samples, ks, alphas = self.update_param_cache[
+                tuple(existing_data)
+            ]
         log_likelihoods = []
 
         for n, (outer_k, outer_alpha) in enumerate(zip(updated_k_samples, updated_alpha_samples)):
-            inner_k_samples = ks[n*num_inner_samples:(n+1)*num_inner_samples]
-            inner_alpha_samples = alphas[n*num_inner_samples:(n+1)*num_inner_samples]
+            inner_k_samples = ks[n * num_inner_samples : (n + 1) * num_inner_samples]
+            inner_alpha_samples = alphas[n * num_inner_samples : (n + 1) * num_inner_samples]
             # Calculate the log-likelihood for the new query point only
             # loop over the inner alphas for numerator
             sampled_choices = []
@@ -328,7 +378,9 @@ The parameter k affects how the system values the three input parameters."""
 
             # Use the log-sum-exp trick for numerical stability
             max_log = np.max(marginal_log_likelihoods)
-            log_marginal_likelihood = max_log + np.log(np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log)))
+            log_marginal_likelihood = max_log + np.log(
+                np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log))
+            )
             naive_mean = np.log(np.mean(np.exp(marginal_log_likelihoods)))
             # print(f"log_marginal_likelihood: {log_marginal_likelihood}, max_log: {max_log}, naive: {naive_mean}")
             # print(f"log_likelihood: {log_likelihood}, diff: {log_likelihood - log_marginal_likelihood}")
@@ -336,7 +388,7 @@ The parameter k affects how the system values the three input parameters."""
         # Calculate the EIG for the new query point
         eig_value = np.mean(log_likelihoods)
         return eig_value
-    
+
     def get_norm_factors(self):
         N = 100000
         errs = []
@@ -349,6 +401,7 @@ The parameter k affects how the system values the three input parameters."""
         stderr = np.std(errs)
         meanerr = self.env.k_std**2
         return meanerr, stderr
+
 
 class TemporalDiscount:
     def __init__(self, epsilon=0.01, k_mean=-4.25, k_std=0.5, alpha_scale=2):
@@ -370,13 +423,13 @@ class TemporalDiscount:
             alpha = halfnorm.rvs(scale=self.alpha_scale)
             return (k, alpha)
 
-        self.truth = sample_k_alpha() 
+        self.truth = sample_k_alpha()
         self.observed_data = []
 
-    def generate_system_message(self, include_prior=True, goal=None): 
+    def generate_system_message(self, include_prior=True, goal=None):
         assert goal is not None
         if include_prior:
-                message = f"""{PRIOR}
+            message = f"""{PRIOR}
 {goal}
 Make observations by specifying the three parameters iR, dR, D to query the person's choices, where D is a positive integer specifying
 the number of days delayed. 
@@ -406,13 +459,13 @@ Example:
 <answer> your answer </answer>
 """
         return message
-    
+
     def sample_random_input(self):
         iR = np.random.randint(1, 200)
         dR = np.random.randint(iR + 1, 300)
         days = np.random.randint(1, 365)
         return iR, dR, days
-        
+
     def _calculate_values(self, iR, dR, Days, k):
         # Calculate the values of the two propositions
         # V0 represents the value of $R today
@@ -426,9 +479,11 @@ Example:
         z = (V1 - V0) / alpha
         phi = norm.cdf(z)
         probability = self.epsilon + (1 - 2 * self.epsilon) * phi
-        choice = np.random.binomial(n=1, p=probability) # choice == 1 if the person selects delayed reward
+        choice = np.random.binomial(
+            n=1, p=probability
+        )  # choice == 1 if the person selects delayed reward
         return choice
-    
+
     def step(self, iR, dR, Days):
         k, alpha = self.truth
         V0, V1 = self._calculate_values(iR, dR, Days, k)
@@ -441,9 +496,12 @@ Example:
         # Split the string by commas and remove any leading/trailing whitespace
         items = [item.strip() for item in list_string.split(",")]
         items = [int(float(item)) for item in items]
-        if len(items) != 3: return f"Item len not 3 {input_string}"
-        if items[0] > items[1]: return f"item 0 not less than item 1, {input_string}"
-        if items[2] <= 0: return f"item 2 not greater than 0, {input_string}"
+        if len(items) != 3:
+            return f"Item len not 3 {input_string}"
+        if items[0] > items[1]:
+            return f"item 0 not less than item 1, {input_string}"
+        if items[2] <= 0:
+            return f"item 2 not greater than 0, {input_string}"
         return np.array(items)
 
     def run_experiment(self, input_string):
@@ -459,11 +517,11 @@ Example:
         return self.observed_data
 
     def get_df(self):
-        '''
-            Construct dataframe used for Box's Loop
-        '''
+        """
+        Construct dataframe used for Box's Loop
+        """
         self.df = construct_dataframe(self)
-    
+
     def get_description(self):
         if self.include_prior:
             return "The environment models a person's choice between a delayed reward of a certain number of days and an immediate reward."
@@ -478,22 +536,25 @@ Example:
             return ["Immediate_Reward", "Delayed_Reward", "Delay_Days", "Choice"]
         else:
             return ["Input_1", "Input_2", "Input_3", "Output"]
-    
+
     def get_ordered_features(self):
-        return self.get_ordered_column_names()[:-1] 
+        return self.get_ordered_column_names()[:-1]
 
     def format_column_description(self):
-        '''
-            Crucial make sure these descriptions are consistent with the ordered column names
-        '''
+        """Keep descriptions consistent with ordered column names."""
         if self.include_prior:
-            return ("The observations are: \n -Choice: Person's choice between delayed (1) or immediate (0) reward. \n"
-                    "The input values are \n -Immediate_Reward: reward you get immediately \n -Delayed_Reward: reward you get after certain number of days \n -Delay_Days: number of days you have to wait for the delayed reward \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -Choice: Person's choice between delayed (1) or immediate (0) reward. \n"
+                "The input values are \n -Immediate_Reward: reward you get immediately \n -Delayed_Reward: reward you get after certain number of days \n -Delay_Days: number of days you have to wait for the delayed reward \n"
+                "Use the values of the input values to help you model the observations. "
+            )
         else:
-            return ("The observations are: \n -Output \n"
-                    "The input values are \n -Input_1 \n -Input_2 \n -Input_3 \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -Output \n"
+                "The input values are \n -Input_1 \n -Input_2 \n -Input_3 \n"
+                "Use the values of the input values to help you model the observations. "
+            )
+
 
 if __name__ == "__main__":
     predictions = []
@@ -506,7 +567,7 @@ if __name__ == "__main__":
     goal = DiscountGoal(env)
     mean_error, std = goal.get_norm_factors()
     print(mean_error, std)
-    
+
     # input_string = "[10, 20, 1]"
     # res = goal.env.run_experiment(input_string)
     # print(input_string,res)
@@ -551,16 +612,16 @@ if __name__ == "__main__":
 
     # for days in days_range:
     #     print(f"Calculating EIG for (iR: {iR}, dR: {dR}, days: {days})")
-        
+
     #     # eig = goal.expected_information_gain_nmc_old((iR, dR, days))
     #     nmc_eig = goal.expected_information_gain((iR, dR, days))
-        
+
     #     # eigs.append(eig)
     #     nmc_eigs.append(nmc_eig)
-        
+
     #     # print(f"EIG: {eig}")
     #     print(f"NMC EIG: {nmc_eig}")
-    
+
     # # Plot the results
     # plt.figure(figsize=(10, 6))
     # # plt.plot(days_range, eigs, label='EIG', marker='o')

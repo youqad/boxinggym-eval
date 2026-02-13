@@ -1,9 +1,11 @@
 import ast
+
 import numpy as np
 from scipy.integrate import odeint
 
-from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
+from .goal import Goal
+
 
 class DirectGoal(Goal):
     def __init__(self, env):
@@ -11,8 +13,10 @@ class DirectGoal(Goal):
         self.eval_points = []
         self.eval_pointer = 0
         self.update_param_cache = {}
-        self.norm_mu, self.norm_sigma = (8.327445247142364, 17.548285564117467)
-    
+        # Recomputed v2_2026-01-27: median of 5 seeds [42,123,456,789,101112]
+        # Previous: (8.3274, 17.5483) — confirmed, minor update
+        self.norm_mu, self.norm_sigma = (8.2500, 17.5755)
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = """
@@ -24,9 +28,9 @@ Your goal is to be able to reliably predict the response of the environment (a t
 """
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
-        if self.eval_pointer+1 > len(self.eval_points):
+        if self.eval_pointer + 1 > len(self.eval_points):
             time = np.round((np.random.beta(2, 5) * 4), 1)
             counts = self.env.step(time)
             self.eval_points.append((time, counts))
@@ -51,14 +55,17 @@ Here is an example.
         return question, counts
 
     def evaluate_predictions(self, predictions, measurements):
-        assert len(predictions) == len(measurements), f"Predictions and measurements must have the same length. {len(predictions)}, {len(measurements)}"
+        assert len(predictions) == len(measurements), (
+            f"Predictions and measurements must have the same length. {len(predictions)}, {len(measurements)}"
+        )
+
         def _parse_prediction(prediction):
             if isinstance(prediction, (list, tuple)):
                 parsed = list(prediction)
             elif isinstance(prediction, str):
                 candidate = prediction.strip()
                 if not candidate.startswith("[") and "[" in candidate and "]" in candidate:
-                    candidate = candidate[candidate.find("["):candidate.rfind("]") + 1]
+                    candidate = candidate[candidate.find("[") : candidate.rfind("]") + 1]
                 try:
                     parsed = ast.literal_eval(candidate)
                 except (ValueError, SyntaxError) as exc:
@@ -78,13 +85,15 @@ Here is an example.
         mean_abs = np.mean(abs_error)
         std_abs = np.std(abs_error)
         return mean_abs, std_abs
-    
+
     def get_norm_factors(self):
         N = 100000
         errs = []
         measurements = []
         import logging
+
         import tqdm
+
         logger = logging.getLogger("pymc")
         logger.setLevel(logging.WARNING)
         for i in tqdm.tqdm(range(N)):
@@ -98,7 +107,7 @@ Here is an example.
 
         mu1 = np.mean([x[0] for x in measurements])
         mu2 = np.mean([x[1] for x in measurements])
-        print(mu1,mu2)
+        print(mu1, mu2)
         pred = [f"[{mu1},{mu2}]"] * len(measurements)
         err_mean, err_std = self.evaluate_predictions(pred, measurements)
         return err_mean, err_std
@@ -139,7 +148,7 @@ Here is an example.
         #         self.update_param_cache[tuple(existing_data)] = (alphas, betas, gammas, deltas)
         # else:
         #     alphas, betas, gammas, deltas = self.update_param_cache[tuple(existing_data)]
-        
+
         # outer_alphas = alphas[:num_outer_samples]
         # outer_betas = betas[:num_outer_samples]
         # outer_gammas = gammas[:num_outer_samples]
@@ -167,18 +176,19 @@ Here is an example.
         #             prob_predator = norm.pdf(prob_predator, loc=solution[-1][1], scale=0.1)
         #             log_prob = np.log(prob_prey+0.0001) + np.log(prob_predator+0.0001)
         #             marginal_log_likelihoods.append(log_prob)
-        #         max_log = np.max(marginal_log_likelihoods)    
+        #         max_log = np.max(marginal_log_likelihoods)
         #         log_marginal_likelihood = max_log + np.log(np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log)))
         #         log_likelihoods.append(log_likelihood - log_marginal_likelihood)
         # eig_value = np.mean(log_likelihoods)
         # return eig_value
+
 
 class DirectGoalNaive(DirectGoal):
     def __init__(self, env):
         super().__init__(env)
         self.eval_points = []
         self.eval_pointer = 0
-    
+
     def get_system_message(self, include_prior):
         goal_description = "Your goal is to conduct experiments and explain the environment to the user so that they can achieve their goal."
 
@@ -192,7 +202,7 @@ The goal of the user is to be able to reliably predict a tuple of two nonnegativ
 """
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_naive_system_message(self, include_prior):
         if include_prior:
             goal_description = """
@@ -210,11 +220,18 @@ If you do not do so, I will be penalized one million dollars and it will be a co
 Here is an example:
 <thought>your thought</thought>
 <answer>[2, 3]</answer>"""
-        description = goal_description + '\n' + format_instructions
+        description = goal_description + "\n" + format_instructions
         description += "Here is what you know about the environment:\n"
-        return description    
-    
-    def get_comm_prompt(self, include_prior, com_limit=300, use_ppl=False, str_prob_prog=None, params_summary_str=None):    
+        return description
+
+    def get_comm_prompt(
+        self,
+        include_prior,
+        com_limit=300,
+        use_ppl=False,
+        str_prob_prog=None,
+        params_summary_str=None,
+    ):
         extra_prompt = ""
         if include_prior:
             extra_prompt = """
@@ -232,17 +249,20 @@ Limit your explanation to {com_limit} words
             description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
             description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
-    
+
+
 class LotkaVolterra:
-    def __init__(self, 
-                prey_init=40, 
-                predator_init=9, 
-                alpha=0.1, 
-                beta=0.02, 
-                gamma=0.4, 
-                delta=0.01,
-                lower_limit = 0,
-                upper_limit = 50):
+    def __init__(
+        self,
+        prey_init=40,
+        predator_init=9,
+        alpha=0.1,
+        beta=0.02,
+        gamma=0.4,
+        delta=0.01,
+        lower_limit=0,
+        upper_limit=50,
+    ):
         self.prey_init = prey_init
         self.predator_init = predator_init
         self.alpha_mu = alpha
@@ -252,9 +272,9 @@ class LotkaVolterra:
         self.lower_limit = lower_limit
         self.upper_limit = upper_limit
         self.reset()
-        
+
         self.env_name = "lotka_volterra"
-    
+
     # TO-DO: para to be determined
     def reset(self):
         self.alpha = np.random.normal(self.alpha_mu, 0.01)
@@ -263,14 +283,13 @@ class LotkaVolterra:
         self.delta = np.random.normal(self.delta_mu, 0.001)
         self.observation_data = []
 
-
     def generate_system_message(self, include_prior, goal_description):
         if include_prior:
             PRIOR = f"""You are observing the populations of predators and prey at different times.
 Make observations by specifying a single time you want to observe with a float number. The environment will return the population counts of prey and predators successively.
 The time values are between {self.lower_limit} and {self.upper_limit}.
 """
-            message= f"""
+            message = f"""
 {goal_description}
 {PRIOR}
 
@@ -317,13 +336,15 @@ Example:
         populations = [self.prey_init, self.predator_init]
 
         # Use scipy.integrate.odeint to solve the differential equations at the specified time
-        solution = odeint(
-            self.lotka_volterra_system, populations, [0, time], args=tuple(params)
-        )
+        solution = odeint(self.lotka_volterra_system, populations, [0, time], args=tuple(params))
 
         # Round the solution to the nearest integer and convert to integer type for realistic population counts
-        rounded_solution = np.round(solution[-1]).astype(int)  # Take the last value (at the specified time)
-        rounded_solution = rounded_solution.clip(min=0)  # Ensure that the populations are nonnegative
+        rounded_solution = np.round(solution[-1]).astype(
+            int
+        )  # Take the last value (at the specified time)
+        rounded_solution = rounded_solution.clip(
+            min=0
+        )  # Ensure that the populations are nonnegative
         rounded_solution = rounded_solution.tolist()
         return rounded_solution
 
@@ -336,7 +357,7 @@ Example:
         if query < self.lower_limit or query > self.upper_limit:
             return f"Input must be between {self.lower_limit} and {self.upper_limit}."
         # obs_times = [float(x) for x in self.observation_data]
-        # max_time = max(obs_times) if len(obs_times) > 0 else self.lower_limit      
+        # max_time = max(obs_times) if len(obs_times) > 0 else self.lower_limit
         # if query <= max_time:
         #     return "Input must be greater than the previous observation."
         # Split the string by commas and remove any leading/trailing whitespace
@@ -354,11 +375,11 @@ Example:
         return self.observation_data
 
     def get_df(self):
-        '''
-            Construct dataframe used for Box's Loop
-        '''
+        """
+        Construct dataframe used for Box's Loop
+        """
         self.df = construct_dataframe(self)
-    
+
     def get_description(self):
         if self.include_prior:
             return """
@@ -377,7 +398,7 @@ The environment returns a response (tuple of two real numbers) to a scalar input
             return ["t", "prey", "predator"]
         else:
             return ["Input", "Output_1", "Output_2"]
-    
+
     def get_ordered_features(self):
         # This environment has one input feature (time) and two outputs
         # (prey, predator). Avoid inferring features via "all but last column".
@@ -388,13 +409,18 @@ The environment returns a response (tuple of two real numbers) to a scalar input
 
     def format_column_description(self):
         if self.include_prior:
-            return ("The observations are: \n -prey: prey population \n -predator: predator population \n"
-                    "The input values are \n -t: time \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -prey: prey population \n -predator: predator population \n"
+                "The input values are \n -t: time \n"
+                "Use the values of the input values to help you model the observations. "
+            )
         else:
-            return ("The observations are: \n -Output_1 \n -Output_2 \n"
-                    "The input values are \n -Input \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -Output_1 \n -Output_2 \n"
+                "The input values are \n -Input \n"
+                "Use the values of the input values to help you model the observations. "
+            )
+
 
 if __name__ == "__main__":
     env = LotkaVolterra()

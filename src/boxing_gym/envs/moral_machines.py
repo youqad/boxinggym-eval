@@ -1,14 +1,15 @@
-import re
 import random
+import re
 
+import litellm
 import numpy as np
 import pymc as pm
-import litellm
 
-from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
-from ..agents.model_config import get_model_config
 from ..agents.litellm_utils import call_llm_sync
+from ..agents.model_config import get_model_config
+from .goal import Goal
+
 
 class DirectPrediction(Goal):
     def __init__(self, env):
@@ -17,7 +18,7 @@ class DirectPrediction(Goal):
         self.eval_pointer = 0
         self.update_params_cache = {}
         self.norm_mu, self.norm_sigma = (0.424, 0.494190246767376)
-    
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = "Your goal is to be able to predict the choice of the participant in the Moral Machine experiment based on the descriptions of the characters in each group and the intervention the car would take. Conduct experiments to gather data and build a model that can predict the participant's choice."
@@ -25,9 +26,9 @@ class DirectPrediction(Goal):
             goal_description = "Your goal is to be able to predict the binary choice output based on the input features describing two groups and an intervention. Conduct experiments to gather data and build a model that can predict the binary output."
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-        
+
     def get_goal_eval_question(self, include_prior):
-        if self.eval_pointer+1 > len(self.eval_points):
+        if self.eval_pointer + 1 > len(self.eval_points):
             print("Generating new eval point")
             # check number of 1s and 0s in eval_points and add more of the minority
             num_ones = sum([1 for _, _, _, choice in self.eval_points if int(choice) == 2])
@@ -42,11 +43,11 @@ class DirectPrediction(Goal):
                 num_chars_2 = np.random.randint(1, 5)
                 group1 = np.random.choice(self.env.characters, num_chars_1, replace=True)
                 group2 = np.random.choice(self.env.characters, num_chars_2, replace=True)
-                intervention = np.random.choice(['swerve', 'stay'])
+                intervention = np.random.choice(["swerve", "stay"])
                 _, choice = self.env.step(group1, group2, intervention)
                 if choice == target:
                     break
-    
+
             self.eval_points.append((group1, group2, intervention, choice))
         else:
             group1, group2, intervention, choice = self.eval_points[self.eval_pointer]
@@ -64,61 +65,94 @@ Group 2: {group2}
 Intervention: {intervention}
 What is the binary output? (1 or 2)"""
         return question, choice
-    
+
     def evaluate_predictions(self, predictions, measurements):
         parsed_predictions = []
         for p in predictions:
             # Strip and get last character for strict parsing
             p_clean = p.strip()
             # Try to find standalone 1 or 2
-            match = re.search(r'\b([12])\b', p_clean)
+            match = re.search(r"\b([12])\b", p_clean)
             if match:
                 parsed_predictions.append(int(match.group(1)))
             else:
                 # Fallback: check last character if it's a digit
-                last_char = p_clean[-1] if p_clean else ''
-                if last_char in ['1', '2']:
+                last_char = p_clean[-1] if p_clean else ""
+                if last_char in ["1", "2"]:
                     parsed_predictions.append(int(last_char))
                 else:
                     print("prediction not parsed", p)
                     parsed_predictions.append(None)
         # Count only non-None predictions for correctness
-        correctness = [parsed_predictions[i]==measurements[i] for i in range(len(predictions)) if parsed_predictions[i] is not None]
+        correctness = [
+            parsed_predictions[i] == measurements[i]
+            for i in range(len(predictions))
+            if parsed_predictions[i] is not None
+        ]
         if len(correctness) > 0:
             accuracy = sum(correctness) / len(predictions)  # Penalize unparsable as incorrect
-            std = np.std(np.array([1 if parsed_predictions[i]==measurements[i] else 0 for i in range(len(predictions))]))
+            std = np.std(
+                np.array(
+                    [
+                        1 if parsed_predictions[i] == measurements[i] else 0
+                        for i in range(len(predictions))
+                    ]
+                )
+            )
         else:
             accuracy = 0.0
             std = 0.0
         # Return error rate (1-accuracy) to align with other environments that return error metrics
-        return (1-accuracy, std)
-    
+        return (1 - accuracy, std)
+
     def expected_information_gain(self, query_point, num_outer_samples=100, num_inner_samples=10):
         group1, group2, intervention = query_point
         existing_data = self.env.observed_data
         if tuple(existing_data) not in self.update_params_cache:
             with pm.Model() as model:
                 # Priors for regression coefficients
-                beta_intervention = pm.Normal('beta_interventioni', mu=-0.3, sigma=0.1)  # Preference for inaction
-                beta_group = pm.Normal('beta_groupi', mu=0.4, sigma=0.1)  # Preference for group 1
-                beta_gender = pm.Normal('beta_genderi', mu=-0.3, sigma=0.1)  # Sparing females
-                beta_fitness = pm.Normal('beta_fitnessi', mu=0.4, sigma=0.1)  # Sparing the fit
-                beta_social_status = pm.Normal('beta_social_statusi', mu=0.1, sigma=0.1)  # Sparing higher status
+                beta_intervention = pm.Normal(
+                    "beta_interventioni", mu=-0.3, sigma=0.1
+                )  # Preference for inaction
+                beta_group = pm.Normal("beta_groupi", mu=0.4, sigma=0.1)  # Preference for group 1
+                beta_gender = pm.Normal("beta_genderi", mu=-0.3, sigma=0.1)  # Sparing females
+                beta_fitness = pm.Normal("beta_fitnessi", mu=0.4, sigma=0.1)  # Sparing the fit
+                beta_social_status = pm.Normal(
+                    "beta_social_statusi", mu=0.1, sigma=0.1
+                )  # Sparing higher status
                 # beta_legal = pm.Normal('beta_legal', mu=0.2, sigma=0.1)  # Sparing the non-jaywalkers
-                beta_age = pm.Normal('beta_agei', mu=0.1, sigma=0.1)  # Sparing the young
-                beta_human_count = pm.Normal('beta_human_counti', mu=0.7, sigma=0.1)  # Sparing more characters
-                beta_species = pm.Normal('beta_speciesi', mu=0.6, sigma=0.1)  
+                beta_age = pm.Normal("beta_agei", mu=0.1, sigma=0.1)  # Sparing the young
+                beta_human_count = pm.Normal(
+                    "beta_human_counti", mu=0.7, sigma=0.1
+                )  # Sparing more characters
+                beta_species = pm.Normal("beta_speciesi", mu=0.6, sigma=0.1)
 
                 # Prior for intercept
-                alpha = pm.Normal('alphai', mu=0, sigma=0.3)
+                alpha = pm.Normal("alphai", mu=0, sigma=0.3)
 
                 # Likelihood
-                def likelihood(obs_count_diff, obs_gender, obs_age, obs_social_status, obs_fitness, obs_species, obs_intervention, obs_choice):
-                    y_hat = (alpha + obs_count_diff + beta_group +
-                                beta_gender * obs_gender + beta_age * obs_age + # self.beta_legal * group_2_jaywalkers +
-                                beta_social_status * obs_social_status + beta_fitness * obs_fitness +
-                                beta_species * obs_species + beta_intervention * obs_intervention)
-                    return pm.Bernoulli('choicei', logit_p=y_hat, observed=obs_choice)
+                def likelihood(
+                    obs_count_diff,
+                    obs_gender,
+                    obs_age,
+                    obs_social_status,
+                    obs_fitness,
+                    obs_species,
+                    obs_intervention,
+                    obs_choice,
+                ):
+                    y_hat = (
+                        alpha
+                        + obs_count_diff
+                        + beta_group
+                        + beta_gender * obs_gender
+                        + beta_age * obs_age  # self.beta_legal * group_2_jaywalkers +
+                        + beta_social_status * obs_social_status
+                        + beta_fitness * obs_fitness
+                        + beta_species * obs_species
+                        + beta_intervention * obs_intervention
+                    )
+                    return pm.Bernoulli("choicei", logit_p=y_hat, observed=obs_choice)
 
                 # calc obs features
                 if len(existing_data) > 0:
@@ -126,59 +160,137 @@ What is the binary output? (1 or 2)"""
                     for ed in existing_data:
                         obs = {}
                         group1, group2, intervention, choice = ed
-                        group1_human_count = len([char for char in group1 if char in self.env.characters[:-2]])
-                        group2_human_count = len([char for char in group2 if char in self.env.characters[:-2]])
+                        group1_human_count = len(
+                            [char for char in group1 if char in self.env.characters[:-2]]
+                        )
+                        group2_human_count = len(
+                            [char for char in group2 if char in self.env.characters[:-2]]
+                        )
 
                         human_count_diff = group1_human_count - group2_human_count
-                        intervention_val = 1 if intervention == 'swerve' else -1
+                        intervention_val = 1 if intervention == "swerve" else -1
                         # group_2_jaywalkers = random.choice([-1, 0])
 
                         group1_attrs = [self.env._get_char_attr(char) for char in group1]
                         group2_attrs = [self.env._get_char_attr(char) for char in group2]
-                        gender_diff = sum([att["gender"] for att in group1_attrs]) - sum([att["gender"] for att in group2_attrs])
-                        age_diff = sum([att["age"] for att in group1_attrs]) - sum([att["age"] for att in group2_attrs])
-                        social_status_diff = sum([att["social_status"] for att in group1_attrs]) - sum([att["social_status"] for att in group2_attrs])
-                        fitness_diff = sum([att["fitness"] for att in group1_attrs]) - sum([att["fitness"] for att in group2_attrs])
-                        species_diff = sum([att["species"] for att in group1_attrs]) - sum([att["species"] for att in group2_attrs])
-                        obs['count'] = human_count_diff
-                        obs['gender'] = gender_diff
-                        obs['age'] = age_diff
-                        obs['social_status'] = social_status_diff
-                        obs['fitness'] = fitness_diff
-                        obs['species'] = species_diff
-                        obs['intervention'] = intervention_val
+                        gender_diff = sum([att["gender"] for att in group1_attrs]) - sum(
+                            [att["gender"] for att in group2_attrs]
+                        )
+                        age_diff = sum([att["age"] for att in group1_attrs]) - sum(
+                            [att["age"] for att in group2_attrs]
+                        )
+                        social_status_diff = sum(
+                            [att["social_status"] for att in group1_attrs]
+                        ) - sum([att["social_status"] for att in group2_attrs])
+                        fitness_diff = sum([att["fitness"] for att in group1_attrs]) - sum(
+                            [att["fitness"] for att in group2_attrs]
+                        )
+                        species_diff = sum([att["species"] for att in group1_attrs]) - sum(
+                            [att["species"] for att in group2_attrs]
+                        )
+                        obs["count"] = human_count_diff
+                        obs["gender"] = gender_diff
+                        obs["age"] = age_diff
+                        obs["social_status"] = social_status_diff
+                        obs["fitness"] = fitness_diff
+                        obs["species"] = species_diff
+                        obs["intervention"] = intervention_val
                         obs_features.append(obs)
-                                
-                    obs_count_diff = pm.Data('obs_count_diff', [obs['count'] for obs in obs_features])
-                    obs_gender = pm.Data('obs_gender', [obs['gender'] for obs in obs_features])
-                    obs_age = pm.Data('obs_age', [obs['age'] for obs in obs_features])
-                    obs_social_status = pm.Data('obs_social_status', [obs['social_status'] for obs in obs_features])
-                    obs_fitness = pm.Data('obs_fitness', [obs['fitness'] for obs in obs_features])
-                    obs_species = pm.Data('obs_species', [obs['species'] for obs in obs_features])
-                    obs_intervention = pm.Data('obs_intervention', [obs['intervention'] for obs in obs_features])
-                    obs_choice = pm.Data('obs_choice', [1-d[3]+1 for d in existing_data])
+
+                    obs_count_diff = pm.Data(
+                        "obs_count_diff", [obs["count"] for obs in obs_features]
+                    )
+                    obs_gender = pm.Data("obs_gender", [obs["gender"] for obs in obs_features])
+                    obs_age = pm.Data("obs_age", [obs["age"] for obs in obs_features])
+                    obs_social_status = pm.Data(
+                        "obs_social_status", [obs["social_status"] for obs in obs_features]
+                    )
+                    obs_fitness = pm.Data("obs_fitness", [obs["fitness"] for obs in obs_features])
+                    obs_species = pm.Data("obs_species", [obs["species"] for obs in obs_features])
+                    obs_intervention = pm.Data(
+                        "obs_intervention", [obs["intervention"] for obs in obs_features]
+                    )
+                    obs_choice = pm.Data("obs_choice", [1 - d[3] + 1 for d in existing_data])
                     # Observed data
-                    likelihood(obs_count_diff, obs_gender, obs_age, obs_social_status, obs_fitness, obs_species, obs_intervention, obs_choice)
-                
-                trace = pm.sample(num_outer_samples * num_inner_samples + num_outer_samples, tune=1000, return_inferencedata=False, chains=2, cores=2, target_accept=0.95)
-                
-            beta_human_counts = trace['beta_human_counti']
-            beta_gender = trace['beta_genderi']
-            beta_group = trace['beta_groupi']
-            beta_age = trace['beta_agei']
-            beta_social_status = trace['beta_social_statusi']
-            beta_fitness = trace['beta_fitnessi']
-            beta_species = trace['beta_speciesi']
-            beta_interventions = trace['beta_interventioni']
-            alphas = trace['alphai']
-            
-            shuffling = list(zip(beta_human_counts, beta_group, beta_gender, beta_age, beta_social_status, beta_fitness, beta_species, beta_interventions, alphas))            
+                    likelihood(
+                        obs_count_diff,
+                        obs_gender,
+                        obs_age,
+                        obs_social_status,
+                        obs_fitness,
+                        obs_species,
+                        obs_intervention,
+                        obs_choice,
+                    )
+
+                trace = pm.sample(
+                    num_outer_samples * num_inner_samples + num_outer_samples,
+                    tune=1000,
+                    return_inferencedata=False,
+                    chains=2,
+                    cores=2,
+                    target_accept=0.95,
+                )
+
+            beta_human_counts = trace["beta_human_counti"]
+            beta_gender = trace["beta_genderi"]
+            beta_group = trace["beta_groupi"]
+            beta_age = trace["beta_agei"]
+            beta_social_status = trace["beta_social_statusi"]
+            beta_fitness = trace["beta_fitnessi"]
+            beta_species = trace["beta_speciesi"]
+            beta_interventions = trace["beta_interventioni"]
+            alphas = trace["alphai"]
+
+            shuffling = list(
+                zip(
+                    beta_human_counts,
+                    beta_group,
+                    beta_gender,
+                    beta_age,
+                    beta_social_status,
+                    beta_fitness,
+                    beta_species,
+                    beta_interventions,
+                    alphas,
+                )
+            )
             random.shuffle(shuffling)
-            beta_human_counts, beta_group, beta_gender, beta_age, beta_social_status, beta_fitness, beta_species, beta_interventions, alphas = zip(*shuffling)
-            self.update_params_cache[tuple(existing_data)] = (beta_human_counts, beta_group, beta_gender, beta_age, beta_social_status, beta_fitness, beta_species, beta_interventions, alphas)
+            (
+                beta_human_counts,
+                beta_group,
+                beta_gender,
+                beta_age,
+                beta_social_status,
+                beta_fitness,
+                beta_species,
+                beta_interventions,
+                alphas,
+            ) = zip(*shuffling)
+            self.update_params_cache[tuple(existing_data)] = (
+                beta_human_counts,
+                beta_group,
+                beta_gender,
+                beta_age,
+                beta_social_status,
+                beta_fitness,
+                beta_species,
+                beta_interventions,
+                alphas,
+            )
         else:
-            beta_human_counts, beta_group, beta_gender, beta_age, beta_social_status, beta_fitness, beta_species, beta_interventions, alphas = self.update_params_cache[tuple(existing_data)]
-        
+            (
+                beta_human_counts,
+                beta_group,
+                beta_gender,
+                beta_age,
+                beta_social_status,
+                beta_fitness,
+                beta_species,
+                beta_interventions,
+                alphas,
+            ) = self.update_params_cache[tuple(existing_data)]
+
         outer_beta_human_counts = beta_human_counts[:num_outer_samples]
         outer_beta_group = beta_group[:num_outer_samples]
         outer_beta_gender = beta_gender[:num_outer_samples]
@@ -188,7 +300,7 @@ What is the binary output? (1 or 2)"""
         outer_beta_species = beta_species[:num_outer_samples]
         outer_beta_interventions = beta_interventions[:num_outer_samples]
         outer_alphas = alphas[:num_outer_samples]
-        
+
         log_likelihoods = []
         # calculate features of query
         group1, group2, intervention = query_point
@@ -197,55 +309,159 @@ What is the binary output? (1 or 2)"""
         group2_human_count = len([char for char in group2 if char in self.env.characters[:-2]])
 
         human_count_diff = group1_human_count - group2_human_count
-        intervention_val = 1 if intervention == 'swerve' else -1
+        intervention_val = 1 if intervention == "swerve" else -1
 
         group1_attrs = [self.env._get_char_attr(char) for char in group1]
         group2_attrs = [self.env._get_char_attr(char) for char in group2]
-        gender_diff = sum([att["gender"] for att in group1_attrs]) - sum([att["gender"] for att in group2_attrs])
-        age_diff = sum([att["age"] for att in group1_attrs]) - sum([att["age"] for att in group2_attrs])
-        social_status_diff = sum([att["social_status"] for att in group1_attrs]) - sum([att["social_status"] for att in group2_attrs])
-        fitness_diff = sum([att["fitness"] for att in group1_attrs]) - sum([att["fitness"] for att in group2_attrs])
-        species_diff = sum([att["species"] for att in group1_attrs]) - sum([att["species"] for att in group2_attrs])
-        
-        for n, (ob_human_counts, ob_group, ob_gender, ob_age, ob_social_status, ob_fitness, ob_species, ob_interventions, ob_alphas) in enumerate(zip(outer_beta_human_counts, outer_beta_group, outer_beta_gender, outer_beta_age, outer_beta_social_status, outer_beta_fitness, outer_beta_species, outer_beta_interventions, outer_alphas)):
+        gender_diff = sum([att["gender"] for att in group1_attrs]) - sum(
+            [att["gender"] for att in group2_attrs]
+        )
+        age_diff = sum([att["age"] for att in group1_attrs]) - sum(
+            [att["age"] for att in group2_attrs]
+        )
+        social_status_diff = sum([att["social_status"] for att in group1_attrs]) - sum(
+            [att["social_status"] for att in group2_attrs]
+        )
+        fitness_diff = sum([att["fitness"] for att in group1_attrs]) - sum(
+            [att["fitness"] for att in group2_attrs]
+        )
+        species_diff = sum([att["species"] for att in group1_attrs]) - sum(
+            [att["species"] for att in group2_attrs]
+        )
+
+        for n, (
+            ob_human_counts,
+            ob_group,
+            ob_gender,
+            ob_age,
+            ob_social_status,
+            ob_fitness,
+            ob_species,
+            ob_interventions,
+            ob_alphas,
+        ) in enumerate(
+            zip(
+                outer_beta_human_counts,
+                outer_beta_group,
+                outer_beta_gender,
+                outer_beta_age,
+                outer_beta_social_status,
+                outer_beta_fitness,
+                outer_beta_species,
+                outer_beta_interventions,
+                outer_alphas,
+            )
+        ):
             # calculate features
             with pm.Model() as model:
-                y_hat = (ob_alphas + ob_human_counts * human_count_diff + ob_group +
-                         ob_gender * gender_diff + ob_age * age_diff + ob_social_status * social_status_diff + ob_fitness * fitness_diff + ob_species * species_diff + ob_interventions * intervention_val)
-                prob = 1/(1 + np.exp(-y_hat))
+                y_hat = (
+                    ob_alphas
+                    + ob_human_counts * human_count_diff
+                    + ob_group
+                    + ob_gender * gender_diff
+                    + ob_age * age_diff
+                    + ob_social_status * social_status_diff
+                    + ob_fitness * fitness_diff
+                    + ob_species * species_diff
+                    + ob_interventions * intervention_val
+                )
+                prob = 1 / (1 + np.exp(-y_hat))
                 sampled_choice = np.random.binomial(1, prob)
                 prob = prob if sampled_choice == 1 else 1 - prob
                 log_likelihood = np.log(prob)
-                in_human_counts = beta_human_counts[num_outer_samples + n * num_inner_samples: num_outer_samples + (n+1) * num_inner_samples]
-                in_group = beta_group[num_outer_samples + n * num_inner_samples: num_outer_samples + (n+1) * num_inner_samples]
-                in_gender = beta_gender[num_outer_samples + n * num_inner_samples: num_outer_samples + (n+1) * num_inner_samples]
-                in_age = beta_age[num_outer_samples + n * num_inner_samples: num_outer_samples + (n+1) * num_inner_samples]
-                in_social_status = beta_social_status[num_outer_samples + n * num_inner_samples: num_outer_samples + (n+1) * num_inner_samples]
-                in_fitness = beta_fitness[num_outer_samples + n * num_inner_samples: num_outer_samples + (n+1) * num_inner_samples]
-                in_species = beta_species[num_outer_samples + n * num_inner_samples: num_outer_samples + (n+1) * num_inner_samples]
-                in_interventions = beta_interventions[num_outer_samples + n * num_inner_samples: num_outer_samples + (n+1) * num_inner_samples]
-                in_alphas = alphas[num_outer_samples + n * num_inner_samples: num_outer_samples + (n+1) * num_inner_samples]
-                
+                in_human_counts = beta_human_counts[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                in_group = beta_group[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                in_gender = beta_gender[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                in_age = beta_age[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                in_social_status = beta_social_status[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                in_fitness = beta_fitness[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                in_species = beta_species[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                in_interventions = beta_interventions[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                in_alphas = alphas[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+
                 marginal_log_likelihoods = []
-                for i_human_count, i_group, i_gender, i_age, i_social_status, i_fitness, i_species, i_interventions, i_alphas in zip(in_human_counts, in_group, in_gender, in_age, in_social_status, in_fitness, in_species, in_interventions, in_alphas):
-                    y_hat = (i_alphas + i_human_count * human_count_diff + i_group + i_gender * gender_diff + i_age * age_diff + i_social_status * social_status_diff + i_fitness * fitness_diff + i_species * species_diff + i_interventions * intervention_val)
-                    prob = 1/(1 + np.exp(-y_hat))
-                    marginal_log_likelihood = np.log(prob) if sampled_choice == 1 else np.log(1 - prob)
+                for (
+                    i_human_count,
+                    i_group,
+                    i_gender,
+                    i_age,
+                    i_social_status,
+                    i_fitness,
+                    i_species,
+                    i_interventions,
+                    i_alphas,
+                ) in zip(
+                    in_human_counts,
+                    in_group,
+                    in_gender,
+                    in_age,
+                    in_social_status,
+                    in_fitness,
+                    in_species,
+                    in_interventions,
+                    in_alphas,
+                ):
+                    y_hat = (
+                        i_alphas
+                        + i_human_count * human_count_diff
+                        + i_group
+                        + i_gender * gender_diff
+                        + i_age * age_diff
+                        + i_social_status * social_status_diff
+                        + i_fitness * fitness_diff
+                        + i_species * species_diff
+                        + i_interventions * intervention_val
+                    )
+                    prob = 1 / (1 + np.exp(-y_hat))
+                    marginal_log_likelihood = (
+                        np.log(prob) if sampled_choice == 1 else np.log(1 - prob)
+                    )
                     marginal_log_likelihoods.append(marginal_log_likelihood)
-                
-            max_log = np.max(marginal_log_likelihoods)    
-            log_marginal_likelihood = max_log + np.log(np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log)))
+
+            max_log = np.max(marginal_log_likelihoods)
+            log_marginal_likelihood = max_log + np.log(
+                np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log))
+            )
             log_likelihoods.append(log_likelihood - log_marginal_likelihood)
-        
+
         eig_value = np.mean(log_likelihoods)
         return eig_value
-    
+
     def get_norm_factors(self):
-        N = 1000    
+        N = 1000
         errs = []
         measurements = []
         import logging
+
         import tqdm
+
         logger = logging.getLogger("pymc")
         logger.setLevel(logging.WARNING)
         for i in tqdm.tqdm(range(N)):
@@ -259,12 +475,13 @@ What is the binary output? (1 or 2)"""
         err_mean, err_std = self.evaluate_predictions(pred, measurements)
         return err_mean, err_std
 
+
 class DirectPredictionNaive(DirectPrediction):
     def __init__(self, env):
         super().__init__(env)
         self.eval_points = []
         self.eval_pointer = 0
-    
+
     def get_system_message(self, include_prior):
         goal_description = "Your goal is to conduct experiments and explain the environment to the user so that they can achieve their goal."
         if include_prior:
@@ -273,7 +490,7 @@ class DirectPredictionNaive(DirectPrediction):
             goal_description += "The goal of the user is to be able to predict the binary choice output based on the input features describing two groups and an intervention."
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_naive_system_message(self, include_prior):
         if include_prior:
             goal_description = """The Moral Machine is an experiment where participants are presented with moral dilemmas involving autonomous vehicles. In each dilemma, the vehicle must decide between two outcomes, each involving the death of a different group of characters.
@@ -291,11 +508,18 @@ The output is a choice between group 1 and group 2.
 You may think before prividing your answer. Here is an example:
 <thought>your thought</thought>
 <answer>your answer in the specified format</answer>"""
-        description = goal_description + '\n' + format_instructions
+        description = goal_description + "\n" + format_instructions
         description += "Here is what you know about the environment:\n"
-        return description    
-    
-    def get_comm_prompt(self, include_prior, com_limit=300, use_ppl=False, str_prob_prog=None, params_summary_str=None):
+        return description
+
+    def get_comm_prompt(
+        self,
+        include_prior,
+        com_limit=300,
+        use_ppl=False,
+        str_prob_prog=None,
+        params_summary_str=None,
+    ):
         description = f"""Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. 
 They will make predictions based solely on your explanation, so provide as much detail as possible. You CANNOT provide your own experiments or observations.
 Limit your explanation to {com_limit} words"""
@@ -309,6 +533,7 @@ Limit your explanation to {com_limit} words"""
 
         return description
 
+
 class MoralMachine:
     def __init__(self, model_name="gpt-5.2"):
         self.model_name = model_name
@@ -319,11 +544,28 @@ class MoralMachine:
         self.api_key = cfg.get("api_key")
         litellm.drop_params = True
         litellm.set_verbose = False
-        self.characters = ['stroller', 'boy', 'girl', 'pregnant_woman', 'male_doctor', 'female_doctor',
-                        'female_athlete', 'male_athlete', 'female_executive', 'male_executive',
-                        'large_woman', 'large_man', 'homeless', 'old_man', 'old_woman', 'criminal', 'dog', 'cat']
+        self.characters = [
+            "stroller",
+            "boy",
+            "girl",
+            "pregnant_woman",
+            "male_doctor",
+            "female_doctor",
+            "female_athlete",
+            "male_athlete",
+            "female_executive",
+            "male_executive",
+            "large_woman",
+            "large_man",
+            "homeless",
+            "old_man",
+            "old_woman",
+            "criminal",
+            "dog",
+            "cat",
+        ]
 
-        self.attributes = ['gender', 'fitness', 'social_status', 'lawful', 'age', 'human']
+        self.attributes = ["gender", "fitness", "social_status", "lawful", "age", "human"]
         self.model = self._build_model()
         # system message for the lm that plays the participant
         self.system = """You have to make choices in a moral dilemma involving autonomous vehicles. In each dilemma, the vehicle must decide between two outcomes, each involving the death of a different group of characters.
@@ -358,48 +600,76 @@ Start with "I choose to save group 1/group 2 because...". Be concise and faithfu
     def _build_model(self):
         with pm.Model() as model:
             # Priors for regression coefficients
-            beta_intervention = pm.Normal('beta_intervention', mu=-0.3, sigma=0.1)  # Preference for inaction
-            beta_group = pm.Normal('beta_group', mu=0.4, sigma=0.1)  # Preference for group 1
-            beta_gender = pm.Normal('beta_gender', mu=-0.3, sigma=0.1)  # Sparing females
-            beta_fitness = pm.Normal('beta_fitness', mu=0.4, sigma=0.1)  # Sparing the fit
-            beta_social_status = pm.Normal('beta_social_status', mu=0.1, sigma=0.1)  # Sparing higher status
+            beta_intervention = pm.Normal(
+                "beta_intervention", mu=-0.3, sigma=0.1
+            )  # Preference for inaction
+            beta_group = pm.Normal("beta_group", mu=0.4, sigma=0.1)  # Preference for group 1
+            beta_gender = pm.Normal("beta_gender", mu=-0.3, sigma=0.1)  # Sparing females
+            beta_fitness = pm.Normal("beta_fitness", mu=0.4, sigma=0.1)  # Sparing the fit
+            beta_social_status = pm.Normal(
+                "beta_social_status", mu=0.1, sigma=0.1
+            )  # Sparing higher status
             # beta_legal = pm.Normal('beta_legal', mu=0.2, sigma=0.1)  # Sparing the non-jaywalkers
-            beta_age = pm.Normal('beta_age', mu=0.1, sigma=0.1)  # Sparing the young
-            beta_human_count = pm.Normal('beta_human_count', mu=0.7, sigma=0.1)  # Sparing more characters
-            beta_species = pm.Normal('beta_species', mu=0.6, sigma=0.1)  
+            beta_age = pm.Normal("beta_age", mu=0.1, sigma=0.1)  # Sparing the young
+            beta_human_count = pm.Normal(
+                "beta_human_count", mu=0.7, sigma=0.1
+            )  # Sparing more characters
+            beta_species = pm.Normal("beta_species", mu=0.6, sigma=0.1)
 
             # Prior for intercept
-            alpha = pm.Normal('alpha', mu=0, sigma=0.3)
+            alpha = pm.Normal("alpha", mu=0, sigma=0.3)
         return model
 
     def calculate_attr_diff(self, group1, group2, attribute):
-        if attribute == 'gender':
-            return len([char for char in group1 if 'man' in char or 'woman' in char]) - len([char for char in group2 if 'man' in char or 'woman' in char])
-        elif attribute == 'age':
-            return len([char for char in group1 if 'elderly' in char]) - len([char for char in group2 if 'elderly' in char])
-        elif attribute == 'social_status':
-            return len([char for char in group1 if 'executive' in char or 'homeless' in char or 'criminal' in char]) - len([char for char in group2 if 'executive' in char or 'homeless' in char or 'criminal' in char])
-        elif attribute == 'fitness':
-            return len([char for char in group1 if 'athlete' in char]) - len([char for char in group2 if 'athlete' in char])
-        elif attribute == 'species':
-            return len([char for char in group1 if 'dog' in char or 'cat' in char]) - len([char for char in group2 if 'dog' in char or 'cat' in char])
-        elif attribute == 'human':
-            return len([char for char in group1 if 'human' in char]) - len([char for char in group2 if 'human' in char])
+        if attribute == "gender":
+            return len([char for char in group1 if "man" in char or "woman" in char]) - len(
+                [char for char in group2 if "man" in char or "woman" in char]
+            )
+        elif attribute == "age":
+            return len([char for char in group1 if "elderly" in char]) - len(
+                [char for char in group2 if "elderly" in char]
+            )
+        elif attribute == "social_status":
+            return len(
+                [
+                    char
+                    for char in group1
+                    if "executive" in char or "homeless" in char or "criminal" in char
+                ]
+            ) - len(
+                [
+                    char
+                    for char in group2
+                    if "executive" in char or "homeless" in char or "criminal" in char
+                ]
+            )
+        elif attribute == "fitness":
+            return len([char for char in group1 if "athlete" in char]) - len(
+                [char for char in group2 if "athlete" in char]
+            )
+        elif attribute == "species":
+            return len([char for char in group1 if "dog" in char or "cat" in char]) - len(
+                [char for char in group2 if "dog" in char or "cat" in char]
+            )
+        elif attribute == "human":
+            return len([char for char in group1 if "human" in char]) - len(
+                [char for char in group2 if "human" in char]
+            )
         else:
             return 0
 
     def reset(self):
         # sample true values from the prior distributions
         with self.model:
-            self.alpha = pm.draw(self.model['alpha'])
-            self.beta_human_count = pm.draw(self.model['beta_human_count'])
-            self.beta_gender = pm.draw(self.model['beta_gender'])
-            self.beta_age = pm.draw(self.model['beta_age'])
-            self.beta_social_status = pm.draw(self.model['beta_social_status'])
-            self.beta_fitness = pm.draw(self.model['beta_fitness'])
-            self.beta_species = pm.draw(self.model['beta_species'])
-            self.beta_intervention = pm.draw(self.model['beta_intervention'])
-            self.beta_group = pm.draw(self.model['beta_group'])
+            self.alpha = pm.draw(self.model["alpha"])
+            self.beta_human_count = pm.draw(self.model["beta_human_count"])
+            self.beta_gender = pm.draw(self.model["beta_gender"])
+            self.beta_age = pm.draw(self.model["beta_age"])
+            self.beta_social_status = pm.draw(self.model["beta_social_status"])
+            self.beta_fitness = pm.draw(self.model["beta_fitness"])
+            self.beta_species = pm.draw(self.model["beta_species"])
+            self.beta_intervention = pm.draw(self.model["beta_intervention"])
+            self.beta_group = pm.draw(self.model["beta_group"])
             # self.beta_legal = pm.draw(self.model['beta_legal'])
         self.observed_data = []
 
@@ -415,7 +685,7 @@ Group 1: [character1, character2, ...]
 Group 2: [character1, character2, ...]
 Intervention: intervention (swerve to save group 1 or stay to save group 1)
 </observe>
-Characters can be any of: {', '.join(self.characters)}  
+Characters can be any of: {", ".join(self.characters)}  
 You can reflect before making an observation by providing your thoughts in <thought>.
 
 Here is an example:
@@ -438,7 +708,7 @@ Group 1: [entity1, entity2, ...]
 Group 2: [entity1, entity2, ...]
 Intervention: intervention_type (swerve or stay)
 </observe>
-Entities can be any of: {', '.join(self.characters)}
+Entities can be any of: {", ".join(self.characters)}
 You can reflect before making an observation by providing your thoughts in <thought>.
 
 Here is an example:
@@ -453,7 +723,7 @@ When asked to answer a question about the environment, respond in the format spe
 <answer> your answer </answer>
 """
         return message
-    
+
     def _get_char_attr(self, character):
         attrs = {
             "count": 1,
@@ -463,9 +733,24 @@ When asked to answer a question about the environment, respond in the format spe
             "fitness": None,
             "species": None,
         }
-        if character in ["boy", "male_doctor", "male_athlete", "male_executive", "large_man", "old_man"]:
+        if character in [
+            "boy",
+            "male_doctor",
+            "male_athlete",
+            "male_executive",
+            "large_man",
+            "old_man",
+        ]:
             attrs["gender"] = 0  # Male
-        elif character in ["girl", "female_doctor", "female_athlete", "female_executive", "large_woman", "old_woman", "pregnant_woman"]:
+        elif character in [
+            "girl",
+            "female_doctor",
+            "female_athlete",
+            "female_executive",
+            "large_woman",
+            "old_woman",
+            "pregnant_woman",
+        ]:
             attrs["gender"] = -1  # Female
         else:
             attrs["gender"] = 0  # Neutral
@@ -473,7 +758,7 @@ When asked to answer a question about the environment, respond in the format spe
         if character in ["boy", "girl"]:
             attrs["age"] = 1  # Child
         elif character in ["old_man", "old_woman"]:
-            attrs["age"] =  0 # Elderly
+            attrs["age"] = 0  # Elderly
         else:
             attrs["age"] = 0
 
@@ -505,50 +790,71 @@ When asked to answer a question about the environment, respond in the format spe
         group2_count = np.random.randint(1, 5)
         group1 = np.random.choice(self.characters, group1_count, replace=True)
         group2 = np.random.choice(self.characters, group2_count, replace=True)
-        intervention = np.random.choice(['swerve', 'stay'])
+        intervention = np.random.choice(["swerve", "stay"])
         # convert to tuple of strings
         group1 = tuple(group1.tolist())
         group2 = tuple(group2.tolist())
         intervention = str(intervention)
         return group1, group2, intervention
-        
+
     def step(self, group1, group2, intervention):
         # get scenario attributes
         group1_human_count = len([char for char in group1 if char in self.characters[:-2]])
         group2_human_count = len([char for char in group2 if char in self.characters[:-2]])
 
         human_count_diff = group1_human_count - group2_human_count
-        intervention_val = 1 if intervention == 'swerve' else -1
+        intervention_val = 1 if intervention == "swerve" else -1
         # group_2_jaywalkers = random.choice([-1, 0])
 
         group1_attrs = [self._get_char_attr(char) for char in group1]
         group2_attrs = [self._get_char_attr(char) for char in group2]
-        gender_diff = sum([att["gender"] for att in group1_attrs]) - sum([att["gender"] for att in group2_attrs])
-        age_diff = sum([att["age"] for att in group1_attrs]) - sum([att["age"] for att in group2_attrs])
-        social_status_diff = sum([att["social_status"] for att in group1_attrs]) - sum([att["social_status"] for att in group2_attrs])
-        fitness_diff = sum([att["fitness"] for att in group1_attrs]) - sum([att["fitness"] for att in group2_attrs])
-        species_diff = sum([att["species"] for att in group1_attrs]) - sum([att["species"] for att in group2_attrs])
-        
+        gender_diff = sum([att["gender"] for att in group1_attrs]) - sum(
+            [att["gender"] for att in group2_attrs]
+        )
+        age_diff = sum([att["age"] for att in group1_attrs]) - sum(
+            [att["age"] for att in group2_attrs]
+        )
+        social_status_diff = sum([att["social_status"] for att in group1_attrs]) - sum(
+            [att["social_status"] for att in group2_attrs]
+        )
+        fitness_diff = sum([att["fitness"] for att in group1_attrs]) - sum(
+            [att["fitness"] for att in group2_attrs]
+        )
+        species_diff = sum([att["species"] for att in group1_attrs]) - sum(
+            [att["species"] for att in group2_attrs]
+        )
+
         with pm.Model() as model:
-            y_hat = (self.alpha + self.beta_human_count * human_count_diff + self.beta_group +
-                        self.beta_gender * gender_diff + self.beta_age * age_diff + # self.beta_legal * group_2_jaywalkers +
-                        self.beta_social_status * social_status_diff + self.beta_fitness * fitness_diff +
-                        self.beta_species * species_diff + self.beta_intervention * intervention_val)
-            choice = pm.Bernoulli('choice', logit_p=y_hat)
+            y_hat = (
+                self.alpha
+                + self.beta_human_count * human_count_diff
+                + self.beta_group
+                + self.beta_gender * gender_diff
+                + self.beta_age * age_diff  # self.beta_legal * group_2_jaywalkers +
+                + self.beta_social_status * social_status_diff
+                + self.beta_fitness * fitness_diff
+                + self.beta_species * species_diff
+                + self.beta_intervention * intervention_val
+            )
+            choice = pm.Bernoulli("choice", logit_p=y_hat)
             trace = pm.sample_prior_predictive(samples=1, model=model)
-        choice = 1 - int(trace['prior']['choice'][0][0]) + 1
-        query = self.user_template.format(group1=group1, group2=group2, intervention=intervention, choice=choice)
-        character_string = ', '.join(self.characters)
-        system = self.system.format(characters=character_string,
-                        beta_human_count=self.beta_human_count,
-                        beta_gender=self.beta_gender,
-                        beta_group=self.beta_group,
-                        # beta_legal=self.beta_legal,
-                        beta_age=self.beta_age,
-                        beta_social_status=self.beta_social_status,
-                        beta_fitness=self.beta_fitness,
-                        beta_species=self.beta_species,
-                        beta_intervention=self.beta_intervention)
+        choice = 1 - int(trace["prior"]["choice"][0][0]) + 1
+        query = self.user_template.format(
+            group1=group1, group2=group2, intervention=intervention, choice=choice
+        )
+        character_string = ", ".join(self.characters)
+        system = self.system.format(
+            characters=character_string,
+            beta_human_count=self.beta_human_count,
+            beta_gender=self.beta_gender,
+            beta_group=self.beta_group,
+            # beta_legal=self.beta_legal,
+            beta_age=self.beta_age,
+            beta_social_status=self.beta_social_status,
+            beta_fitness=self.beta_fitness,
+            beta_species=self.beta_species,
+            beta_intervention=self.beta_intervention,
+        )
         # print(system)
         # print(query)
         response = call_llm_sync(
@@ -561,39 +867,39 @@ When asked to answer a question about the environment, respond in the format spe
             temperature=0.7,
         )
         response = f"The participant responded with: {response}\n"
-        
+
         return response, choice
-    
+
     def validate_input(self, input_string):
         try:
-            group1 = re.search(r'Group 1: \[(.*?)\]', input_string).group(1)
-            group1 = group1.split(', ')
-            group2 = re.search(r'Group 2: \[(.*?)\]', input_string).group(1)
-            group2 = group2.split(', ')
-            intervention = re.search(r'Intervention: (\w+)', input_string).group(1)
+            group1 = re.search(r"Group 1: \[(.*?)\]", input_string).group(1)
+            group1 = group1.split(", ")
+            group2 = re.search(r"Group 2: \[(.*?)\]", input_string).group(1)
+            group2 = group2.split(", ")
+            intervention = re.search(r"Intervention: (\w+)", input_string).group(1)
         except:
             return "Invalid input format. Please provide 'Group 1', 'Group 2', and 'Intervention' in the correct format."
-        
+
         for char in group1 + group2:
             if char not in self.characters:
                 return f"Invalid character: {char}. Please use characters from the following list: {', '.join(self.characters)}"
-        
-        if intervention not in ['swerve', 'stay']:
+
+        if intervention not in ["swerve", "stay"]:
             return "Invalid intervention. Please provide either 'swerve' or 'stay'."
-        
-        return {'group1': group1, 'group2': group2, 'intervention': intervention}
-        
+
+        return {"group1": group1, "group2": group2, "intervention": intervention}
+
     def run_experiment(self, input_string):
         design = self.validate_input(input_string)
         if isinstance(design, str):
             return design, False
-        group1 = design['group1']
-        group2 = design['group2']
-        intervention = design['intervention']
+        group1 = design["group1"]
+        group2 = design["group2"]
+        intervention = design["intervention"]
         response, choice = self.step(group1, group2, intervention)
         self.observed_data.append((tuple(group1), tuple(group2), intervention, choice))
         return response, True
-    
+
     def get_data(self):
         data_tuple = []
         # TODO: need to get the total options available
@@ -602,27 +908,27 @@ When asked to answer a question about the environment, respond in the format spe
             for attribute in ["count", "gender", "age", "social_status", "fitness", "species"]:
                 attribute_diff = self.calculate_attr_diff(group1, group2, attribute)
                 row.append(attribute_diff)
-                if intervention == 'swerve':
+                if intervention == "swerve":
                     intervention_encoded = 1
                 else:
                     intervention_encoded = 0
 
             data_tuple.append(row + [intervention_encoded, choice])
         return data_tuple
-    
+
     def group_attributes(self, group):
         attrs = []
         for char in group:
-            attrs.append(self._get_char_attr(char)) 
+            attrs.append(self._get_char_attr(char))
         return attrs
 
     def get_df(self):
-        '''
-            Construct dataframe used for Box's Loop
-        '''
-        
+        """
+        Construct dataframe used for Box's Loop
+        """
+
         self.df = construct_dataframe(self)
-    
+
     def get_description(self):
         if self.include_prior:
             return f"""
@@ -641,44 +947,55 @@ The characters can be any of the following: {self.characters}
     def get_ordered_column_names(self):
         if self.include_prior:
             return [
-                "Human_Count_Diff", 
-                "Gender_Diff", 
-                "Age_Diff", 
-                "Social_Status_Diff", 
-                "Fitness_Diff", 
-                "Species_Diff", 
+                "Human_Count_Diff",
+                "Gender_Diff",
+                "Age_Diff",
+                "Social_Status_Diff",
+                "Fitness_Diff",
+                "Species_Diff",
                 "Intervention",
                 "Choice",
             ]
         else:
-            return ["Input_1", "Input_2", "Input_3", "Input_4", "Input_5", "Input_6", "Input_7", "Output"]
-    
+            return [
+                "Input_1",
+                "Input_2",
+                "Input_3",
+                "Input_4",
+                "Input_5",
+                "Input_6",
+                "Input_7",
+                "Output",
+            ]
+
     def get_ordered_features(self):
-        return self.get_ordered_column_names()[:-1] 
+        return self.get_ordered_column_names()[:-1]
 
     def format_column_description(self):
-        '''
-            Crucial make sure these descriptions are consistent with the ordered column names
-        '''
+        """
+        Crucial make sure these descriptions are consistent with the ordered column names
+        """
         if self.include_prior:
             description = (
-            "The observations are:\n"
-            "-Choice: participant's choice on which group to save (2 for group 2 or 1 for group 1) \n"
-            "The input values are:\n"
-            "-Human_Count_Diff: human count difference between the two groups\n"
-            "-Gender_Diff: gender difference between the two groups\n"
-            "-Age_Diff: age difference between the two groups\n"
-            "-Social_Status_Diff: social status difference between the two groups\n"
-            "-Fitness_Diff: fitness difference between the two groups\n"
-            "-Species_Diff: species difference between the two groups\n"
-            "-Intervention: the intervention required to save the group (1 for swerve or 0 for stay) \n"
-            "Use the values of the input values to help you model the observations."
-        )
+                "The observations are:\n"
+                "-Choice: participant's choice on which group to save (2 for group 2 or 1 for group 1) \n"
+                "The input values are:\n"
+                "-Human_Count_Diff: human count difference between the two groups\n"
+                "-Gender_Diff: gender difference between the two groups\n"
+                "-Age_Diff: age difference between the two groups\n"
+                "-Social_Status_Diff: social status difference between the two groups\n"
+                "-Fitness_Diff: fitness difference between the two groups\n"
+                "-Species_Diff: species difference between the two groups\n"
+                "-Intervention: the intervention required to save the group (1 for swerve or 0 for stay) \n"
+                "Use the values of the input values to help you model the observations."
+            )
             return description
         else:
-            return ("The observations are: \n -Output \n"
-                    "The input values are \n -Input_1 \n -Input_2 \n -Input_3 \n -Input_4 \n -Input_5 \n -Input_6 \n -Input_7 \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -Output \n"
+                "The input values are \n -Input_1 \n -Input_2 \n -Input_3 \n -Input_4 \n -Input_5 \n -Input_6 \n -Input_7 \n"
+                "Use the values of the input values to help you model the observations. "
+            )
 
 
 if __name__ == "__main__":
@@ -721,24 +1038,21 @@ if __name__ == "__main__":
 #                 ]
 #     acc, std = goal.evaluate_predictions(preds, gts)
 #     print(acc, std)
-    # for i in range(2):
-    #     o = goal.get_goal_eval_question(True)
-    #     print(i, o)
-    # print(len(goal.eval_points))
-    # output, success = env.run_experiment(input_string)
-    # print(f"Test case 3 - Output: {output}, Success: {success}")
-    # query_point = (["man", "woman"], ["boy", "girl"], "swerve")
-    # eig = goal.expected_information_gain(query_point)
-    # print(f"Expected Information Gain: {eig}")
-    # loop and plot EIG values
-    # query_points = [(["man", "woman"], ["boy", "girl"], "swerve"),
-    #                 (["elderly", "child"], ["adult", "teen"], "swerve"),
-    #                 (["cat", "dog"], ["bird", "squirrel"], "swerve"),
-    #                 (["pedestrian", "cyclist"], ["driver", "passenger"], "swerve")]
+# for i in range(2):
+#     o = goal.get_goal_eval_question(True)
+#     print(i, o)
+# print(len(goal.eval_points))
+# output, success = env.run_experiment(input_string)
+# print(f"Test case 3 - Output: {output}, Success: {success}")
+# query_point = (["man", "woman"], ["boy", "girl"], "swerve")
+# eig = goal.expected_information_gain(query_point)
+# print(f"Expected Information Gain: {eig}")
+# loop and plot EIG values
+# query_points = [(["man", "woman"], ["boy", "girl"], "swerve"),
+#                 (["elderly", "child"], ["adult", "teen"], "swerve"),
+#                 (["cat", "dog"], ["bird", "squirrel"], "swerve"),
+#                 (["pedestrian", "cyclist"], ["driver", "passenger"], "swerve")]
 
-    # for query_point in query_points:
-    #     eig = goal.expected_information_gain(query_point)
-    #     print(f"Query Point: {query_point}, Expected Information Gain: {eig}")                
-                    
-                    
-        
+# for query_point in query_points:
+#     eig = goal.expected_information_gain(query_point)
+#     print(f"Query Point: {query_point}, Expected Information Gain: {eig}")

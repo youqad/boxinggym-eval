@@ -2,10 +2,11 @@ import random
 
 import numpy as np
 import pymc as pm
-from scipy.stats import truncnorm, binom
+from scipy.stats import binom, truncnorm
 
-from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
+from .goal import Goal
+
 
 class DirectDeath(Goal):
     def __init__(self, env):
@@ -13,8 +14,10 @@ class DirectDeath(Goal):
         self.eval_points = []
         self.eval_pointer = 0
         self.update_param_cache = {}
-        self.norm_mu, self.norm_sigma = (222.2998, 189.76853880440774)
-    
+        # Recomputed v2_2026-01-27: median of 5 seeds [42,123,456,789,101112]
+        # Previous: (222.2998, 189.7685) — confirmed correct, minor update
+        self.norm_mu, self.norm_sigma = (223.3291, 190.6460)
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = "Your goal is to be able to reliably predict the number of infected individuals at specific times. Conduct experiments to learn about the environment and make predictions based on your observations."
@@ -22,11 +25,11 @@ class DirectDeath(Goal):
             goal_description = "Your goal is to be able to reliably predict the positive integer output of the environment for different float inputs. Conduct experiments to learn about the environment and make predictions based on your observations."
         description = self.env.get_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
-        if self.eval_pointer+1 > len(self.eval_points):
+        if self.eval_pointer + 1 > len(self.eval_points):
             # Generate a time value greater than 0 and up to the upper limit
-            time = np.random.uniform(self.env.lower_bound+0.001, self.env.upper_bound)
+            time = np.random.uniform(self.env.lower_bound + 0.001, self.env.upper_bound)
             infected_num = self.env.step(time)
             self.eval_points.append((time, infected_num))
         else:
@@ -39,7 +42,7 @@ class DirectDeath(Goal):
             question = f"What is the output of the environment at input {time}?"
         question += " Respond with a positive integer."
         return question, infected_num
-    
+
     def evaluate_predictions(self, predictions, measurements):
         parsed_predictions = []
         for pred in predictions:
@@ -54,56 +57,74 @@ class DirectDeath(Goal):
         if tuple(existing_data) not in self.update_param_cache:
             # Update the parameter prior using PyMC
             with pm.Model() as model:
-                theta = pm.TruncatedNormal('theta', mu=self.env.mu, sigma=self.env.sigma,
-                                        lower=self.env.lower_bound, upper=self.env.upper_bound)
+                theta = pm.TruncatedNormal(
+                    "theta",
+                    mu=self.env.mu,
+                    sigma=self.env.sigma,
+                    lower=self.env.lower_bound,
+                    upper=self.env.upper_bound,
+                )
 
                 # Define the likelihood function
                 def likelihood(xi, infected_num):
                     eta = 1 - pm.math.exp(-theta * xi)
-                    return pm.Binomial('infected_num', n=self.env.N, p=eta, observed=infected_num)
+                    return pm.Binomial("infected_num", n=self.env.N, p=eta, observed=infected_num)
 
-                xi_obs = pm.Data('xi_obs', [d[0] for d in existing_data])
-                infected_num_obs = pm.Data('infected_num_obs', [d[1] for d in existing_data])
+                xi_obs = pm.Data("xi_obs", [d[0] for d in existing_data])
+                infected_num_obs = pm.Data("infected_num_obs", [d[1] for d in existing_data])
                 likelihood(xi_obs, infected_num_obs)
-                trace = pm.sample(num_outer_samples * num_inner_samples + num_outer_samples, tune=1000, return_inferencedata=False)
-            
-            thetas = trace['theta']
+                trace = pm.sample(
+                    num_outer_samples * num_inner_samples + num_outer_samples,
+                    tune=1000,
+                    return_inferencedata=False,
+                )
+
+            thetas = trace["theta"]
             random.shuffle(thetas)
             updated_theta_samples = thetas[:num_outer_samples]
-            print(len(trace['theta']))
+            print(len(trace["theta"]))
             print("Updated parameters", len(updated_theta_samples))
             print(f"Inferred theta: {np.mean(updated_theta_samples)}")
-            self.update_param_cache[tuple(existing_data)] = (updated_theta_samples, thetas[num_outer_samples:])
+            self.update_param_cache[tuple(existing_data)] = (
+                updated_theta_samples,
+                thetas[num_outer_samples:],
+            )
         else:
             updated_theta_samples, thetas = self.update_param_cache[tuple(existing_data)]
-        
+
         log_likelihoods = []
 
         for n, outer_theta in enumerate(updated_theta_samples):
             # Calculate the log-likelihood for the new query point only
             eta = 1 - np.exp(-outer_theta * xi)
-            inner_theta_samples = thetas[n*num_inner_samples:(n+1)*num_inner_samples]
+            inner_theta_samples = thetas[n * num_inner_samples : (n + 1) * num_inner_samples]
             sampled_infected_num = np.random.binomial(self.env.N, eta)
-            preds = [1 for _ in range(sampled_infected_num)] + [0 for _ in range(self.env.N - sampled_infected_num)]
+            preds = [1 for _ in range(sampled_infected_num)] + [
+                0 for _ in range(self.env.N - sampled_infected_num)
+            ]
             log_liks = [np.log(eta) if pred == 1 else np.log(1 - eta) for pred in preds]
             log_likelihood = np.mean(log_liks)
             # Calculate the marginal log-likelihood for the new query point only
             marginal_log_likelihoods = []
             for inner_theta in inner_theta_samples:
                 eta = 1 - np.exp(-inner_theta * xi)
-                marginal_log_likelihood = [np.log(eta) if pred == 1 else np.log(1 - eta) for pred in preds]
+                marginal_log_likelihood = [
+                    np.log(eta) if pred == 1 else np.log(1 - eta) for pred in preds
+                ]
                 marginal_log_likelihood = np.mean(marginal_log_likelihood)
                 marginal_log_likelihoods.append(marginal_log_likelihood)
 
             # Use the log-sum-exp trick for numerical stability
             max_log = np.max(marginal_log_likelihoods)
-            log_marginal_likelihood = max_log + np.log(np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log)))
+            log_marginal_likelihood = max_log + np.log(
+                np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log))
+            )
             log_likelihoods.append(log_likelihood - log_marginal_likelihood)
 
         # Calculate the EIG for the new query point
         eig_value = np.mean(log_likelihoods)
         return eig_value
-    
+
     def get_norm_factors(self):
         N = 10000
         errs = []
@@ -119,12 +140,13 @@ class DirectDeath(Goal):
         mean_err, std_err = self.evaluate_predictions(predicitons, outs)
         return mean_err, std_err
 
+
 class DirectDeathNaive(DirectDeath):
     def __init__(self, env):
         super().__init__(env)
         self.eval_points = []
         self.eval_pointer = 0
-    
+
     def get_system_message(self, include_prior):
         goal_description = "Your goal is to conduct experiments and explain the environment to the user so that they can achieve their goal."
         if include_prior:
@@ -133,10 +155,12 @@ class DirectDeathNaive(DirectDeath):
             goal_description += "The goal of the user is to reliably predict the positive integer output of the environment for different float inputs. Conduct experiments to learn about the environment."
         description = self.env.get_system_message(include_prior, goal_description)
         return description
-    
+
     def get_naive_system_message(self, include_prior):
         if include_prior:
-            goal_description = "Your goal is to predict the number of infected individuals at specific times."
+            goal_description = (
+                "Your goal is to predict the number of infected individuals at specific times."
+            )
         else:
             goal_description = "Your goal is to predict the positive integer output of the environment for different float inputs."
         format_instructions = """You must respond with a positive integer. You may also think before providing your predictions.
@@ -147,8 +171,15 @@ Here is an example:
         description = goal_description + "\n" + format_instructions
         description += "Here is what you know about the enivronment:\n"
         return description
-    
-    def get_comm_prompt(self, include_prior, com_limit=300, use_ppl=False, str_prob_prog=None, params_summary_str=None):    
+
+    def get_comm_prompt(
+        self,
+        include_prior,
+        com_limit=300,
+        use_ppl=False,
+        str_prob_prog=None,
+        params_summary_str=None,
+    ):
         description = f"""Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. 
 They will make predictions based solely on your explanation, so provide as much detail as possible. You cannot provide your own experiments or observations.
 Limit your explanation to {com_limit} words."""
@@ -160,7 +191,6 @@ Limit your explanation to {com_limit} words."""
             description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
             description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
-    
 
 
 class InfectionRate(Goal):
@@ -170,7 +200,7 @@ class InfectionRate(Goal):
         self.eval_pointer = 0
         self.update_param_cache = {}
         self.norm_mu, self.norm_sigma = (0.2902838787350395, 1.756991075450312)
-    
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = "Your goal is to be able to reliably predict the infection rate of the disease. Conduct experiments to learn about the environment and make predictions based on your observations. The infection rate is a positive real number. It is the rate at which healthy individuals become infected. Specifically, probability of a person being infected is proportional to 1-exp(-theta*x), where theta is the infection rate and x is the time."
@@ -178,7 +208,7 @@ class InfectionRate(Goal):
             goal_description = "Your goal is to be able to reliably predict the latent parameter theta that governs the system's outputs. Conduct experiments to learn about the environment and make predictions based on your observations. Theta is a positive real number."
         description = self.env.get_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
         if include_prior:
             question = "What is the infection rate?"
@@ -201,57 +231,78 @@ class InfectionRate(Goal):
         if tuple(existing_data) not in self.update_param_cache:
             # Update the parameter prior using PyMC
             with pm.Model() as model:
-                theta = pm.TruncatedNormal('theta', mu=self.env.mu, sigma=self.env.sigma,
-                                        lower=self.env.lower_bound, upper=self.env.upper_bound)
+                theta = pm.TruncatedNormal(
+                    "theta",
+                    mu=self.env.mu,
+                    sigma=self.env.sigma,
+                    lower=self.env.lower_bound,
+                    upper=self.env.upper_bound,
+                )
 
                 # Define the likelihood function
                 def likelihood(xi, infected_num):
                     eta = 1 - pm.math.exp(-theta * xi)
-                    return pm.Binomial('infected_num', n=self.env.N, p=eta, observed=infected_num)
+                    return pm.Binomial("infected_num", n=self.env.N, p=eta, observed=infected_num)
 
                 if len(existing_data) == 0:
-                    xi_obs = pm.Data('xi_obs', [d[0] for d in existing_data])
-                    infected_num_obs = pm.Data('infected_num_obs', [d[1] for d in existing_data])
+                    xi_obs = pm.Data("xi_obs", [d[0] for d in existing_data])
+                    infected_num_obs = pm.Data("infected_num_obs", [d[1] for d in existing_data])
                     likelihood(xi_obs, infected_num_obs)
-                trace = pm.sample(num_outer_samples * num_inner_samples + num_outer_samples, tune=1000, return_inferencedata=False, chains=2, cores=2, target_accept=0.95)
-            
-            thetas = trace['theta']
+                trace = pm.sample(
+                    num_outer_samples * num_inner_samples + num_outer_samples,
+                    tune=1000,
+                    return_inferencedata=False,
+                    chains=2,
+                    cores=2,
+                    target_accept=0.95,
+                )
+
+            thetas = trace["theta"]
             random.shuffle(thetas)
             updated_theta_samples = thetas[:num_outer_samples]
-            print(len(trace['theta']))
+            print(len(trace["theta"]))
             print("Updated parameters", len(updated_theta_samples))
             print(f"Inferred theta: {np.mean(updated_theta_samples)}")
-            self.update_param_cache[tuple(existing_data)] = (updated_theta_samples, thetas[num_outer_samples:])
+            self.update_param_cache[tuple(existing_data)] = (
+                updated_theta_samples,
+                thetas[num_outer_samples:],
+            )
         else:
             updated_theta_samples, thetas = self.update_param_cache[tuple(existing_data)]
-        
+
         log_likelihoods = []
 
         for n, outer_theta in enumerate(updated_theta_samples):
             # Calculate the log-likelihood for the new query point only
             eta = 1 - np.exp(-outer_theta * xi)
-            inner_theta_samples = thetas[n*num_inner_samples:(n+1)*num_inner_samples]
+            inner_theta_samples = thetas[n * num_inner_samples : (n + 1) * num_inner_samples]
             sampled_infected_num = np.random.binomial(self.env.N, eta)
-            preds = [1 for _ in range(sampled_infected_num)] + [0 for _ in range(self.env.N - sampled_infected_num)]
+            preds = [1 for _ in range(sampled_infected_num)] + [
+                0 for _ in range(self.env.N - sampled_infected_num)
+            ]
             log_liks = [np.log(eta) if pred == 1 else np.log(1 - eta) for pred in preds]
             log_likelihood = np.mean(log_liks)
             # Calculate the marginal log-likelihood for the new query point only
             marginal_log_likelihoods = []
             for inner_theta in inner_theta_samples:
                 eta = 1 - np.exp(-inner_theta * xi)
-                marginal_log_likelihood = [np.log(eta) if pred == 1 else np.log(1 - eta) for pred in preds]
+                marginal_log_likelihood = [
+                    np.log(eta) if pred == 1 else np.log(1 - eta) for pred in preds
+                ]
                 marginal_log_likelihood = np.mean(marginal_log_likelihood)
                 marginal_log_likelihoods.append(marginal_log_likelihood)
 
             # Use the log-sum-exp trick for numerical stability
             max_log = np.max(marginal_log_likelihoods)
-            log_marginal_likelihood = max_log + np.log(np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log)))
+            log_marginal_likelihood = max_log + np.log(
+                np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log))
+            )
             log_likelihoods.append(log_likelihood - log_marginal_likelihood)
 
         # Calculate the EIG for the new query point
         eig_value = np.mean(log_likelihoods)
         return eig_value
-    
+
     def get_norm_factors(self):
         N = 100000
         errs = []
@@ -262,13 +313,14 @@ class InfectionRate(Goal):
             sampled_infection_rate = np.random.normal(self.env.mu, scale=self.env.sigma)
             true_infection_rate = self.env.theta
             preds.append(sampled_infection_rate)
-            errs.append(np.mean((sampled_infection_rate - true_infection_rate)**2))
+            errs.append(np.mean((sampled_infection_rate - true_infection_rate) ** 2))
             measurements.append(true_infection_rate)
         pred_mu = np.mean(preds)
         predicitons = [str(pred_mu) for _ in range(N)]
         mean_err, _ = self.evaluate_predictions(predicitons, measurements)
         stds = np.std(errs)
         return mean_err, stds
+
 
 class DeathProcess:
     def __init__(self, N=50, mu=1, sigma=1, lower_bound=0):
@@ -331,10 +383,10 @@ When asked to answer a question about the environement, respond in the format sp
 
         if act <= self.lower_bound:
             return f"Error: The input must be greater than {self.lower_bound}."
-        
+
         if act >= self.upper_bound:
             return f"Error: The input must be less than the {self.upper_bound}."
-        
+
         # obs_times = [d[0] for d in self.observation_data]
         # print(obs_times)
         # max_time = max(obs_times) if obs_times else self.lower_bound
@@ -356,11 +408,11 @@ When asked to answer a question about the environement, respond in the format sp
         return self.observation_data
 
     def get_df(self):
-        '''
-            Construct dataframe used for Box's Loop
-        '''
+        """
+        Construct dataframe used for Box's Loop
+        """
         self.df = construct_dataframe(self)
-    
+
     def get_description(self):
         if self.include_prior:
             return f"""
@@ -379,22 +431,25 @@ You are observing a positive integer (with a maximum value of {self.N}) for a po
             return ["Time", "Infected_Count"]
         else:
             return ["Input", "Output"]
-    
+
     def get_ordered_features(self):
-        return self.get_ordered_column_names()[:-1] 
+        return self.get_ordered_column_names()[:-1]
 
     def format_column_description(self):
-        '''
-            Crucial make sure these descriptions are consistent with the ordered column names
-        '''
+        """Keep descriptions consistent with ordered column names."""
         if self.include_prior:
-            return ("The observations are: \n -Infected_Count: number of infected people at time x \n"
-                    "The input values are \n -Time: time \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -Infected_Count: number of infected people at time x \n"
+                "The input values are \n -Time: time \n"
+                "Use the values of the input values to help you model the observations. "
+            )
         else:
-            return ("The observations are: \n -Output \n"
-                    "The input values are \n -Input \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -Output \n"
+                "The input values are \n -Input \n"
+                "Use the values of the input values to help you model the observations. "
+            )
+
 
 if __name__ == "__main__":
     env = DeathProcess()
@@ -402,7 +457,7 @@ if __name__ == "__main__":
     print(goal.get_norm_factors())
     # goal2 = InfectionRate(env)
     # print(goal2.get_norm_factors())
-    
+
     # input_string = "0.1"
     # print(env.run_experiment(input_string))
     # # input_string = "1"
@@ -425,6 +480,3 @@ if __name__ == "__main__":
     # plt.ylabel("Expected Information Gain")
     # plt.title("Expected Information Gain for Different Inputs")
     # plt.show()
-    
-
-    

@@ -1,16 +1,17 @@
 import ast
-import numpy as np
-import random
 import logging
+import random
 from itertools import permutations
 
-from scipy.stats import norm
+import numpy as np
 import pymc as pm
+from scipy.stats import norm
 
-from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
+from .goal import Goal
 
 logger = logging.getLogger(__name__)
+
 
 class DirectGoal(Goal):
     # Default env params used to compute hardcoded norm values
@@ -21,15 +22,15 @@ class DirectGoal(Goal):
         self.eval_points = []
         self.eval_pointer = 0
         self.update_param_cache = {}
-        # Recomputed with Normal(0,1) sampling to match eval distribution
-        # Values from 50-trial median to reduce variance
+        # Recomputed v2_2026-01-27: median of 5 seeds [42,123,456,789,101112]
+        # Prior values: (176.9, 1247.7) had high seed variance
         # IMPORTANT: Only valid for default params (num_sources=3, dim=2, m=1e-4, alpha=1)
-        self.norm_mu = 176.9
-        self.norm_sigma = 1247.7
+        self.norm_mu = 57.7620
+        self.norm_sigma = 310.1102
 
         # Warn if env params differ from those used to compute hardcoded norms
         self._check_norm_validity(env)
-    
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = f"""
@@ -41,10 +42,10 @@ Your goal is to be able to reliably predict a scalar-valued floating-point numbe
 """
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
-        if self.eval_pointer+1 > len(self.eval_points):
-            loc = np.random.normal(0, 1, (self.env.dim, ))
+        if self.eval_pointer + 1 > len(self.eval_points):
+            loc = np.random.normal(0, 1, (self.env.dim,))
             choice = self.env.signal_intensity(loc)
             self.eval_points.append((loc, choice))
         else:
@@ -72,10 +73,12 @@ Here is an example.
 """
             assert "location" not in question
             assert "intensity" not in question
-        return question, choice 
+        return question, choice
 
     def evaluate_predictions(self, predictions, measurements):
-        assert len(predictions) == len(measurements), "Predictions and measurements must have the same length."
+        assert len(predictions) == len(measurements), (
+            "Predictions and measurements must have the same length."
+        )
 
         filtered_predictions = []
         filtered_measurements = []
@@ -98,7 +101,9 @@ Here is an example.
             # Update the prior distribution using the existing data
             with pm.Model() as model:
                 # Define dimensions
-                theta = pm.Normal('theta', mu=0, sigma=1, shape=(self.env.num_sources, self.env.dim))
+                theta = pm.Normal(
+                    "theta", mu=0, sigma=1, shape=(self.env.num_sources, self.env.dim)
+                )
 
                 # Define the likelihood function
                 def likelihood(xi, obs_y):
@@ -106,7 +111,7 @@ Here is an example.
                     for k in range(self.env.num_sources):
                         distance_squared = pm.math.sum((theta[k] - xi) ** 2)
                         intensity += self.env.alpha / (self.env.m + distance_squared)
-                    return pm.Normal('signals', mu=intensity, sigma=self.env.sigma, observed=obs_y)
+                    return pm.Normal("signals", mu=intensity, sigma=self.env.sigma, observed=obs_y)
 
                 # Observe the existing data
                 # Convert existing_data to numpy arrays for better handling
@@ -115,18 +120,30 @@ Here is an example.
                     obs_intensity = np.array([obs_intensity for _, obs_intensity in existing_data])
 
                     # Use pm.Data to allow for dynamic updating
-                    obs_loc_data = pm.Data('obs_loc', obs_loc)
-                    obs_intensity_data = pm.Data('obs_intensity', obs_intensity)
+                    obs_loc_data = pm.Data("obs_loc", obs_loc)
+                    obs_intensity_data = pm.Data("obs_intensity", obs_intensity)
 
                     # Call the likelihood function with the observed data
                     likelihood(obs_loc_data, obs_intensity_data)
 
                     # Sample from the posterior distribution
-                    trace = pm.sample(num_outer_samples * num_inner_samples + num_outer_samples, tune=1000, return_inferencedata=False)
-                    thetas = trace['theta']
+                    trace = pm.sample(
+                        num_outer_samples * num_inner_samples + num_outer_samples,
+                        tune=1000,
+                        return_inferencedata=False,
+                    )
+                    thetas = trace["theta"]
                 else:
                     # sample num_outer_samples * num_inner_samples + num_outer_samples thetas
-                    thetas = np.random.normal(0, 1, (num_outer_samples * num_inner_samples + num_outer_samples, self.env.num_sources, self.env.dim))
+                    thetas = np.random.normal(
+                        0,
+                        1,
+                        (
+                            num_outer_samples * num_inner_samples + num_outer_samples,
+                            self.env.num_sources,
+                            self.env.dim,
+                        ),
+                    )
                 self.update_param_cache[tuple(existing_data)] = thetas
         else:
             thetas = self.update_param_cache[tuple(existing_data)]
@@ -136,7 +153,10 @@ Here is an example.
 
         log_likelihoods = []
         for n, outer_theta in enumerate(outer_thetas):
-            inner_thetas = thetas[num_outer_samples+n * num_inner_samples:num_outer_samples+(n + 1) * num_inner_samples]
+            inner_thetas = thetas[
+                num_outer_samples + n * num_inner_samples : num_outer_samples
+                + (n + 1) * num_inner_samples
+            ]
             # Calculate the log-likelihood for the new query point only
             intensity = self.env.b
             for k in range(len(outer_theta)):
@@ -152,12 +172,16 @@ Here is an example.
                 for k in range(len(inner_theta)):
                     distance_squared = np.sum((inner_theta[k] - query_point) ** 2)
                     intensity_inner += self.env.alpha / (self.env.m + distance_squared)
-                marginal_log_likelihood = norm.logpdf(sampled_obs, loc=intensity_inner, scale=self.env.sigma)
+                marginal_log_likelihood = norm.logpdf(
+                    sampled_obs, loc=intensity_inner, scale=self.env.sigma
+                )
                 marginal_log_likelihoods.append(marginal_log_likelihood)
 
             # Use the log-sum-exp trick for numerical stability
             max_log = np.max(marginal_log_likelihoods)
-            log_marginal_likelihood = max_log + np.log(np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log)))
+            log_marginal_likelihood = max_log + np.log(
+                np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log))
+            )
             log_likelihoods.append(log_likelihood - log_marginal_likelihood)
 
         # Calculate the EIG for the new query point
@@ -195,12 +219,13 @@ Here is an example.
         mean_mse, std_mse = self.evaluate_predictions(predictions, measurements)
         return mean_mse, std_mse
 
+
 class DirectGoalNaive(DirectGoal):
     def __init__(self, env):
         super().__init__(env)
         self.eval_points = []
         self.eval_pointer = 0
-    
+
     def get_system_message(self, include_prior):
         goal_description = "Your goal is to conduct experiments and explain the environment to the user so that they can achieve their goal."
 
@@ -214,7 +239,7 @@ The goal of the user is to be able to reliably predict a scalar-valued floating-
 """
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_naive_system_message(self, include_prior):
         if include_prior:
             goal_description = f"""
@@ -232,11 +257,18 @@ If you do not do so, I will be penalized one million dollars and it will be a co
 Here is an example:
 <thought>your thought</thought>
 <answer>1</answer>"""
-        description = goal_description + '\n' + format_instructions
+        description = goal_description + "\n" + format_instructions
         description += "Here is what you know about the environment:\n"
-        return description    
-    
-    def get_comm_prompt(self, include_prior, com_limit=300, use_ppl=False, str_prob_prog=None, params_summary_str=None):    
+        return description
+
+    def get_comm_prompt(
+        self,
+        include_prior,
+        com_limit=300,
+        use_ppl=False,
+        str_prob_prog=None,
+        params_summary_str=None,
+    ):
         extra_prompt = ""
         if include_prior:
             extra_prompt = """
@@ -258,7 +290,7 @@ Limit your explanation to {com_limit} words.
             description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
             description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
-    
+
 
 class SourceGoal(Goal):
     def __init__(self, env):
@@ -268,7 +300,7 @@ class SourceGoal(Goal):
         self.update_param_cache = {}
         self.norm_mu = 1.57
         self.norm_sigma = 1.15385
-    
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = f"""
@@ -280,26 +312,27 @@ Your goal is to be able to predict {self.env.num_sources} sets of {self.env.dim}
 """
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
         true_theta = self.env.true_theta
         if include_prior:
             question = f"""
 Please predict {self.env.num_sources} {self.env.dim}-dimensional coordinates of the signal sources.
 Format your prediction as a list of {self.env.num_sources} lists of {self.env.dim} values. Answer up to two decimal places.
-Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range(self.env.dim)]) + ']' for _ in range(self.env.num_sources)])}]'
+Here is an example prediction: '[{", ".join(["[" + ", ".join(["1" for _ in range(self.env.dim)]) + "]" for _ in range(self.env.num_sources)])}]'
 """
         else:
             question = f"""
 Please predict {self.env.num_sources} sets of {self.env.dim}-dimensional latent parameters.
 Format your prediction as a list of {self.env.num_sources} lists of {self.env.dim} values. Answer up to two decimal places.
-Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range(self.env.dim)]) + ']' for _ in range(self.env.num_sources)])}]'
+Here is an example prediction: '[{", ".join(["[" + ", ".join(["1" for _ in range(self.env.dim)]) + "]" for _ in range(self.env.num_sources)])}]'
 """
-        return question, true_theta 
-    
-    def evaluate_predictions(self, predictions, measurements):
+        return question, true_theta
 
-        assert len(predictions) == len(measurements), "Predictions and measurements must have the same length."
+    def evaluate_predictions(self, predictions, measurements):
+        assert len(predictions) == len(measurements), (
+            "Predictions and measurements must have the same length."
+        )
 
         def _parse_prediction(prediction):
             if isinstance(prediction, (list, tuple)):
@@ -307,7 +340,7 @@ Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range
             elif isinstance(prediction, str):
                 candidate = prediction.strip()
                 if not candidate.startswith("[") and "[" in candidate and "]" in candidate:
-                    candidate = candidate[candidate.find("["):candidate.rfind("]") + 1]
+                    candidate = candidate[candidate.find("[") : candidate.rfind("]") + 1]
                 try:
                     parsed = ast.literal_eval(candidate)
                 except (ValueError, SyntaxError) as exc:
@@ -327,9 +360,11 @@ Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range
             assert isinstance(prediction, list)
             estimated_locations = np.array(prediction)
             if estimated_locations.shape != true_theta.shape:
-                raise ValueError("The shape of the estimated locations must match the shape of the true locations.")
+                raise ValueError(
+                    "The shape of the estimated locations must match the shape of the true locations."
+                )
 
-            lowest_mse = float('inf')
+            lowest_mse = float("inf")
             for permuted_estimated in permutations(estimated_locations):
                 se = (self.env.true_theta - np.array(permuted_estimated)) ** 2
                 mse = np.mean(se)
@@ -338,7 +373,7 @@ Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range
                     lowest_mse = mse
 
             return lowest_mse
-        
+
         mses = [permuted_mse(predictions[i], measurements[i]) for i in range(len(predictions))]
         return np.mean(mses), np.std(mses)
 
@@ -349,7 +384,9 @@ Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range
             # Update the prior distribution using the existing data
             with pm.Model() as model:
                 # Define dimensions
-                theta = pm.Normal('theta', mu=0, sigma=1, shape=(self.env.num_sources, self.env.dim))
+                theta = pm.Normal(
+                    "theta", mu=0, sigma=1, shape=(self.env.num_sources, self.env.dim)
+                )
 
                 # Define the likelihood function
                 def likelihood(xi, obs_y):
@@ -357,7 +394,7 @@ Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range
                     for k in range(self.env.num_sources):
                         distance_squared = pm.math.sum((theta[k] - xi) ** 2)
                         intensity += self.env.alpha / (self.env.m + distance_squared)
-                    return pm.Normal('signals', mu=intensity, sigma=self.env.sigma, observed=obs_y)
+                    return pm.Normal("signals", mu=intensity, sigma=self.env.sigma, observed=obs_y)
 
                 # Observe the existing data
                 # Convert existing_data to numpy arrays for better handling
@@ -366,18 +403,30 @@ Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range
                     obs_intensity = np.array([obs_intensity for _, obs_intensity in existing_data])
 
                     # Use pm.Data to allow for dynamic updating
-                    obs_loc_data = pm.Data('obs_loc', obs_loc)
-                    obs_intensity_data = pm.Data('obs_intensity', obs_intensity)
+                    obs_loc_data = pm.Data("obs_loc", obs_loc)
+                    obs_intensity_data = pm.Data("obs_intensity", obs_intensity)
 
                     # Call the likelihood function with the observed data
                     likelihood(obs_loc_data, obs_intensity_data)
 
                     # Sample from the posterior distribution
-                    trace = pm.sample(num_outer_samples * num_inner_samples + num_outer_samples, tune=1000, return_inferencedata=False)
-                    thetas = trace['theta']
+                    trace = pm.sample(
+                        num_outer_samples * num_inner_samples + num_outer_samples,
+                        tune=1000,
+                        return_inferencedata=False,
+                    )
+                    thetas = trace["theta"]
                 else:
                     # sample num_outer_samples * num_inner_samples + num_outer_samples thetas
-                    thetas = np.random.normal(0, 1, (num_outer_samples * num_inner_samples + num_outer_samples, self.env.num_sources, self.env.dim))
+                    thetas = np.random.normal(
+                        0,
+                        1,
+                        (
+                            num_outer_samples * num_inner_samples + num_outer_samples,
+                            self.env.num_sources,
+                            self.env.dim,
+                        ),
+                    )
                 self.update_param_cache[tuple(existing_data)] = thetas
         else:
             thetas = self.update_param_cache[tuple(existing_data)]
@@ -387,7 +436,10 @@ Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range
 
         log_likelihoods = []
         for n, outer_theta in enumerate(outer_thetas):
-            inner_thetas = thetas[num_outer_samples+n * num_inner_samples:num_outer_samples+(n + 1) * num_inner_samples]
+            inner_thetas = thetas[
+                num_outer_samples + n * num_inner_samples : num_outer_samples
+                + (n + 1) * num_inner_samples
+            ]
             # Calculate the log-likelihood for the new query point only
             intensity = self.env.b
             for k in range(len(outer_theta)):
@@ -403,18 +455,22 @@ Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range
                 for k in range(len(inner_theta)):
                     distance_squared = np.sum((inner_theta[k] - query_point) ** 2)
                     intensity_inner += self.env.alpha / (self.env.m + distance_squared)
-                marginal_log_likelihood = norm.logpdf(sampled_obs, loc=intensity_inner, scale=self.env.sigma)
+                marginal_log_likelihood = norm.logpdf(
+                    sampled_obs, loc=intensity_inner, scale=self.env.sigma
+                )
                 marginal_log_likelihoods.append(marginal_log_likelihood)
 
             # Use the log-sum-exp trick for numerical stability
             max_log = np.max(marginal_log_likelihoods)
-            log_marginal_likelihood = max_log + np.log(np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log)))
+            log_marginal_likelihood = max_log + np.log(
+                np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log))
+            )
             log_likelihoods.append(log_likelihood - log_marginal_likelihood)
 
         # Calculate the EIG for the new query point
         eig_value = np.mean(log_likelihoods)
         return eig_value
-    
+
     def get_norm_factors(self):
         N = 1000000
         predictions = []
@@ -434,6 +490,7 @@ Here is an example prediction: '[{', '.join(['[' + ', '.join(['1' for _ in range
         mean_mse, _ = self.evaluate_predictions(predictions, measurements)
         return mean_mse, std
 
+
 class Signal:
     def __init__(self, num_sources=3, dim=2, b=1e-1, m=1e-4, alpha=1, sigma=0.5):
         # Initialize constants
@@ -447,7 +504,7 @@ class Signal:
         self.dim = dim  # Number of dimensions
         self.reset()
         self.env_name = "location_finding"
-    
+
     def reset(self):
         self.observed_data = []
         # Randomly generate source locations with normal distribution
@@ -460,7 +517,7 @@ Each source emits a signal of identical strength.
 Note that the location of the sources is unknown to us!
 Make observations by specifying a single point where you want to measure the signal in a length-{self.dim} list of floating-point numbers enclosed by double brackets. 
 """
-            message= f"""{PRIOR}
+            message = f"""{PRIOR}
 {goal_description}
 Here is an example:
 <thought> your thought </thought>
@@ -485,7 +542,7 @@ Example:
 <answer> your answer </answer>
 """
         return message
-    
+
     def sample_random_input(self):
         # Use Normal(0,1) to match: (1) source locations, (2) eval distribution
         # Previously Uniform(-2,2) caused distribution mismatch
@@ -502,17 +559,19 @@ Example:
         intensity = self.signal_intensity(xi)
         noisy_intensity = np.random.normal(intensity, self.sigma)
         return noisy_intensity
-    
+
     def validate_input(self, input_string):
         try:
             data = input_string.strip()
             data = input_string.strip("[]")
             data = [item.strip() for item in data.split(",")]
-            data = [float(item) for item in data] 
+            data = [float(item) for item in data]
         except:
             return "Error: Input must be a list of floating-point numbers."
         if len(data) != self.dim:
-            return "Error: Input must be a list of length equal to the dimension of the environment."
+            return (
+                "Error: Input must be a list of length equal to the dimension of the environment."
+            )
         return np.array(data)
 
     def run_experiment(self, input_string):
@@ -533,11 +592,11 @@ Example:
         return self.observed_data
 
     def get_df(self):
-        '''
-            Construct dataframe used for Box's Loop
-        '''
+        """
+        Construct dataframe used for Box's Loop
+        """
         self.df = construct_dataframe(self)
-    
+
     def get_description(self):
         if self.include_prior:
             return f"""The intensity at any point in the grid is determined by the superposition of signals from {self.num_sources} sources.
@@ -557,22 +616,25 @@ Make observations by specifying a single point where you want to observe in a {s
             return ["Coordinate_1", "Coordinate_2", "Signal_Intensity"]
         else:
             return ["Input_1", "Input_2", "Output"]
-    
+
     def get_ordered_features(self):
-        return self.get_ordered_column_names()[:-1] 
+        return self.get_ordered_column_names()[:-1]
 
     def format_column_description(self):
-        '''
-            Crucial make sure these descriptions are consistent with the ordered column names
-        '''
+        """Keep descriptions consistent with ordered column names."""
         if self.include_prior:
-            return ("The observations are: \n -Signal_Intensity: signal strength at the location \n"
-                    "The input values are \n -Coordinate_1: 1st dimension coordinate \n -Coordinate_2: 2nd dimension coordinate \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -Signal_Intensity: signal strength at the location \n"
+                "The input values are \n -Coordinate_1: 1st dimension coordinate \n -Coordinate_2: 2nd dimension coordinate \n"
+                "Use the values of the input values to help you model the observations. "
+            )
         else:
-            return ("The observations are: \n -Output \n"
-                    "The input values are \n -Input_1 \n -Input_2 \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -Output \n"
+                "The input values are \n -Input_1 \n -Input_2 \n"
+                "Use the values of the input values to help you model the observations. "
+            )
+
 
 if __name__ == "__main__":
     env = Signal(3, 2)
@@ -592,7 +654,7 @@ if __name__ == "__main__":
     # # input_string = "[1, 1]"
     # # # get eig
     # # print(goal.env.run_experiment(input_string))
-    
+
     # # input_string = "[0, 0]"
     # # print(goal.env.run_experiment(input_string))
     # inputs = [

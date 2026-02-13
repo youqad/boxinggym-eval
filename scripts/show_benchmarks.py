@@ -16,13 +16,11 @@ Examples:
 
 import argparse
 import csv
+import html
 import json
 import os
-import sys
-from typing import Any, Dict, Iterable, List, Optional, Tuple
-
-import html
-
+from collections.abc import Iterable
+from typing import Any
 
 PAPER_DISCOVERY10_PRIOR = {
     # Discovery@10 (with prior) values from the paper's LaTeX tables.
@@ -32,15 +30,7 @@ PAPER_DISCOVERY10_PRIOR = {
 }
 
 
-def add_src_to_path() -> str:
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-    src_path = os.path.join(repo_root, "src")
-    if src_path not in sys.path:
-        sys.path.insert(0, src_path)
-    return repo_root
-
-
-def get_norm_factors(env_name: str) -> Tuple[Optional[float], Optional[float]]:
+def get_norm_factors(env_name: str) -> tuple[float | None, float | None]:
     # Static map to avoid importing envs (which may need API keys) during aggregation
     STATIC = {
         "dugongs": (0.9058681693402041, 9.234192516908691),
@@ -65,15 +55,17 @@ def iter_json_files(root: str) -> Iterable[str]:
                 yield os.path.join(dirpath, fn)
 
 
-def load_result(path: str) -> Optional[Dict]:
+def load_result(path: str) -> dict | None:
     try:
-        with open(path, "r") as f:
+        with open(path) as f:
             return json.load(f)
     except Exception:
         return None
 
 
-def standardize(err_mean: float, err_std: float, mu0: Optional[float], sigma0: Optional[float]) -> Tuple[Optional[float], Optional[float]]:
+def standardize(
+    err_mean: float, err_std: float, mu0: float | None, sigma0: float | None
+) -> tuple[float | None, float | None]:
     if sigma0 in (None, 0):
         return None, None
     return (err_mean - mu0) / sigma0, err_std / sigma0
@@ -83,7 +75,7 @@ def _standardize_with_norm_factors(
     err_mean: float,
     err_std: float,
     norm_factors: Any,
-) -> Tuple[Optional[float], Optional[float]]:
+) -> tuple[float | None, float | None]:
     if not isinstance(norm_factors, dict):
         return None, None
     mu0 = norm_factors.get("mu")
@@ -100,7 +92,7 @@ def _standardize_with_norm_factors(
         return None, None
 
 
-def row_to_str(row: Dict) -> str:
+def row_to_str(row: dict) -> str:
     budget = row.get("budget")
     budget_str = f"{budget:>3}" if budget is not None else "  -"
     paper = row.get("paper_discovery10_mean")
@@ -113,233 +105,243 @@ def row_to_str(row: Dict) -> str:
     )
 
 
-def main():
+def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Show benchmark results with paper comparisons.")
-    ap.add_argument("root", nargs="?", default="results", help="Root folder to scan (default: results)")
+    ap.add_argument(
+        "root", nargs="?", default="results", help="Root folder to scan (default: results)"
+    )
     ap.add_argument("--csv", dest="csv_out", default=None, help="Optional path to also write CSV")
-    ap.add_argument("--html", dest="html_out", default=None, help="Optional path to also write HTML")
-    args = ap.parse_args()
+    ap.add_argument(
+        "--html", dest="html_out", default=None, help="Optional path to also write HTML"
+    )
+    return ap.parse_args()
 
-    rows: List[Dict] = []
-    for path in iter_json_files(args.root):
+
+def extract_z_by_budget(z_results_precomputed: list) -> dict[int, dict[str, Any]]:
+    z_by_budget: dict[int, dict[str, Any]] = {}
+    for zr in z_results_precomputed:
+        if not isinstance(zr, dict):
+            continue
+        b = zr.get("budget")
+        if b is None:
+            continue
+        try:
+            z_by_budget[int(b)] = zr
+        except Exception:
+            continue
+    return z_by_budget
+
+
+def _coerce_budget(value: Any) -> int | float | None:
+    """Convert budget-like values to numeric for sorting/formatting."""
+    if value is None:
+        return None
+    try:
+        b = float(value)
+    except Exception:
+        return None
+    return int(b) if b.is_integer() else b
+
+
+def compute_z_scores(
+    err_mean: float | None,
+    err_std: float | None,
+    z_entry: dict | None,
+    norm_factors: dict,
+    mu0: float | None,
+    sigma0: float | None,
+) -> tuple[float | None, float | None]:
+    """Compute z_mean and z_std from various sources."""
+    z_mean = z_std = None
+
+    if isinstance(z_entry, dict):
+        z_mean = z_entry.get("z_mean")
+        z_std = z_entry.get("z_std")
+
+    if (z_mean is None or z_std is None) and err_mean is not None and err_std is not None:
+        z_mean, z_std = _standardize_with_norm_factors(
+            float(err_mean), float(err_std), norm_factors
+        )
+
+    if (z_mean is None or z_std is None) and err_mean is not None and err_std is not None:
+        z_mean, z_std = standardize(float(err_mean), float(err_std), mu0, sigma0)
+
+    return z_mean, z_std
+
+
+def process_result_file(path: str, blob: dict) -> list[dict]:
+    rows = []
+
+    cfg = blob.get("config", {})
+    envs_raw = cfg.get("envs")
+    env_cfg = envs_raw if isinstance(envs_raw, dict) else {}
+    exp_raw = cfg.get("exp")
+    exp_cfg = exp_raw if isinstance(exp_raw, dict) else {}
+    env_name = env_cfg.get("env_name")
+    goal_name = env_cfg.get("goal_name")
+    include_prior = bool(cfg.get("include_prior", False))
+    llms_raw = cfg.get("llms")
+    if isinstance(llms_raw, dict):
+        model_name = llms_raw.get("model_name")
+    elif isinstance(llms_raw, str):
+        model_name = llms_raw
+    else:
+        model_name = None
+    seed = cfg.get("seed")
+    use_ppl = bool(cfg.get("use_ppl", False))
+    experiment_type = exp_cfg.get("experiment_type")
+    budgets = exp_cfg.get("num_experiments")
+
+    if not env_name or not goal_name:
+        return rows
+
+    mu0, sigma0 = get_norm_factors(env_name)
+    data = blob.get("data") or {}
+    raw_results = data.get("results") or []
+    z_results_precomputed = data.get("z_results") or []
+    norm_factors = data.get("norm_factors") or {}
+
+    z_by_budget = extract_z_by_budget(z_results_precomputed)
+
+    if not raw_results:
+        return rows
+
+    for i, entry in enumerate(raw_results):
+        if not entry or not isinstance(entry, list) or not entry[0]:
+            continue
+
+        try:
+            err_mean, err_std = entry[0]
+        except Exception:
+            err_mean = err_std = None
+
+        budget_raw = None
+        if isinstance(budgets, list) and i < len(budgets):
+            budget_raw = budgets[i]
+        elif isinstance(budgets, (int, float)):
+            budget_raw = budgets
+
+        budget = _coerce_budget(budget_raw)
+
+        # Find matching z_entry
+        z_entry = None
+        if budget is not None and z_by_budget:
+            try:
+                z_entry = z_by_budget.get(int(budget))
+            except Exception:
+                z_entry = None
+        if (
+            z_entry is None
+            and (budget is None or not z_by_budget)
+            and z_results_precomputed
+            and i < len(z_results_precomputed)
+        ):
+            z_entry = z_results_precomputed[i]
+
+        z_mean, z_std = compute_z_scores(err_mean, err_std, z_entry, norm_factors, mu0, sigma0)
+
+        if isinstance(z_entry, dict) and budget is None:
+            budget = _coerce_budget(z_entry.get("budget"))
+
+        # Check for paper comparison
+        paper_mean = paper_se = delta_vs_paper = None
+        budget_is_10 = isinstance(budget, (int, float)) and int(budget) == 10
+        if (
+            goal_name == "direct_naive"
+            and include_prior
+            and budget_is_10
+            and env_name in PAPER_DISCOVERY10_PRIOR
+            and z_mean is not None
+        ):
+            paper_mean, paper_se = PAPER_DISCOVERY10_PRIOR[env_name]
+            delta_vs_paper = z_mean - paper_mean
+
+        rows.append(
+            {
+                "path": path,
+                "env": env_name,
+                "goal": goal_name,
+                "experiment_type": experiment_type,
+                "include_prior": include_prior,
+                "use_ppl": use_ppl,
+                "model": model_name,
+                "seed": seed,
+                "budget": budget,
+                "raw_mean": f"{err_mean:.6g}" if err_mean is not None else "",
+                "raw_std": f"{err_std:.6g}" if err_std is not None else "",
+                "z_mean": f"{z_mean:.6g}" if z_mean is not None else "",
+                "z_std": f"{z_std:.6g}" if z_std is not None else "",
+                "paper_discovery10_mean": f"{paper_mean:.6g}" if paper_mean is not None else "",
+                "paper_discovery10_se": f"{paper_se:.6g}" if paper_se is not None else "",
+                "delta_vs_paper": f"{delta_vs_paper:.6g}" if delta_vs_paper is not None else "",
+            }
+        )
+
+    return rows
+
+
+def collect_results(root: str) -> list[dict]:
+    rows = []
+    for path in iter_json_files(root):
         blob = load_result(path)
         if not blob or not isinstance(blob, dict):
             continue
+        rows.extend(process_result_file(path, blob))
+    return rows
 
-        cfg = blob.get("config", {})
-        env_cfg = (cfg.get("envs") or {})
-        exp_cfg = (cfg.get("exp") or {})
-        env_name = env_cfg.get("env_name")
-        goal_name = env_cfg.get("goal_name")
-        include_prior = bool(cfg.get("include_prior", False))
-        model_name = (cfg.get("llms") or {}).get("model_name")
-        seed = cfg.get("seed")
-        use_ppl = bool(cfg.get("use_ppl", False))
-        experiment_type = exp_cfg.get("experiment_type")
-        budgets = exp_cfg.get("num_experiments")
 
-        if not env_name or not goal_name:
-            continue
-
-        mu0, sigma0 = get_norm_factors(env_name)
-        data = blob.get("data") or {}
-        raw_results = data.get("results") or []
-        z_results_precomputed = data.get("z_results") or []
-        norm_factors = data.get("norm_factors") or {}
-
-        z_by_budget: Dict[int, Dict[str, Any]] = {}
-        for zr in z_results_precomputed:
-            if not isinstance(zr, dict):
-                continue
-            b = zr.get("budget")
-            if b is None:
-                continue
-            try:
-                z_by_budget[int(b)] = zr
-            except Exception:
-                continue
-
-        if not raw_results:
-            continue
-
-        for i, entry in enumerate(raw_results):
-            if not entry or not isinstance(entry, list) or not entry[0]:
-                continue
-
-            # Get raw error values
-            try:
-                err_mean, err_std = entry[0]
-            except Exception:
-                err_mean = err_std = None
-
-            budget = None
-            if isinstance(budgets, list) and i < len(budgets):
-                budget = budgets[i]
-            elif isinstance(budgets, (int, float)):
-                budget = int(budgets)
-
-            z_entry = None
-            if budget is not None and z_by_budget:
-                try:
-                    z_entry = z_by_budget.get(int(budget))
-                except Exception:
-                    z_entry = None
-            if (
-                z_entry is None
-                and (budget is None or not z_by_budget)
-                and z_results_precomputed
-                and i < len(z_results_precomputed)
-            ):
-                z_entry = z_results_precomputed[i]
-
-            z_mean = z_std = None
-            if isinstance(z_entry, dict):
-                z_mean = z_entry.get("z_mean")
-                z_std = z_entry.get("z_std")
-                if budget is None:
-                    budget = z_entry.get("budget")
-
-            if (z_mean is None or z_std is None) and err_mean is not None and err_std is not None:
-                z_mean, z_std = _standardize_with_norm_factors(
-                    float(err_mean), float(err_std), norm_factors
-                )
-
-            if (z_mean is None or z_std is None) and err_mean is not None and err_std is not None:
-                z_mean, z_std = standardize(float(err_mean), float(err_std), mu0, sigma0)
-
-            paper_mean = paper_se = delta_vs_paper = None
-            if (
-                goal_name == "direct_naive"
-                and include_prior
-                and budget == 10
-                and env_name in PAPER_DISCOVERY10_PRIOR
-                and z_mean is not None
-            ):
-                paper_mean, paper_se = PAPER_DISCOVERY10_PRIOR[env_name]
-                delta_vs_paper = z_mean - paper_mean
-
-            rows.append(
-                {
-                    "path": path,
-                    "env": env_name,
-                    "goal": goal_name,
-                    "experiment_type": experiment_type,
-                    "include_prior": include_prior,
-                    "use_ppl": use_ppl,
-                    "model": model_name,
-                    "seed": seed,
-                    "budget": budget,
-                    "raw_mean": f"{err_mean:.6g}" if err_mean is not None else "",
-                    "raw_std": f"{err_std:.6g}" if err_std is not None else "",
-                    "z_mean": f"{z_mean:.6g}" if z_mean is not None else "",
-                    "z_std": f"{z_std:.6g}" if z_std is not None else "",
-                    "paper_discovery10_mean": f"{paper_mean:.6g}" if paper_mean is not None else "",
-                    "paper_discovery10_se": f"{paper_se:.6g}" if paper_se is not None else "",
-                    "delta_vs_paper": f"{delta_vs_paper:.6g}" if delta_vs_paper is not None else "",
-                }
-            )
-
-    # Pretty print
+def print_results(rows: list[dict]) -> None:
     if not rows:
         print("No results found.")
         return
 
-    print("ENV                  MODEL                        BGT raw±std        z±std          paper      Δ")
+    print(
+        "ENV                  MODEL                        BGT raw±std        z±std          paper      Δ"
+    )
     print("-" * 110)
-    for row in sorted(rows, key=lambda r: (r["env"], str(r.get("budget")), r.get("model") or "")):
+
+    def _sort_key(r: dict) -> tuple[str, float, str]:
+        b_num = _coerce_budget(r.get("budget"))
+        b_key = float(b_num) if b_num is not None else float("inf")
+        return (r["env"], b_key, r.get("model") or "")
+
+    for row in sorted(rows, key=_sort_key):
         print(row_to_str(row))
 
-    # Optional CSV output
-    if args.csv_out:
-        os.makedirs(os.path.dirname(args.csv_out), exist_ok=True)
-        fieldnames = [
-            "path",
-            "env",
-            "goal",
-            "experiment_type",
-            "include_prior",
-            "use_ppl",
-            "model",
-            "seed",
-            "budget",
-            "raw_mean",
-            "raw_std",
-            "z_mean",
-            "z_std",
-            "paper_discovery10_mean",
-            "paper_discovery10_se",
-            "delta_vs_paper",
-        ]
-        with open(args.csv_out, "w", newline="") as f:
-            w = csv.DictWriter(f, fieldnames=fieldnames)
-            w.writeheader()
-            w.writerows(rows)
-        print(f"\nCSV written to {args.csv_out}")
 
-    # Optional HTML output (styled, filterable, sortable)
-    if args.html_out:
-        os.makedirs(os.path.dirname(args.html_out), exist_ok=True)
+def write_csv(rows: list[dict], csv_out: str) -> None:
+    os.makedirs(os.path.dirname(csv_out) or ".", exist_ok=True)
+    fieldnames = [
+        "path",
+        "env",
+        "goal",
+        "experiment_type",
+        "include_prior",
+        "use_ppl",
+        "model",
+        "seed",
+        "budget",
+        "raw_mean",
+        "raw_std",
+        "z_mean",
+        "z_std",
+        "paper_discovery10_mean",
+        "paper_discovery10_se",
+        "delta_vs_paper",
+    ]
+    with open(csv_out, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        w.writerows(rows)
+    print(f"\nCSV written to {csv_out}")
 
-        def td(val: str) -> str:
-            return f"<td>{html.escape(str(val))}</td>"
 
-        header_cells = [
-            "Env", "Model", "Budget", "raw mean", "raw std", "z mean", "z std",
-            "Paper mean", "Paper se", "Δ vs paper", "Seed", "Include prior",
-            "Use PPL", "Goal", "Exp type", "Path"
-        ]
-
-        env_options = sorted({r.get("env", "") for r in rows})
-        model_options = sorted({r.get("model", "") for r in rows})
-        budget_options = sorted({str(r.get("budget")) for r in rows if r.get("budget") is not None})
-
-        rows_html = []
-        for r in sorted(rows, key=lambda r: (r["env"], str(r.get("budget")), r.get("model") or "")):
-            paper_present = bool(r.get("paper_discovery10_mean"))
-            delta = r.get("delta_vs_paper", "")
-            delta_class = ""
-            if delta:
-                try:
-                    dval = float(delta)
-                    delta_class = "delta-pos" if dval <= 0 else "delta-neg"
-                except Exception:
-                    delta_class = ""
-            rows_html.append(
-                f"<tr data-env='{html.escape(str(r.get('env','')))}' "
-                f"data-model='{html.escape(str(r.get('model','')))}' "
-                f"data-budget='{html.escape(str(r.get('budget','')))}' "
-                f"data-prior='{html.escape(str(r.get('include_prior','')))}' "
-                f"data-paper={'1' if paper_present else '0'}>"
-                + "".join([
-                    td(r.get("env", "")), td(r.get("model", "")), td(r.get("budget", "")),
-                    td(r.get("raw_mean", "")), td(r.get("raw_std", "")),
-                    td(r.get("z_mean", "")), td(r.get("z_std", "")),
-                    f"<td class='paper'>{html.escape(r.get('paper_discovery10_mean',''))}</td>",
-                    f"<td class='paper'>{html.escape(r.get('paper_discovery10_se',''))}</td>",
-                    f"<td class='{delta_class}'>{html.escape(delta)}</td>",
-                    td(r.get("seed", "")),
-                    td(r.get("include_prior", "")), td(r.get("use_ppl", "")),
-                    td(r.get("goal", "")), td(r.get("experiment_type", "")),
-                    td(r.get("path", "")),
-                ]) + "</tr>"
-            )
-
-        env_opts_html = "<option value=''>All envs</option>" + "".join(
-            f"<option value='{html.escape(e)}'>{html.escape(e)}</option>" for e in env_options
-        )
-        model_opts_html = "<option value=''>All models</option>" + "".join(
-            f"<option value='{html.escape(m)}'>{html.escape(m)}</option>" for m in model_options
-        )
-        budget_opts_html = "<option value=''>All budgets</option>" + "".join(
-            f"<option value='{html.escape(b)}'>{html.escape(b)}</option>" for b in budget_options
-        )
-
-        html_doc = """<!DOCTYPE html>
-<html lang=\"en\">
+HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset=\"UTF-8\" />
+  <meta charset="UTF-8" />
   <title>BoxingGym Benchmarks</title>
-  <script src=\"https://unpkg.com/htmx.org@1.9.12\"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <style>
     :root {{
       --bg: #0f172a;
@@ -377,35 +379,29 @@ def main():
   </style>
 </head>
 <body>
-  <div class=\"card\">
+  <div class="card">
     <h1>BoxingGym Benchmarks</h1>
-    <div class=\"muted\">Total rows: {total_rows} &nbsp;·&nbsp; Click headers to sort, use filters/search to narrow.</div>
-    <div class=\"grid\" style=\"margin-top:16px;\">
+    <div class="muted">Total rows: {total_rows} &nbsp;·&nbsp; Click headers to sort, use filters/search to narrow.</div>
+    <div class="grid" style="margin-top:16px;">
       <div>
         <label>Env</label>
-        <select id=\"f-env\">
-          {env_opts}
-        </select>
+        <select id="f-env">{env_opts}</select>
       </div>
       <div>
         <label>Model</label>
-        <select id=\"f-model\">
-          {model_opts}
-        </select>
+        <select id="f-model">{model_opts}</select>
       </div>
       <div>
         <label>Budget</label>
-        <select id=\"f-budget\">
-          {budget_opts}
-        </select>
+        <select id="f-budget">{budget_opts}</select>
       </div>
       <div>
         <label>Search (path / goal / exp)</label>
-        <input id=\"f-search\" type=\"text\" placeholder=\"substring match...\" />
+        <input id="f-search" type="text" placeholder="substring match..." />
       </div>
       <div>
         <label>Include prior</label>
-        <select id=\"f-prior\">
+        <select id="f-prior">
           <option value=''>Any</option>
           <option value='True'>True</option>
           <option value='False'>False</option>
@@ -413,25 +409,18 @@ def main():
       </div>
       <div>
         <label>Paper baseline</label>
-        <select id=\"f-paper\">
+        <select id="f-paper">
           <option value=''>All rows</option>
           <option value='1'>Only rows with paper ref</option>
           <option value='0'>Hide rows with paper ref</option>
         </select>
       </div>
     </div>
-    <table id=\"bench-table\">
-      <thead>
-        <tr>
-          {header_html}
-        </tr>
-      </thead>
-      <tbody>
-        {rows_html}
-      </tbody>
+    <table id="bench-table">
+      <thead><tr>{header_html}</tr></thead>
+      <tbody>{rows_html}</tbody>
     </table>
   </div>
-
   <script>
     const tbl = document.getElementById('bench-table');
     const rows = Array.from(tbl.tBodies[0].rows);
@@ -482,23 +471,135 @@ def main():
 </body>
 </html>"""
 
-        header_html = ''.join(
-            f"<th data-key='{html.escape(h.lower().replace(' ','_'))}'>" + html.escape(h) + "</th>"
-            for h in header_cells
-        )
 
-        html_doc = html_doc.format(
-            total_rows=len(rows),
-            env_opts=env_opts_html,
-            model_opts=model_opts_html,
-            budget_opts=budget_opts_html,
-            header_html=header_html,
-            rows_html=''.join(rows_html),
-        )
+def _td(val: str) -> str:
+    """Escape and wrap value in td tag."""
+    return f"<td>{html.escape(str(val))}</td>"
 
-        with open(args.html_out, "w", encoding="utf-8") as f:
-            f.write(html_doc)
-        print(f"HTML written to {args.html_out}")
+
+def _build_row_html(r: dict) -> str:
+    """Build HTML for a single table row."""
+    paper_present = bool(r.get("paper_discovery10_mean"))
+    delta = r.get("delta_vs_paper", "")
+    delta_class = ""
+    if delta:
+        try:
+            dval = float(delta)
+            delta_class = "delta-pos" if dval <= 0 else "delta-neg"
+        except Exception:
+            pass
+
+    cells = [
+        _td(r.get("env", "")),
+        _td(r.get("model", "")),
+        _td(r.get("budget", "")),
+        _td(r.get("raw_mean", "")),
+        _td(r.get("raw_std", "")),
+        _td(r.get("z_mean", "")),
+        _td(r.get("z_std", "")),
+        f"<td class='paper'>{html.escape(r.get('paper_discovery10_mean', ''))}</td>",
+        f"<td class='paper'>{html.escape(r.get('paper_discovery10_se', ''))}</td>",
+        f"<td class='{delta_class}'>{html.escape(delta)}</td>",
+        _td(r.get("seed", "")),
+        _td(r.get("include_prior", "")),
+        _td(r.get("use_ppl", "")),
+        _td(r.get("goal", "")),
+        _td(r.get("experiment_type", "")),
+        _td(r.get("path", "")),
+    ]
+
+    return (
+        f"<tr data-env='{html.escape(str(r.get('env', '')))}' "
+        f"data-model='{html.escape(str(r.get('model', '')))}' "
+        f"data-budget='{html.escape(str(r.get('budget', '')))}' "
+        f"data-prior='{html.escape(str(r.get('include_prior', '')))}' "
+        f"data-paper={'1' if paper_present else '0'}>" + "".join(cells) + "</tr>"
+    )
+
+
+def write_html(rows: list[dict], html_out: str) -> None:
+    """Write results to HTML file with filters and sorting."""
+    os.makedirs(os.path.dirname(html_out) or ".", exist_ok=True)
+
+    header_cells = [
+        "Env",
+        "Model",
+        "Budget",
+        "raw mean",
+        "raw std",
+        "z mean",
+        "z std",
+        "Paper mean",
+        "Paper se",
+        "Δ vs paper",
+        "Seed",
+        "Include prior",
+        "Use PPL",
+        "Goal",
+        "Exp type",
+        "Path",
+    ]
+
+    env_options = sorted({r.get("env", "") for r in rows})
+    model_options = sorted({r.get("model", "") for r in rows})
+    budget_options = sorted({str(r.get("budget")) for r in rows if r.get("budget") is not None})
+
+    sorted_rows = sorted(
+        rows,
+        key=lambda r: (
+            r["env"],
+            float(_coerce_budget(r.get("budget")))
+            if _coerce_budget(r.get("budget")) is not None
+            else float("inf"),
+            r.get("model") or "",
+        ),
+    )
+    rows_html = "".join(_build_row_html(r) for r in sorted_rows)
+
+    env_opts_html = "<option value=''>All envs</option>" + "".join(
+        f"<option value='{html.escape(e)}'>{html.escape(e)}</option>" for e in env_options
+    )
+    model_opts_html = "<option value=''>All models</option>" + "".join(
+        f"<option value='{html.escape(m)}'>{html.escape(m)}</option>" for m in model_options
+    )
+    budget_opts_html = "<option value=''>All budgets</option>" + "".join(
+        f"<option value='{html.escape(b)}'>{html.escape(b)}</option>" for b in budget_options
+    )
+
+    header_html = "".join(
+        f"<th data-key='{html.escape(h.lower().replace(' ', '_'))}'>{html.escape(h)}</th>"
+        for h in header_cells
+    )
+
+    html_doc = HTML_TEMPLATE.format(
+        total_rows=len(rows),
+        env_opts=env_opts_html,
+        model_opts=model_opts_html,
+        budget_opts=budget_opts_html,
+        header_html=header_html,
+        rows_html=rows_html,
+    )
+
+    with open(html_out, "w", encoding="utf-8") as f:
+        f.write(html_doc)
+    print(f"HTML written to {html_out}")
+
+
+def main():
+    """Main entry point for benchmark display."""
+    args = parse_args()
+    rows = collect_results(args.root)
+
+    print_results(rows)
+
+    if not rows:
+        return
+
+    if args.csv_out:
+        write_csv(rows, args.csv_out)
+
+    if args.html_out:
+        write_html(rows, args.html_out)
 
 
 if __name__ == "__main__":

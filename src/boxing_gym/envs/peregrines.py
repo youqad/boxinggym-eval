@@ -4,8 +4,8 @@ import numpy as np
 import pymc as pm
 from scipy.stats import distributions
 
-from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
+from .goal import Goal
 
 
 class DirectGoal(Goal):
@@ -14,10 +14,9 @@ class DirectGoal(Goal):
         self.eval_points = []
         self.eval_pointer = 0
         self.update_parameters_cache = {}
-        # Recomputed with Beta(2,5)*4 sampling to match eval distribution
-        # Previous values (10991, 15725) were computed with uniform sampling
-        # New values: median of 5 trials with seeds [42, 123, 456, 789, 101112]
-        self.norm_mu, self.norm_sigma = 8566.62, 12530.86
+        # Recomputed v2_2026-01-27: median of 5 seeds [42,123,456,789,101112]
+        # Previous: (8566.62, 12530.86) — re-verified, adjusted for seed variance
+        self.norm_mu, self.norm_sigma = 6908.6500, 10581.9558
 
     def _sample_eval_time(self) -> float:
         """Single source of truth for evaluation time sampling."""
@@ -30,9 +29,9 @@ class DirectGoal(Goal):
             goal_description = "Your goal is to be able to predict the integer response of the environment to a given input. Conduct experiments to learn about the environment and make predictions based on your observations."
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
-        if self.eval_pointer+1 > len(self.eval_points):
+        if self.eval_pointer + 1 > len(self.eval_points):
             ti = self._sample_eval_time()
             pop = self.env.step(ti)
             self.eval_points.append((ti, pop))
@@ -54,15 +53,17 @@ Here is an example.
 <thought> your thought </thought>
 <answer>1</answer>"""
         return question, pop
-    
+
     def evaluate_predictions(self, predictions, measurements):
-        assert len(predictions) == len(measurements), "Predictions and measurements must have the same length."
+        assert len(predictions) == len(measurements), (
+            "Predictions and measurements must have the same length."
+        )
         predictions = [int(float(x)) for x in predictions]
         se = (np.array(predictions) - np.array(measurements)) ** 2
         mse = np.mean(se)
         std_mse = np.std(se)
         return mse, std_mse
-    
+
     def expected_information_gain(self, query_point, num_outer_samples=1000, num_inner_samples=10):
         t_query = query_point
         existing_data = self.env.observation_data
@@ -73,66 +74,101 @@ Here is an example.
                 beta1 = np.array([1.2])
                 beta2 = np.array([0.07])
                 beta3 = np.array([-0.24])
-                alpha_prior = pm.Normal('alphai', mu=alpha, sigma=0.1)
-                beta1_prior = pm.Normal('beta1i', mu=beta1, sigma=0.1)
-                beta2_prior = pm.Normal('beta2i', mu=beta2, sigma=0.01)
-                beta3_prior = pm.Normal('beta3i', mu=beta3, sigma=0.05)
+                alpha_prior = pm.Normal("alphai", mu=alpha, sigma=0.1)
+                beta1_prior = pm.Normal("beta1i", mu=beta1, sigma=0.1)
+                beta2_prior = pm.Normal("beta2i", mu=beta2, sigma=0.01)
+                beta3_prior = pm.Normal("beta3i", mu=beta3, sigma=0.05)
 
                 def likelihood(ti, popi):
                     year_squared = np.square(ti)
                     year_cubed = year_squared * ti
-                    log_lambda = alpha_prior + beta1_prior * ti + beta2_prior * year_squared + beta3_prior * year_cubed
+                    log_lambda = (
+                        alpha_prior
+                        + beta1_prior * ti
+                        + beta2_prior * year_squared
+                        + beta3_prior * year_cubed
+                    )
                     return pm.Poisson("C_obs", mu=np.exp(log_lambda), observed=popi)
-                
-                ti_obs = pm.Data('ti_obs', [x[0] for x in existing_data])
-                popi_obs = pm.Data('popi_obs', [x[1] for x in existing_data])
+
+                ti_obs = pm.Data("ti_obs", [x[0] for x in existing_data])
+                popi_obs = pm.Data("popi_obs", [x[1] for x in existing_data])
                 likelihood(ti_obs, popi_obs)
-                trace = pm.sample(num_outer_samples*num_inner_samples+num_outer_samples, tune=1000, return_inferencedata=False, chains=2, cores=2, target_accept=0.95)
-            alphas = trace['alphai']
-            beta1s = trace['beta1i']
-            beta2s = trace['beta2i']
-            beta3s = trace['beta3i']
+                trace = pm.sample(
+                    num_outer_samples * num_inner_samples + num_outer_samples,
+                    tune=1000,
+                    return_inferencedata=False,
+                    chains=2,
+                    cores=2,
+                    target_accept=0.95,
+                )
+            alphas = trace["alphai"]
+            beta1s = trace["beta1i"]
+            beta2s = trace["beta2i"]
+            beta3s = trace["beta3i"]
             shuffling = list(zip(alphas, beta1s, beta2s, beta3s))
             random.shuffle(shuffling)
             alphas, beta1s, beta2s, beta3s = zip(*shuffling)
             self.update_parameters_cache[tuple(existing_data)] = (alphas, beta1s, beta2s, beta3s)
         else:
             alphas, beta1s, beta2s, beta3s = self.update_parameters_cache[tuple(existing_data)]
-        
+
         outer_alphas = alphas[:num_outer_samples]
         outer_beta1s = beta1s[:num_outer_samples]
         outer_beta2s = beta2s[:num_outer_samples]
         outer_beta3s = beta3s[:num_outer_samples]
-        
+
         log_likelihoods = []
-        for n, (alphai, beta1i, beta2i, beta3i) in enumerate(zip(outer_alphas, outer_beta1s, outer_beta2s, outer_beta3s)):
+        for n, (alphai, beta1i, beta2i, beta3i) in enumerate(
+            zip(outer_alphas, outer_beta1s, outer_beta2s, outer_beta3s)
+        ):
             # calculate the likelihood of the query point given the parameters
             with pm.Model() as model:
                 year_squared = np.square(t_query)
                 year_cubed = year_squared * t_query
 
                 log_lambda = alphai + beta1i * t_query + beta2i * year_squared + beta3i * year_cubed
-                # sample using np 
+                # sample using np
                 C = np.random.poisson(np.exp(log_lambda))
                 # get prob of C
-                
-                prob = distributions.poisson.pmf(C, np.exp(log_lambda))
-                log_likelihood = np.log(prob+0.0001)
 
-                inner_alphas = alphas[num_outer_samples+n*num_inner_samples:num_outer_samples+(n+1)*num_inner_samples]
-                inner_beta1s = beta1s[num_outer_samples+n*num_inner_samples:num_outer_samples+(n+1)*num_inner_samples]
-                inner_beta2s = beta2s[num_outer_samples+n*num_inner_samples:num_outer_samples+(n+1)*num_inner_samples]
-                inner_beta3s = beta3s[num_outer_samples+n*num_inner_samples:num_outer_samples+(n+1)*num_inner_samples]
+                prob = distributions.poisson.pmf(C, np.exp(log_lambda))
+                log_likelihood = np.log(prob + 0.0001)
+
+                inner_alphas = alphas[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                inner_beta1s = beta1s[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                inner_beta2s = beta2s[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                inner_beta3s = beta3s[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
                 marginal_log_likelihoods = []
-                for inner_alphai, inner_beta1i, inner_beta2i, inner_beta3i in zip(inner_alphas, inner_beta1s, inner_beta2s, inner_beta3s):
+                for inner_alphai, inner_beta1i, inner_beta2i, inner_beta3i in zip(
+                    inner_alphas, inner_beta1s, inner_beta2s, inner_beta3s
+                ):
                     year_squared = np.square(t_query)
                     year_cubed = year_squared * t_query
-                    log_lambda = inner_alphai + inner_beta1i * t_query + inner_beta2i * year_squared + inner_beta3i * year_cubed
+                    log_lambda = (
+                        inner_alphai
+                        + inner_beta1i * t_query
+                        + inner_beta2i * year_squared
+                        + inner_beta3i * year_cubed
+                    )
                     prob = distributions.poisson.pmf(C, np.exp(log_lambda))
-                    marginal_log_likelihoods.append(np.log(prob+0.0001))
-                
-                max_log = np.max(marginal_log_likelihoods)    
-                log_marginal_likelihood = max_log + np.log(np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log)))
+                    marginal_log_likelihoods.append(np.log(prob + 0.0001))
+
+                max_log = np.max(marginal_log_likelihoods)
+                log_marginal_likelihood = max_log + np.log(
+                    np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log))
+                )
                 log_likelihoods.append(log_likelihood - log_marginal_likelihood)
         eig_value = np.mean(log_likelihoods)
         return eig_value
@@ -142,7 +178,9 @@ Here is an example.
         errs = []
         measurements = []
         import logging
+
         import tqdm
+
         logger = logging.getLogger("pymc")
         logger.setLevel(logging.WARNING)
         for i in tqdm.tqdm(range(N)):
@@ -159,12 +197,13 @@ Here is an example.
         err_mean, err_std = self.evaluate_predictions(pred, measurements)
         return err_mean, err_std
 
+
 class DirectGoalNaive(DirectGoal):
     def __init__(self, env):
         super().__init__(env)
         self.eval_points = []
         self.eval_pointer = 0
-    
+
     def get_system_message(self, include_prior):
         goal_description = "Your goal is to conduct experiments and explain the environment to the user so that they can achieve their goal."
         if include_prior:
@@ -173,22 +212,33 @@ class DirectGoalNaive(DirectGoal):
             goal_description += "The goal of the user is to be able to predict the integer response of the environment to a given input."
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_naive_system_message(self, include_prior):
         if include_prior:
-            goal_description = "Your goal is to predict the population count of peregrines given the time."
+            goal_description = (
+                "Your goal is to predict the population count of peregrines given the time."
+            )
         else:
-            goal_description = "Your goal is to predict the integer response of the environment to a given input."
+            goal_description = (
+                "Your goal is to predict the integer response of the environment to a given input."
+            )
         format_instructions = """You will be provided an input to this environment and will be tasked with predicting the output for each input.
 You must respond with an integer number. You may also think before providing your predictions.
 Here is an example:
 <thought>your thought</thought>
 <answer>1</answer>"""
-        description = goal_description + '\n' + format_instructions
+        description = goal_description + "\n" + format_instructions
         description += "Here is what you know about the environment:\n"
-        return description    
-    
-    def get_comm_prompt(self, include_prior, com_limit=300, use_ppl=False, str_prob_prog=None, params_summary_str=None):
+        return description
+
+    def get_comm_prompt(
+        self,
+        include_prior,
+        com_limit=300,
+        use_ppl=False,
+        str_prob_prog=None,
+        params_summary_str=None,
+    ):
         description = f"""Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. 
 They will make predictions based solely on your explanation, so provide as much detail as possible. You CANNOT provide your own experiments or observations.
 Limit your explanation to {com_limit} words"""
@@ -199,7 +249,8 @@ Limit your explanation to {com_limit} words"""
             description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
             description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
-    
+
+
 class Peregrines:
     def __init__(self, lower_limit=0, upper_limit=5, alpha=4.5, beta1=1.2, beta2=0.07, beta3=-0.24):
         self.alpha_mu = alpha
@@ -213,21 +264,21 @@ class Peregrines:
 
     def reset(self):
         self.observation_data = []
-        
-        with pm.Model() as model:   
-            alpha_prior = pm.Normal('alpha', mu=self.alpha_mu, sigma=0.1)
-            beta1_prior = pm.Normal('beta1', mu=self.beta1_mu, sigma=0.1)
-            beta2_prior = pm.Normal('beta2', mu=self.beta2_mu, sigma=0.01)
-            beta3_prior = pm.Normal('beta3', mu=self.beta3_mu, sigma=0.05)
+
+        with pm.Model() as model:
+            alpha_prior = pm.Normal("alpha", mu=self.alpha_mu, sigma=0.1)
+            beta1_prior = pm.Normal("beta1", mu=self.beta1_mu, sigma=0.1)
+            beta2_prior = pm.Normal("beta2", mu=self.beta2_mu, sigma=0.01)
+            beta3_prior = pm.Normal("beta3", mu=self.beta3_mu, sigma=0.05)
             self.alpha = pm.draw(alpha_prior)
             self.beta1 = pm.draw(beta1_prior)
             self.beta2 = pm.draw(beta2_prior)
             self.beta3 = pm.draw(beta3_prior)
 
-    def generate_system_message(self, include_prior=True, goal=None): 
+    def generate_system_message(self, include_prior=True, goal=None):
         assert goal is not None
         if include_prior:
-                message = f"""The population count of peregrine falcons varies at different times.
+            message = f"""The population count of peregrine falcons varies at different times.
 {goal}
 Make observations by specifying a single time you want to observe with a float number. The environment will return the population count of peregrine falcons at that time.
 The time values are between {self.lower_limit} and {self.upper_limit}.
@@ -255,25 +306,25 @@ Example:
 <answer> your answer </answer>
 """
         return message
-    
+
     def sample_random_input(self):
         # sample time between lower and upper limit
         ti = np.random.uniform(self.lower_limit, self.upper_limit)
         return ti
-    
+
     def step(self, ti):
         with pm.Model() as model:
             alpha = self.alpha
             beta1 = self.beta1
             beta2 = self.beta2
             beta3 = self.beta3
-            
+
             year_squared = np.square(ti)
             year_cubed = year_squared * ti
 
             log_lambda = alpha + beta1 * ti + beta2 * year_squared + beta3 * year_cubed
             C_obs = pm.Poisson("C_obs", mu=np.exp(log_lambda))
-            
+
             prior = pm.sample_prior_predictive(samples=1, return_inferencedata=False)
         obs = prior["C_obs"][0]
         # convert obs to int32
@@ -288,11 +339,11 @@ Example:
         if query < self.lower_limit or query > self.upper_limit:
             return f"Input must be between {self.lower_limit} and {self.upper_limit}."
         # obs_times = [float(x[0]) for x in self.observation_data]
-        # max_time = max(obs_times) if len(obs_times) > 0 else self.lower_limit      
+        # max_time = max(obs_times) if len(obs_times) > 0 else self.lower_limit
         # if query <= max_time:
         #     raise "Input mst be greater than the previous observation."
         return query
-    
+
     def run_experiment(self, input_string):
         ti = self.validate_input(input_string)
         if isinstance(ti, str):
@@ -306,7 +357,7 @@ Example:
 
     def get_df(self):
         self.df = construct_dataframe(self)
-    
+
     def get_description(self):
         if self.include_prior:
             return """
@@ -322,22 +373,26 @@ x1 is the input and y is the output
             return ["Year", "Falcon_Population"]
         else:
             return ["Input", "Output"]
-    
+
     def get_ordered_features(self):
-        return self.get_ordered_column_names()[:-1] 
+        return self.get_ordered_column_names()[:-1]
 
     def describe_data_columns(self):
         return self.format_column_description()
 
     def format_column_description(self):
         if self.include_prior:
-            return ("The observations are: \n -Falcon_Population: Population counts of Peregrines \n"
+            return (
+                "The observations are: \n -Falcon_Population: Population counts of Peregrines \n"
                 "The input values are \n -Year: year \n"
-                "Use the values of the input values to help you model the observations. ")
+                "Use the values of the input values to help you model the observations. "
+            )
         else:
-            return ("The observations are: \n -Output \n"
-                    "The input values are \n -Input \n"
-                    "Use the values of the input values to help you model the observations. ")
+            return (
+                "The observations are: \n -Output \n"
+                "The input values are \n -Input \n"
+                "Use the values of the input values to help you model the observations. "
+            )
 
 
 if __name__ == "__main__":
@@ -379,10 +434,8 @@ if __name__ == "__main__":
     # results_all = []
     # for inp in inps:
     #     result, success = env.run_experiment(str(inp))
-    #     if success: 
+    #     if success:
     #         results_all.append(result)
-
-    
 
     # # check and plot eig values
     # eig_values = []
@@ -394,5 +447,3 @@ if __name__ == "__main__":
     # import matplotlib.pyplot as plt
     # plt.plot(inps, eig_values)
     # plt.show()
-
-    

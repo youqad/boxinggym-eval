@@ -19,13 +19,15 @@ import json
 import os
 import re
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any
 
 DEFAULT_ENTITY = os.environ.get("WANDB_ENTITY", "")
 DEFAULT_PROJECT = os.environ.get("WANDB_PROJECT") or "boxing-gym"
+
 
 class DataSource(Enum):
     """Indicates where benchmark data was loaded from."""
@@ -49,11 +51,11 @@ class RunResult:
     z_std: float
     raw_mean: float
     raw_std: float
-    goal: Optional[str] = None
-    include_prior: Optional[bool] = None
-    use_ppl: Optional[bool] = None
-    experiment_type: Optional[str] = None
-    path: Optional[str] = None
+    goal: str | None = None
+    include_prior: bool | None = None
+    use_ppl: bool | None = None
+    experiment_type: str | None = None
+    path: str | None = None
     source: DataSource = DataSource.LOCAL_JSON
 
 
@@ -67,13 +69,13 @@ class AggregatedResult:
     z_mean: float  # average across seeds
     z_std: float  # standard error of mean (SEM) across seeds
     n_seeds: int
-    raw_results: List[RunResult] = field(default_factory=list)
+    raw_results: list[RunResult] = field(default_factory=list)
 
-    goal: Optional[str] = None
-    include_prior: Optional[bool] = None
+    goal: str | None = None
+    include_prior: bool | None = None
 
 
-MODEL_NAMES: Dict[str, str] = {
+MODEL_NAMES: dict[str, str] = {
     "gpt-4o": "GPT-4o",
     "gpt-5.1": "GPT-5.1",
     "gpt-5.1-mini": "GPT-5.1-Mini",
@@ -87,9 +89,11 @@ MODEL_NAMES: Dict[str, str] = {
     "deepseek-reasoner": "DeepSeek-Reasoner",
     "glm-4.7": "GLM-4.7",
     "minimax-m2.1": "MiniMax-M2.1",
+    "kimi-for-coding": "Kimi-K2",
     "kimi-k2": "Kimi-K2",
     "kimi-k2-thinking": "Kimi-K2-Thinking",
     "qwen3-coder-30b": "Qwen3-Coder-30B",
+    "bedrock/qwen.qwen3-32b-v1:0": "Qwen3-32B",
     # IDs as they appear in W&B runs (from litellm routing)
     "anthropic/glm-4.7": "GLM-4.7",
     "anthropic/kimi-for-coding": "Kimi-K2",
@@ -106,7 +110,7 @@ MODEL_NAMES: Dict[str, str] = {
     "openai": "GPT-4o",
 }
 
-ENV_NAMES: Dict[str, str] = {
+ENV_NAMES: dict[str, str] = {
     "dugongs_direct": "dugongs",
     "peregrines_direct": "peregrines",
     "lotka_volterra_direct": "lotka_volterra",
@@ -114,11 +118,11 @@ ENV_NAMES: Dict[str, str] = {
     "moral": "moral_machines",
 }
 
-TEST_ENVIRONMENTS: List[str] = ["dugongs", "peregrines", "lotka_volterra"]
+TEST_ENVIRONMENTS: list[str] = ["dugongs", "peregrines", "lotka_volterra"]
 
 # default goal for single-goal environments
 # used when goal is not specified in config
-DEFAULT_GOALS: Dict[str, str] = {
+DEFAULT_GOALS: dict[str, str] = {
     "dugongs": "length",
     "peregrines": "population",
     "lotka_volterra": "population",
@@ -132,23 +136,24 @@ DEFAULT_GOALS: Dict[str, str] = {
 }
 
 # standardization constants: env -> (mean, std)
-NORM_STATIC: Dict[str, Tuple[float, float]] = {
-    "dugongs": (0.9058681693402041, 9.234192516908691),
-    "peregrines": (10991.5464, 15725.115658658306),
-    "lotka_volterra": (8.327445247142364, 17.548285564117467),
-    "hyperbolic_temporal_discount": (0.25, 4.3),
+# v2_2026-01-27: synced with Goal class values, median of 5 seeds
+NORM_STATIC: dict[str, tuple[float, float]] = {
+    "death_process": (223.3291, 190.6460),
+    "dugongs": (1.3199, 17.0068),
+    "emotion": (1.58508525, 0.7237143937677741),  # unchanged (requires API)
+    "hyperbolic_temporal_discount": (0.3265, 0.4689),
     "irt": (0.5, 0.5),
-    "survival": (0.2604, 0.43885286828275377),
-    "location_finding": (176.9, 1247.7),  # DirectGoal ("signal"); matches location_finding.py
-    "death_process": (0.2902838787350395, 1.756991075450312),
-    "emotion": (1.58508525, 0.7237143937677741),
-    "morals": (0.424, 0.494190246767376),
-    "moral_machines": (0.424, 0.494190246767376),
+    "location_finding": (57.7620, 310.1102),
+    "lotka_volterra": (8.2500, 17.5755),
+    "morals": (0.424, 0.494190246767376),  # unchanged (requires API)
+    "moral_machines": (0.424, 0.494190246767376),  # alias for morals
+    "peregrines": (6908.6500, 10581.9558),
+    "survival": (0.287, 0.446464),  # recomputed 2026-01-27
 }
 
 # Paper reference values: (env, budget) -> z_mean
 # from BoxingGym paper, GPT-4o Discovery with prior
-PAPER_GPT4O_2D: Dict[Tuple[str, int], float] = {
+PAPER_GPT4O_2D: dict[tuple[str, int], float] = {
     ("dugongs", 0): -0.04,
     ("dugongs", 5): -0.06,  # interpolated
     ("dugongs", 10): -0.08,
@@ -162,7 +167,7 @@ PAPER_GPT4O_2D: Dict[Tuple[str, int], float] = {
 
 # Paper reference values:
 # (env, goal, include_prior, budget) -> z_mean
-PAPER_RESULTS: Dict[str, Dict[Tuple[str, str, bool, int], float]] = {
+PAPER_RESULTS: dict[str, dict[tuple[str, str, bool, int], float]] = {
     "gpt-4o": {
         # hyperbolic_temporal_discount
         ("hyperbolic_temporal_discount", "choice", True, 10): 0.87,
@@ -284,7 +289,7 @@ def get_env_display_name(env_key: str) -> str:
     return ENV_NAMES.get(env_key, ENV_NAMES.get(base, base))
 
 
-def get_goal_display_name(env_name: str, goal_key: Optional[str]) -> Optional[str]:
+def get_goal_display_name(env_name: str, goal_key: str | None) -> str | None:
     if not goal_key:
         return DEFAULT_GOALS.get(env_name, goal_key)
     if goal_key in ("direct", "direct_naive", "direct_discovery"):
@@ -296,7 +301,7 @@ def get_goal_display_name(env_name: str, goal_key: Optional[str]) -> Optional[st
     return goal_key
 
 
-_KNOWN_GOALS: Tuple[str, ...] = (
+_KNOWN_GOALS: tuple[str, ...] = (
     "direct_naive",
     "direct_discovery",  # legacy alias for parsing old WandB runs
     "direct",
@@ -309,7 +314,7 @@ _KNOWN_GOALS: Tuple[str, ...] = (
 )
 
 
-def _parse_wandb_run_name(run_name: str) -> Optional[Dict[str, Any]]:
+def _parse_wandb_run_name(run_name: str) -> dict[str, Any] | None:
     m = re.search(r"_(oed|discovery)_(.+)_seed(\d+)$", run_name)
     if not m:
         return None
@@ -344,7 +349,7 @@ def standardize(
     err_mean: float,
     err_std: float,
     env_name: str,
-) -> Tuple[Optional[float], Optional[float]]:
+) -> tuple[float | None, float | None]:
     """Z-score standardization using static normalization constants."""
     mu0, sigma0 = NORM_STATIC.get(env_name, (None, None))
     if sigma0 in (None, 0):
@@ -356,7 +361,7 @@ def _standardize_with_norm_factors(
     err_mean: float,
     err_std: float,
     norm_factors: Any,
-) -> Tuple[Optional[float], Optional[float]]:
+) -> tuple[float | None, float | None]:
     if not isinstance(norm_factors, dict):
         return None, None
     mu0 = norm_factors.get("mu")
@@ -372,18 +377,19 @@ def _standardize_with_norm_factors(
     except Exception:
         return None, None
 
+
 def get_paper_value_4d(
     env: str,
     goal: str,
     include_prior: bool,
     budget: int,
     source: str = "gpt-4o",
-) -> Optional[float]:
+) -> float | None:
     """4D paper lookup for dashboard."""
     return PAPER_RESULTS.get(source, {}).get((env, goal, include_prior, budget))
 
 
-def get_paper_value_2d(env: str, budget: int) -> Optional[float]:
+def get_paper_value_2d(env: str, budget: int) -> float | None:
     """2D paper lookup for CLI (legacy compatibility)."""
     return PAPER_GPT4O_2D.get((env, budget))
 
@@ -393,7 +399,7 @@ def _iter_json_files(root: str) -> Iterable[Path]:
     yield from Path(root).rglob("*.json")
 
 
-def _load_json_file(path: Path) -> Optional[Dict[str, Any]]:
+def _load_json_file(path: Path) -> dict[str, Any] | None:
     """Load a single JSON file, returning None on error."""
     try:
         with path.open("r") as f:
@@ -424,9 +430,9 @@ def _safe_float(val: Any, default: float = 0.0) -> float:
         return default
 
 
-def load_results_from_json_dir(root: str) -> List[RunResult]:
+def load_results_from_json_dir(root: str) -> list[RunResult]:
     """Parse all JSON result files from a directory."""
-    results: List[RunResult] = []
+    results: list[RunResult] = []
 
     for path in _iter_json_files(root):
         blob = _load_json_file(path)
@@ -457,7 +463,7 @@ def load_results_from_json_dir(root: str) -> List[RunResult]:
         z_results_precomputed = data.get("z_results") or []
         norm_factors = data.get("norm_factors") or {}
 
-        z_by_budget: Dict[int, Dict[str, Any]] = {}
+        z_by_budget: dict[int, dict[str, Any]] = {}
         for zr in z_results_precomputed:
             if not isinstance(zr, dict):
                 continue
@@ -543,15 +549,15 @@ def load_results_from_json_dir(root: str) -> List[RunResult]:
     return results
 
 
-def load_results_from_logs(logs_dir: str) -> List[RunResult]:
+def load_results_from_logs(logs_dir: str) -> list[RunResult]:
     """Parse W&B sweep agent logs to extract results."""
-    results: List[RunResult] = []
+    results: list[RunResult] = []
     logs_path = Path(logs_dir)
 
     for log_file in logs_path.glob("agent_*.log"):
-        current_run: Optional[Dict[str, Any]] = None
+        current_run: dict[str, Any] | None = None
 
-        with open(log_file, "r") as f:
+        with open(log_file) as f:
             for line in f:
                 # Parse run identifier: "Syncing run dugongs_direct_oed_gpt-4o_seed1"
                 if "Syncing run" in line:
@@ -615,8 +621,8 @@ def load_results_from_logs(logs_dir: str) -> List[RunResult]:
 
 def load_results_from_local_wandb(
     wandb_dir: str = "wandb-dir",
-    sweep_id: Optional[str] = None,
-) -> List[RunResult]:
+    sweep_id: str | None = None,
+) -> list[RunResult]:
     """Load results from local W&B run directories.
 
     Scans wandb-dir/run-*/files/wandb-summary.json or wandb-dir/wandb/run-*/files/wandb-summary.json
@@ -630,7 +636,7 @@ def load_results_from_local_wandb(
     Returns:
         List of RunResult objects from local wandb runs
     """
-    results: List[RunResult] = []
+    results: list[RunResult] = []
     wandb_path = Path(wandb_dir)
     if not wandb_path.exists():
         return results
@@ -718,6 +724,7 @@ def load_results_from_local_wandb(
             if config_path.exists():
                 try:
                     import yaml
+
                     with config_path.open("r") as f:
                         config = yaml.safe_load(f)
                     if isinstance(config, dict):
@@ -792,7 +799,7 @@ def _parse_sweep_path(
     sweep_path: str,
     entity: str,
     project: str,
-) -> Tuple[str, str, str]:
+) -> tuple[str, str, str]:
     """Parse sweep path into (entity, project, sweep_id).
 
     Accepts either just sweep_id or entity/project/sweep_id format.
@@ -804,12 +811,11 @@ def _parse_sweep_path(
         return parts[0], parts[1], parts[2]
     else:
         raise ValueError(
-            f"Invalid sweep path: {sweep_path}. "
-            "Expected: sweep_id or entity/project/sweep_id"
+            f"Invalid sweep path: {sweep_path}. Expected: sweep_id or entity/project/sweep_id"
         )
 
 
-def _extract_run_metadata(run, config: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_run_metadata(run, config: dict[str, Any]) -> dict[str, Any]:
     """Extract env, model, seed, goal from run config or name.
 
     Returns dict with keys: env, model, seed, goal, experiment_type,
@@ -877,13 +883,13 @@ HISTORY_KEYS = [
 ]
 
 
-def _extract_budget_rows_from_history(run) -> Dict[int, Dict[str, Any]]:
+def _extract_budget_rows_from_history(run) -> dict[int, dict[str, Any]]:
     """Extract budget-keyed rows from run history.
 
     Tries scan_history first, falls back to history() method.
     Returns dict mapping budget -> row dict.
     """
-    budget_rows: Dict[int, Dict[str, Any]] = {}
+    budget_rows: dict[int, dict[str, Any]] = {}
 
     try:
         scan = run.scan_history(keys=HISTORY_KEYS)
@@ -925,9 +931,9 @@ def _extract_budget_rows_from_history(run) -> Dict[int, Dict[str, Any]]:
 
 
 def _budget_rows_to_results(
-    budget_rows: Dict[int, Dict[str, Any]],
-    metadata: Dict[str, Any],
-) -> List[RunResult]:
+    budget_rows: dict[int, dict[str, Any]],
+    metadata: dict[str, Any],
+) -> list[RunResult]:
     """Convert budget rows to RunResult objects."""
     results = []
     for budget, row in sorted(budget_rows.items()):
@@ -966,10 +972,10 @@ def _budget_rows_to_results(
 
 
 def _results_from_summary(
-    summary: Dict[str, Any],
-    config: Dict[str, Any],
-    metadata: Dict[str, Any],
-) -> List[RunResult]:
+    summary: dict[str, Any],
+    config: dict[str, Any],
+    metadata: dict[str, Any],
+) -> list[RunResult]:
     """Extract results from run summary (fallback when history unavailable).
 
     Handles three formats:
@@ -986,7 +992,9 @@ def _results_from_summary(
         # determine budget
         budget = None
         try:
-            budget = int(summary.get("eval/budget")) if summary.get("eval/budget") is not None else None
+            budget = (
+                int(summary.get("eval/budget")) if summary.get("eval/budget") is not None else None
+            )
         except Exception:
             budget = None
 
@@ -1059,12 +1067,21 @@ def _results_from_summary(
     return results
 
 
-def _deduplicate_results(results: List[RunResult]) -> List[RunResult]:
+def _deduplicate_results(results: list[RunResult]) -> list[RunResult]:
     """Remove duplicate results based on key fields."""
     seen: set = set()
-    unique_results: List[RunResult] = []
+    unique_results: list[RunResult] = []
     for r in results:
-        key = (r.env, r.model, r.seed, r.budget, r.goal, r.include_prior, r.use_ppl, r.experiment_type)
+        key = (
+            r.env,
+            r.model,
+            r.seed,
+            r.budget,
+            r.goal,
+            r.include_prior,
+            r.use_ppl,
+            r.experiment_type,
+        )
         if key not in seen:
             seen.add(key)
             unique_results.append(r)
@@ -1075,7 +1092,7 @@ def load_results_from_wandb(
     sweep_path: str,
     entity: str = DEFAULT_ENTITY,
     project: str = DEFAULT_PROJECT,
-) -> List[RunResult]:
+) -> list[RunResult]:
     """Load benchmark results from a WandB sweep.
 
     Args:
@@ -1097,7 +1114,7 @@ def load_results_from_wandb(
     except wandb.errors.CommError as e:
         raise ValueError(f"Error fetching sweep {full_path}: {e}")
 
-    results: List[RunResult] = []
+    results: list[RunResult] = []
 
     for run in sweep.runs:
         summary = dict(run.summary)
@@ -1123,16 +1140,16 @@ def list_wandb_sweeps(
     entity: str = DEFAULT_ENTITY,
     project: str = DEFAULT_PROJECT,
     limit: int = 20,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """List all sweeps in a W&B project."""
     api = _get_wandb_api()
     path = f"{entity}/{project}"
 
-    sweeps_info: List[Dict[str, Any]] = []
+    sweeps_info: list[dict[str, Any]] = []
 
     runs = api.runs(path, filters={"sweep": {"$ne": None}}, per_page=500)
 
-    sweep_ids: Dict[str, Any] = {}
+    sweep_ids: dict[str, Any] = {}
     for run in runs:
         if run.sweep and run.sweep.id not in sweep_ids:
             sweep_ids[run.sweep.id] = run.sweep
@@ -1180,12 +1197,12 @@ def list_wandb_sweeps(
 
 
 def aggregate_results(
-    results: List[RunResult],
-    group_by: Tuple[str, ...] = ("env", "model", "budget", "goal", "include_prior"),
+    results: list[RunResult],
+    group_by: tuple[str, ...] = ("env", "model", "budget", "goal", "include_prior"),
     outlier_threshold: float = 10.0,
-) -> Dict[Tuple, AggregatedResult]:
+) -> dict[tuple, AggregatedResult]:
     """Aggregate results by specified keys, filtering outliers."""
-    grouped: Dict[Tuple, List[RunResult]] = defaultdict(list)
+    grouped: dict[tuple, list[RunResult]] = defaultdict(list)
 
     for r in results:
         if abs(r.z_mean) >= outlier_threshold:
@@ -1193,7 +1210,7 @@ def aggregate_results(
         key = tuple(getattr(r, field) for field in group_by)
         grouped[key].append(r)
 
-    aggregated: Dict[Tuple, AggregatedResult] = {}
+    aggregated: dict[tuple, AggregatedResult] = {}
 
     for key, runs in grouped.items():
         z_means = [r.z_mean for r in runs]
@@ -1202,7 +1219,7 @@ def aggregate_results(
         # compute standard error of mean (SEM) across seeds
         if len(z_means) > 1:
             variance = sum((z - avg_z) ** 2 for z in z_means) / (len(z_means) - 1)
-            std_z = variance**0.5 / len(z_means)**0.5  # SEM = std / sqrt(n)
+            std_z = variance**0.5 / len(z_means) ** 0.5  # SEM = std / sqrt(n)
         else:
             std_z = 0.0
 
@@ -1225,9 +1242,10 @@ def aggregate_results(
 
     return aggregated
 
-def generate_paper_reference_rows(source: str = "gpt-4o") -> List[RunResult]:
+
+def generate_paper_reference_rows(source: str = "gpt-4o") -> list[RunResult]:
     """Generate RunResult objects for paper baseline values."""
-    rows: List[RunResult] = []
+    rows: list[RunResult] = []
 
     paper_data = PAPER_RESULTS.get(source, {})
     model_name = f"Paper ({source.upper() if source == 'box' else 'GPT-4o'})"

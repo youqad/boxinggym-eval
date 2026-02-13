@@ -5,12 +5,12 @@ import numpy as np
 import pymc as pm
 from scipy.stats import norm
 
-from .goal import Goal
 from ..agents.box_loop_helper import construct_dataframe
-
+from .goal import Goal
 
 PRIOR = """Sea cows are different lengths at different ages."""
 NO_PRIOR = """You are observing a float response to a float input."""
+
 
 class DirectGoal(Goal):
     def __init__(self, env):
@@ -18,8 +18,10 @@ class DirectGoal(Goal):
         self.eval_points = []
         self.eval_pointer = 0
         self.update_params_cache = {}
-        self.norm_mu, self.norm_sigma = (0.9058681693402041, 9.234192516908691)
-    
+        # Recomputed v2_2026-01-27: median of 5 seeds [42,123,456,789,101112]
+        # Previous: (0.9059, 9.2342) — sigma increased due to high-variance seeds
+        self.norm_mu, self.norm_sigma = (1.3199, 17.0068)
+
     def get_system_message(self, include_prior):
         if include_prior:
             goal_description = """Your goal is to be able to predict the length of a sea cow given its age. Conduct experiments to learn about the environment and make predictions based on your observations."""
@@ -27,10 +29,10 @@ class DirectGoal(Goal):
             goal_description = "Your goal is to be able to predict the float response of the environment to a given input. Conduct experiments to learn about the environment and make predictions based on your observations."
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_goal_eval_question(self, include_prior):
-        if self.eval_pointer+1 > len(self.eval_points):
-            age = (np.random.beta(2, 5) * 4)
+        if self.eval_pointer + 1 > len(self.eval_points):
+            age = np.random.beta(2, 5) * 4
             length = self.env.step(age)
             self.eval_points.append((age, length))
         else:
@@ -51,9 +53,11 @@ Here is an example.
 <thought> your thought </thought>
 <answer>1</answer>"""
         return question, length
-    
+
     def evaluate_predictions(self, predictions, measurements):
-        assert len(predictions) == len(measurements), "Predictions and measurements must have the same length."
+        assert len(predictions) == len(measurements), (
+            "Predictions and measurements must have the same length."
+        )
         parsed_predictions = []
         for p in predictions:
             p = p.strip()
@@ -88,11 +92,15 @@ Here is an example.
                     obs_age = pm.Data("obs_age", [d[0] for d in existing_data])
                     obs_length = pm.Data("obs_length", [d[1] for d in existing_data])
                     likelihood(obs_age, obs_length)
-                trace = pm.sample(num_outer_samples*num_inner_samples+num_outer_samples, tune=1000, return_inferencedata=False)
-            
-            alphas = trace['alphai']
-            betas = trace['betai']
-            lambdas = trace['lambdai']
+                trace = pm.sample(
+                    num_outer_samples * num_inner_samples + num_outer_samples,
+                    tune=1000,
+                    return_inferencedata=False,
+                )
+
+            alphas = trace["alphai"]
+            betas = trace["betai"]
+            lambdas = trace["lambdai"]
             shuffling = list(zip(alphas, betas, lambdas))
             random.shuffle(shuffling)
             alphas, betas, lambdas = zip(*shuffling)
@@ -105,32 +113,45 @@ Here is an example.
         outer_lambdas = lambdas[:num_outer_samples]
         log_likelihoods = []
         for n, (alpha, beta, lambda_) in enumerate(zip(outer_alphas, outer_betas, outer_lambdas)):
-            # check if alpha, beta, lambda_ are nan 
+            # check if alpha, beta, lambda_ are nan
             with pm.Model() as model:
                 m = alpha - beta * np.abs(lambda_) ** age_query
                 l_sampled = np.random.normal(m, 0.25)
                 prob = norm.pdf(l_sampled, m, 0.25)
-                log_likelihood = np.log(prob+0.001)
-                inner_alphas = alphas[num_outer_samples+n*num_inner_samples:num_outer_samples+(n+1)*num_inner_samples]
-                inner_betas = betas[num_outer_samples+n*num_inner_samples:num_outer_samples+(n+1)*num_inner_samples]
-                inner_lambdas = lambdas[num_outer_samples+n*num_inner_samples:num_outer_samples+(n+1)*num_inner_samples]
+                log_likelihood = np.log(prob + 0.001)
+                inner_alphas = alphas[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                inner_betas = betas[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
+                inner_lambdas = lambdas[
+                    num_outer_samples + n * num_inner_samples : num_outer_samples
+                    + (n + 1) * num_inner_samples
+                ]
                 marginal_log_likelihoods = []
-                for inner_alpha, inner_beta, inner_lambda in zip(inner_alphas, inner_betas, inner_lambdas):
+                for inner_alpha, inner_beta, inner_lambda in zip(
+                    inner_alphas, inner_betas, inner_lambdas
+                ):
                     m = inner_alpha - inner_beta * np.abs(inner_lambda) ** age_query
                     prob_i = norm.pdf(l_sampled, m, 0.25)
-                    marginal_log_likelihoods.append(np.log(prob_i+0.001))
-                
-                max_log = np.max(marginal_log_likelihoods)    
-                log_marginal_likelihood = max_log + np.log(np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log)))
+                    marginal_log_likelihoods.append(np.log(prob_i + 0.001))
+
+                max_log = np.max(marginal_log_likelihoods)
+                log_marginal_likelihood = max_log + np.log(
+                    np.mean(np.exp(np.array(marginal_log_likelihoods) - max_log))
+                )
                 log_likelihoods.append(log_likelihood - log_marginal_likelihood)
         eig_value = np.mean(log_likelihoods)
         return eig_value
-    
+
     def get_norm_factors(self):
-        N = 10000    
+        N = 10000
         errs = []
         measurements = []
-        
+
         for i in range(N):
             if i % 10 == 0:
                 self.env.reset()
@@ -142,12 +163,13 @@ Here is an example.
         err_mean, err_std = self.evaluate_predictions(pred, measurements)
         return err_mean, err_std
 
+
 class DirectGoalNaive(DirectGoal):
     def __init__(self, env):
         super().__init__(env)
         self.eval_points = []
         self.eval_pointer = 0
-    
+
     def get_system_message(self, include_prior):
         goal_description = "Your goal is to conduct experiments and explain the environment to the user so that they can achieve their goal. "
         if include_prior:
@@ -156,22 +178,31 @@ class DirectGoalNaive(DirectGoal):
             goal_description += "The goal of the user is to be able to predict the float response of the environment to a given input."
         description = self.env.generate_system_message(include_prior, goal_description)
         return description
-    
+
     def get_naive_system_message(self, include_prior):
         if include_prior:
             goal_description = "Your goal is to predict the length of a sea cow given its age."
         else:
-            goal_description = "Your goal is to predict the float response of the environment to a given input."
+            goal_description = (
+                "Your goal is to predict the float response of the environment to a given input."
+            )
         format_instructions = """You will be provided an input to this environment and will be tasked with predicting the output for each input.
 You must respond with a real number. You may also think before providing your predictions.
 Here is an example:
 <thought>your thought</thought>
 <answer>1</answer>"""
-        description = goal_description + '\n' + format_instructions
+        description = goal_description + "\n" + format_instructions
         description += "Here is what you know about the environment:\n"
-        return description    
-    
-    def get_comm_prompt(self, include_prior, com_limit=300, use_ppl=False, str_prob_prog=None, params_summary_str=None):
+        return description
+
+    def get_comm_prompt(
+        self,
+        include_prior,
+        com_limit=300,
+        use_ppl=False,
+        str_prob_prog=None,
+        params_summary_str=None,
+    ):
         description = f"""Assume that the user has no prior knowledge, and will not be able to run any experiments before making predictions. 
 They will make predictions based solely on your explanation, so provide as much detail as possible. You CANNOT provide your own experiments or observations.
 Limit your explanation to {com_limit} words."""
@@ -183,7 +214,8 @@ Limit your explanation to {com_limit} words."""
             description += "Don't literally describe the model verbatim but use it to conceptually motivate your explanation."
             description += "The agent will not be able to use the model explicitly but having a conceptual understanding will be beneficial."
         return description
-    
+
+
 class Dugongs:
     def __init__(self, alpha=2, beta=1.5, lambda_=0.4, lower_limit=0, upper_limit=5):
         self.alpha = alpha
@@ -197,7 +229,7 @@ class Dugongs:
 
     def _build_model(self):
         alpha, beta, lambda_ = self.alpha, self.beta, self.lambda_
-        with pm.Model() as model:  
+        with pm.Model() as model:
             alpha = pm.Normal("alpha", mu=alpha, sigma=0.2)
             beta = pm.Normal("beta", mu=beta, sigma=0.5)
             lambda_ = pm.Normal("lambda", mu=lambda_, sigma=0.5)
@@ -205,15 +237,15 @@ class Dugongs:
 
     def reset(self):
         with self.model:
-            self.a = pm.draw(self.model['alpha']) 
-            self.b = pm.draw(self.model['beta'])
-            self.l = pm.draw(self.model['lambda'])
+            self.a = pm.draw(self.model["alpha"])
+            self.b = pm.draw(self.model["beta"])
+            self.l = pm.draw(self.model["lambda"])
         self.observed_data = []
 
-    def generate_system_message(self, include_prior=True, goal=None): 
+    def generate_system_message(self, include_prior=True, goal=None):
         assert goal is not None
         if include_prior:
-                message = f"""{PRIOR}
+            message = f"""{PRIOR}
 {goal}
 Make observations by specifying a single age you want to observe with a real number.
 The environment will return the length of a dugong at that age.
@@ -244,7 +276,7 @@ Example:
 <answer> your answer </answer>
 """
         return message
-    
+
     def sample_random_input(self):
         return np.random.uniform(self.lower_limit, self.upper_limit)
 
@@ -254,8 +286,8 @@ Example:
             y_obs = pm.Normal("y_obs", mu=m, sigma=0.25)
             prior = pm.sample_prior_predictive(samples=1, return_inferencedata=False)
 
-        obs = prior['y_obs'][0]
-        return float(abs(obs)) 
+        obs = prior["y_obs"][0]
+        return float(abs(obs))
 
     def validate_input(self, input_string):
         # Remove the opening and closing brackets
@@ -266,9 +298,9 @@ Example:
             return "Input must be a float."
         if age < self.lower_limit or age > self.upper_limit:
             return f"Input must be between {self.lower_limit} and {self.upper_limit}."
-        
+
         return age
-    
+
     def run_experiment(self, input_string):
         age = self.validate_input(input_string)
         if type(age) == str:
@@ -281,11 +313,11 @@ Example:
         return self.observed_data
 
     def get_df(self):
-        '''
-            Construct dataframe used for Box's Loop
-        '''
+        """
+        Construct dataframe used for Box's Loop
+        """
         self.df = construct_dataframe(self)
-    
+
     def get_description(self):
         if self.include_prior:
             return """The ages and lengths of 27 captured dugongs (sea cows)"""
@@ -300,29 +332,33 @@ Example:
             return ["Age", "Length"]
         else:
             return ["Input", "Output"]
-    
+
     def get_ordered_features(self):
-        return self.get_ordered_column_names()[:-1] 
+        return self.get_ordered_column_names()[:-1]
 
     def format_column_description(self):
         if self.include_prior:
-            return ("The observations are: \n -Length: length of dugong (sea cows) \n"
+            return (
+                "The observations are: \n -Length: length of dugong (sea cows) \n"
                 "The input values are \n -Age: age of dugong (sea cows). \n"
-                "Use the input values to help you model the observations. ")
+                "Use the input values to help you model the observations. "
+            )
         else:
             return ""
+
 
 if __name__ == "__main__":
     env = Dugongs()
     goal = DirectGoal(env)
     import logging
+
     logger = logging.getLogger("pm")
     logger.propagate = False
     print(goal.get_norm_factors())
-    
+
     # input_string = "2"
     # print(env.run_experiment(input_string))
-    
+
     # input_string = "3"
     # print(env.run_experiment(input_string))
 
@@ -336,4 +372,3 @@ if __name__ == "__main__":
     # import matplotlib.pyplot as plt
     # plt.plot(input_tests, eigs)
     # plt.show()
-    

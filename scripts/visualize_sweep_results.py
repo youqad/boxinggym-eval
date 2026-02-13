@@ -26,22 +26,23 @@ import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 # Import from shared module
 from boxing_gym.agents.results_io import (
-    TEST_ENVIRONMENTS,
     DEFAULT_ENTITY,
     DEFAULT_PROJECT,
+    TEST_ENVIRONMENTS,
     AggregatedResult,
     aggregate_results,
     get_env_display_name,
     get_model_display_name,
-    list_wandb_sweeps as list_sweeps_info,
     load_results_from_logs,
     load_results_from_wandb,
 )
 from boxing_gym.agents.results_io import PAPER_GPT4O_2D as PAPER_GPT4O
+from boxing_gym.agents.results_io import (
+    list_wandb_sweeps as list_sweeps_info,
+)
 
 
 @dataclass
@@ -58,7 +59,9 @@ class SweepSummary:
     best_z: float
 
 
-def list_wandb_sweeps(entity: str = DEFAULT_ENTITY, project: str = DEFAULT_PROJECT, limit: int = 20):
+def list_wandb_sweeps(
+    entity: str = DEFAULT_ENTITY, project: str = DEFAULT_PROJECT, limit: int = 20
+):
     """List all sweeps in a W&B project."""
     sweeps = list_sweeps_info(entity, project, limit)
 
@@ -69,7 +72,9 @@ def list_wandb_sweeps(entity: str = DEFAULT_ENTITY, project: str = DEFAULT_PROJE
     print("-" * 90)
 
     for s in sweeps:
-        print(f"{s['id']:<12} {str(s['name'])[:34]:<35} {s['state']:<12} {s['n_runs']:>6} {s['created_at']:<20}")
+        print(
+            f"{s['id']:<12} {str(s['name'])[:34]:<35} {s['state']:<12} {s['n_runs']:>6} {s['created_at']:<20}"
+        )
 
     if len(sweeps) >= limit:
         print(f"\n... showing first {limit} sweeps. Use --limit to see more.")
@@ -79,7 +84,7 @@ def list_wandb_sweeps(entity: str = DEFAULT_ENTITY, project: str = DEFAULT_PROJE
 
 def compare_all_sweeps(
     entity: str = DEFAULT_ENTITY, project: str = DEFAULT_PROJECT, limit: int = 10, budget: int = 5
-) -> List[SweepSummary]:
+) -> list[SweepSummary]:
     """Compare results across all sweeps."""
     try:
         import wandb
@@ -93,7 +98,7 @@ def compare_all_sweeps(
     print(f"\nComparing sweeps in {path} (Budget {budget}):")
     print("=" * 110)
 
-    summaries: List[SweepSummary] = []
+    summaries: list[SweepSummary] = []
 
     try:
         # Get unique sweep IDs from runs with sweeps
@@ -142,7 +147,8 @@ def compare_all_sweeps(
             best_model = min(model_avgs, key=model_avgs.get) if model_avgs else "N/A"
             best_z = model_avgs.get(best_model, 0.0) if model_avgs else 0.0
             overall_avg = (
-                sum(sum(s) for s in model_scores.values()) / sum(len(s) for s in model_scores.values())
+                sum(sum(s) for s in model_scores.values())
+                / sum(len(s) for s in model_scores.values())
                 if model_scores
                 else 0.0
             )
@@ -205,9 +211,9 @@ def print_table_header(title: str, width: int = 100):
     print("=" * width)
 
 
-def print_results_table(aggregated: Dict, budget: int):
+def print_results_table(aggregated: dict, budget: int):
     """Print a results table for a specific budget."""
-    models = sorted(set(k[1] for k in aggregated.keys()))
+    models = sorted(set(k[1] for k in aggregated))
     # Use canonical env names (normalized, without _direct suffix)
     envs = TEST_ENVIRONMENTS
 
@@ -249,11 +255,11 @@ def print_results_table(aggregated: Dict, budget: int):
         print(f"{medal} {row}")
 
 
-def print_comparison_to_paper(aggregated: Dict, budget: int):
+def print_comparison_to_paper(aggregated: dict, budget: int):
     """Print comparison of our results to paper's GPT-4o results."""
     print_table_header(f"COMPARISON TO PAPER (Budget {budget})", 95)
 
-    models = sorted(set(k[1] for k in aggregated.keys()))
+    models = sorted(set(k[1] for k in aggregated))
     # Use canonical env names (normalized, without _direct suffix)
     envs = TEST_ENVIRONMENTS
 
@@ -319,12 +325,12 @@ def print_comparison_to_paper(aggregated: Dict, budget: int):
             print(f"   {row}")
 
 
-def print_learning_improvement(aggregated: Dict):
+def print_learning_improvement(aggregated: dict):
     """Print improvement from budget 0 to budget 5."""
     print_table_header("LEARNING IMPROVEMENT (Budget 0 → 5)", 80)
     print("(More negative = learned more from experiments)\n")
 
-    models = sorted(set(k[1] for k in aggregated.keys()))
+    models = sorted(set(k[1] for k in aggregated))
     # Use canonical env names (normalized, without _direct suffix)
     envs = TEST_ENVIRONMENTS
 
@@ -356,12 +362,12 @@ def print_learning_improvement(aggregated: Dict):
         print(row)
 
 
-def print_overall_ranking(aggregated: Dict, budget: int = 5):
+def print_overall_ranking(aggregated: dict, budget: int = 5):
     """Print overall model ranking."""
     print_table_header(f"OVERALL MODEL RANKING (Budget {budget})", 60)
     print("(Lower Z-score = better prediction accuracy)\n")
 
-    models = sorted(set(k[1] for k in aggregated.keys()))
+    models = sorted(set(k[1] for k in aggregated))
     # Use canonical env names (normalized, without _direct suffix)
     envs = TEST_ENVIRONMENTS
 
@@ -386,14 +392,14 @@ def print_overall_ranking(aggregated: Dict, budget: int = 5):
 
     for i, (avg, model, n_runs) in enumerate(rankings):
         medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "  "
-        print(f"{medal} {i+1:<4} {get_model_display_name(model):<28} {avg:>14.4f} {n_runs:>12}")
+        print(f"{medal} {i + 1:<4} {get_model_display_name(model):<28} {avg:>14.4f} {n_runs:>12}")
 
 
-def print_insights(aggregated: Dict, budget: int = 5):
+def print_insights(aggregated: dict, budget: int = 5):
     """Print dynamically computed insights from the benchmark."""
     print_table_header("KEY INSIGHTS", 80)
 
-    models = sorted(set(k[1] for k in aggregated.keys()))
+    models = sorted(set(k[1] for k in aggregated))
     # Use canonical env names (normalized, without _direct suffix)
     envs = TEST_ENVIRONMENTS
 
@@ -459,9 +465,9 @@ def print_insights(aggregated: Dict, budget: int = 5):
     chat_models = [m for m in models if m not in reasoning_models and m in model_scores]
 
     if reasoning_models and chat_models:
-        reasoning_avg = sum(model_scores.get(m, 0) for m in reasoning_models if m in model_scores) / len(
-            [m for m in reasoning_models if m in model_scores]
-        )
+        reasoning_avg = sum(
+            model_scores.get(m, 0) for m in reasoning_models if m in model_scores
+        ) / len([m for m in reasoning_models if m in model_scores])
         chat_avg = sum(model_scores.get(m, 0) for m in chat_models) / len(chat_models)
 
         if reasoning_avg > chat_avg + 0.2:
@@ -502,14 +508,14 @@ def print_insights(aggregated: Dict, budget: int = 5):
     print(
         f"""
 4. PAPER COMPARISON SUMMARY:
-   - Models better than paper: {models_vs_paper['better']}
-   - Models similar to paper: {models_vs_paper['similar']}
-   - Models worse than paper: {models_vs_paper['worse']}
+   - Models better than paper: {models_vs_paper["better"]}
+   - Models similar to paper: {models_vs_paper["similar"]}
+   - Models worse than paper: {models_vs_paper["worse"]}
 """
     )
 
 
-def export_csv(aggregated: Dict, output_path: Path):
+def export_csv(aggregated: dict, output_path: Path):
     """Export results to CSV."""
     import csv
 
@@ -519,7 +525,16 @@ def export_csv(aggregated: Dict, output_path: Path):
     with open(output_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(
-            ["env", "model", "budget", "z_mean", "z_std", "n_seeds", "paper_gpt4o", "delta_vs_paper"]
+            [
+                "env",
+                "model",
+                "budget",
+                "z_mean",
+                "z_std",
+                "n_seeds",
+                "paper_gpt4o",
+                "delta_vs_paper",
+            ]
         )
 
         for key, r in sorted(aggregated.items()):
@@ -544,7 +559,7 @@ def export_csv(aggregated: Dict, output_path: Path):
     print(f"\nExported results to: {output_path}")
 
 
-def generate_plots(aggregated: Dict, output_dir: Path):
+def generate_plots(aggregated: dict, output_dir: Path):
     """Generate visualization plots."""
     try:
         import matplotlib.pyplot as plt
@@ -588,7 +603,13 @@ def generate_plots(aggregated: Dict, output_dir: Path):
         paper_val = PAPER_GPT4O.get((env, 5))
         if paper_val:
             ax.axhline(
-                y=paper_val, xmin=(i) / 3, xmax=(i + 1) / 3, color="red", linestyle="--", linewidth=2, alpha=0.7
+                y=paper_val,
+                xmin=(i) / 3,
+                xmax=(i + 1) / 3,
+                color="red",
+                linestyle="--",
+                linewidth=2,
+                alpha=0.7,
             )
 
     ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
@@ -661,22 +682,31 @@ Examples:
         "--sweep-id", type=str, help="W&B sweep ID (e.g., 'abc123' or 'entity/project/sweep_id')"
     )
     source_group.add_argument("--logs-dir", type=str, help="Directory containing agent_*.log files")
-    source_group.add_argument("--list-sweeps", action="store_true", help="List all sweeps in the W&B project")
-    source_group.add_argument("--all-sweeps", action="store_true", help="Compare results across all sweeps")
+    source_group.add_argument(
+        "--list-sweeps", action="store_true", help="List all sweeps in the W&B project"
+    )
+    source_group.add_argument(
+        "--all-sweeps", action="store_true", help="Compare results across all sweeps"
+    )
 
     # W&B options
     parser.add_argument(
         "--entity", type=str, default=DEFAULT_ENTITY, help=f"W&B entity (default: {DEFAULT_ENTITY})"
     )
     parser.add_argument(
-        "--project", type=str, default=DEFAULT_PROJECT, help=f"W&B project (default: {DEFAULT_PROJECT})"
+        "--project",
+        type=str,
+        default=DEFAULT_PROJECT,
+        help=f"W&B project (default: {DEFAULT_PROJECT})",
     )
     parser.add_argument(
         "--limit", type=int, default=20, help="Max number of sweeps to list/compare (default: 20)"
     )
 
     # Analysis options
-    parser.add_argument("--budget", type=int, default=5, help="Primary budget to analyze (default: 5)")
+    parser.add_argument(
+        "--budget", type=int, default=5, help="Primary budget to analyze (default: 5)"
+    )
     parser.add_argument(
         "--outlier-threshold",
         type=float,
@@ -711,7 +741,8 @@ Examples:
         if not logs_dir.exists():
             print(f"Error: Logs directory not found: {logs_dir}", file=sys.stderr)
             print(
-                "Use --sweep-id to fetch from W&B or --list-sweeps to see available sweeps.", file=sys.stderr
+                "Use --sweep-id to fetch from W&B or --list-sweeps to see available sweeps.",
+                file=sys.stderr,
             )
             sys.exit(1)
 
@@ -732,7 +763,7 @@ Examples:
         outlier_threshold=args.outlier_threshold,
     )
     # Convert keys from tuples to (env, model, budget) format
-    aggregated: Dict[Tuple[str, str, int], AggregatedResult] = {}
+    aggregated: dict[tuple[str, str, int], AggregatedResult] = {}
     for key, r in agg_result.items():
         new_key = (r.env, r.model, r.budget)
         aggregated[new_key] = r
@@ -743,7 +774,7 @@ Examples:
     print_table_header(f"RESULTS BY ENVIRONMENT (Budget {args.budget})", 95)
     print_results_table(aggregated, args.budget)
 
-    if 0 in set(k[2] for k in aggregated.keys()):
+    if 0 in set(k[2] for k in aggregated):
         print_table_header("RESULTS BY ENVIRONMENT (Budget 0)", 95)
         print_results_table(aggregated, 0)
 
