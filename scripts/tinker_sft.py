@@ -2,32 +2,23 @@
 """
 Tinker SFT Training for BoxingGym
 
-Supervised fine-tuning of Qwen3-4B-Instruct on BoxingGym experiment traces.
-Uses Tinker API with LoRA for efficient training.
+Supervised fine-tuning on BoxingGym experiment traces using Tinker LoRA.
 
 Usage:
-    # Full training
-    uv run python scripts/tinker_sft.py
+    uv run python scripts/tinker_sft.py                              # full training
+    uv run python scripts/tinker_sft.py --smoke-test                 # 128 examples, 1 epoch
+    uv run python scripts/tinker_sft.py --data data/tinker_sft.jsonl # custom data
+    uv run python scripts/tinker_sft.py --model "Qwen/Qwen3-30B-A3B" # different model
 
-    # Smoke test (128 examples, 1 epoch)
-    uv run python scripts/tinker_sft.py --smoke-test
-
-    # Custom data file
-    uv run python scripts/tinker_sft.py --data data/tinker_sft.jsonl
-
-    # Different model
-    uv run python scripts/tinker_sft.py --model "Qwen/Qwen3-30B-A3B"
-
-Prerequisites:
-    1. TINKER_API_KEY in .env
-    2. Training data prepared: uv run python scripts/prepare_tinker_data.py
+Requires TINKER_API_KEY in .env and training data from prepare_tinker_data.py.
 """
 
+import argparse
+import asyncio
 import os
 import sys
-import asyncio
-import argparse
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -47,9 +38,7 @@ def check_tinker_api_key():
 
 def prepare_smoke_test_data(data_path: Path, output_path: Path, num_examples: int = 128):
     """Create a small subset of training data for smoke testing."""
-    import json
-
-    with open(data_path, "r") as f:
+    with open(data_path) as f:
         lines = f.readlines()
 
     # take first N examples (default 128 to ensure at least 1-2 batches with batch_size=64)
@@ -66,11 +55,11 @@ def prepare_smoke_test_data(data_path: Path, output_path: Path, num_examples: in
 def build_config(args):
     """Build Tinker training configuration."""
     import chz
+    from tinker_cookbook.model_info import get_recommended_renderer_name
+    from tinker_cookbook.renderers import TrainOnWhat
     from tinker_cookbook.supervised import train
     from tinker_cookbook.supervised.data import FromConversationFileBuilder
     from tinker_cookbook.supervised.types import ChatDatasetBuilderCommonConfig
-    from tinker_cookbook.renderers import TrainOnWhat
-    from tinker_cookbook.model_info import get_recommended_renderer_name
 
     model_name = args.model
     renderer_name = get_recommended_renderer_name(model_name)

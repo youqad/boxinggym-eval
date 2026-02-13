@@ -2,40 +2,27 @@
 """
 Tinker Evaluation for BoxingGym
 
-Evaluate a Tinker checkpoint on BoxingGym environments by sampling predictions
-and computing z-scores against ground truth.
+Evaluate a Tinker checkpoint on BoxingGym environments. Samples predictions
+and computes z-scores against ground truth.
 
 Usage:
-    # Evaluate SFT checkpoint on all environments
-    uv run python scripts/tinker_eval.py \
-        --checkpoint "tinker://288631d4-1ad2-5ce9-9548-a95535741497:train:0/weights/final"
+    uv run python scripts/tinker_eval.py --checkpoint "tinker://..."
+    uv run python scripts/tinker_eval.py --checkpoint "tinker://..." --envs hyperbolic,dugongs
+    uv run python scripts/tinker_eval.py --checkpoint "tinker://..." --num-samples 20
 
-    # Evaluate on specific environments
-    uv run python scripts/tinker_eval.py \
-        --checkpoint "tinker://..." \
-        --envs hyperbolic_temporal_discount,dugongs
-
-    # More samples for better statistics
-    uv run python scripts/tinker_eval.py \
-        --checkpoint "tinker://..." \
-        --num-samples 20
-
-Prerequisites:
-    1. TINKER_API_KEY in .env
-    2. Trained checkpoint from tinker_sft.py or tinker_rl.py
+Requires TINKER_API_KEY in .env and a trained checkpoint from tinker_sft.py or tinker_rl.py.
 """
 
+import argparse
+import asyncio
+import json
 import os
 import sys
-import asyncio
-import argparse
-import json
-from pathlib import Path
-from typing import Dict, List, Optional
 from datetime import datetime
-from dotenv import load_dotenv
+from pathlib import Path
 
 import numpy as np
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -111,7 +98,7 @@ def extract_answer(text: str) -> str:
     return text
 
 
-def compute_z_score(prediction: str, ground_truth: str, goal) -> Optional[float]:
+def compute_z_score(prediction: str, ground_truth: str, goal) -> float | None:
     try:
         # extract answer from prediction
         answer = extract_answer(prediction)
@@ -166,7 +153,7 @@ async def run_evaluation(args):
     # parse environment list
     env_names = args.envs.split(",") if args.envs else ALL_ENVIRONMENTS
 
-    results: Dict[str, Dict] = {}
+    results: dict[str, dict] = {}
 
     for env_name in env_names:
         env_name = env_name.strip()
@@ -213,7 +200,7 @@ async def run_evaluation(args):
             z = compute_z_score(prediction, ground_truth, goal)
             if z is not None:
                 z_scores.append(z)
-                print(f"  Sample {i+1}/{args.num_samples}: z={z:.3f}")
+                print(f"  Sample {i + 1}/{args.num_samples}: z={z:.3f}")
 
         if z_scores:
             results[env_name] = {
@@ -223,7 +210,9 @@ async def run_evaluation(args):
                 "max_z": float(np.max(z_scores)),
                 "n": len(z_scores),
             }
-            print(f"  Mean z-score: {results[env_name]['mean_z']:.3f} (std: {results[env_name]['std_z']:.3f})")
+            print(
+                f"  Mean z-score: {results[env_name]['mean_z']:.3f} (std: {results[env_name]['std_z']:.3f})"
+            )
         else:
             print(f"  No valid samples for {env_name}")
 
@@ -254,7 +243,9 @@ async def run_evaluation(args):
     for env, r in sorted(results.items()):
         print(f"{env:<35} {r['mean_z']:<10.3f} {r['std_z']:<10.3f} {r['n']:<5}")
     print("-" * 60)
-    print(f"{'AGGREGATE':<35} {aggregate['mean_z']:<10.3f} {aggregate['std_z']:<10.3f} {aggregate['n_envs']:<5}")
+    print(
+        f"{'AGGREGATE':<35} {aggregate['mean_z']:<10.3f} {aggregate['std_z']:<10.3f} {aggregate['n_envs']:<5}"
+    )
     print("=" * 60)
 
     # save output
